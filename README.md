@@ -24,6 +24,7 @@ from the original sources, e.g. [LXCat](https://www.lxcat.net), [NIST](https://w
 - [Usage](#usage)
 - [Development](#development)
 - [Versioning](#versioning)
+- [Citing piclas-db](#citing-piclas-db)
 - [License and contributors](#license-and-contributors)
 
 # Installation
@@ -88,6 +89,11 @@ The same checks run in the [GitHub Actions CI](.github/workflows/ci.yml) for eve
 piclas-db starts with version 0.1.0 and increments the minor version (0.x.0) with each development step. Version 1.0.0 is
 released once the tool is feature complete. The version is defined in `pyproject.toml` only and changes are listed in
 [CHANGELOG.md](CHANGELOG.md).
+
+# Citing piclas-db
+If you use piclas-db, please cite it as given in [CITATION.cff](CITATION.cff) (GitHub shows the citation under "Cite this
+repository"). Since piclas-db does not contain any data, please also cite the original data sources of your database, e.g. the
+LXCat databases, NIST or ATcT, as stated in the references stored in the database.
 
 # License and contributors
 piclas-db is free software under the [GNU General Public License v3.0](LICENSE) or later. The contributors are listed in
