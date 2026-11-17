@@ -61,7 +61,9 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: 3.x
+          # Newest version tested in the CI (compatibility matrix); '3.x' can be a Python release without binary wheels of
+          # h5py yet (Python 3.15: h5py had to be built from source and failed without the HDF5 library)
+          python-version: "3.14"
 
       - name: Build with Poetry
         shell: bash
