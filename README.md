@@ -15,8 +15,8 @@ from the original sources, e.g. [LXCat](https://www.lxcat.net), [NIST](https://w
 > guides you through the download, stores the original files in a local store and can back it up to a private repository.
 
 > [!NOTE]
-> piclas-db is under development (version 0.x). The command-line interface is in place, the commands are implemented step by step
-> (see [CHANGELOG.md](CHANGELOG.md)).
+> piclas-db is under development (version 0.x). All commands are implemented; the interface and file layouts may still change
+> until version 1.0.0 (see [CHANGELOG.md](CHANGELOG.md)).
 
 # Table of Contents
 
@@ -58,7 +58,7 @@ piclas-db -v
 | `piclas-db build recipe.yaml -o database.h5` | Build a database from the original files according to a recipe ([details](docs/build.md)) | **available** |
 | `piclas-db export database.h5 -o tables/` | Write a database of any layout as ASCII tables ([details](docs/migrate.md)) | **available** |
 | `piclas-db plot db.h5 lxcat.txt --pair Ar-electron --compare` | Plot σ(E), k(T) or electronic levels from any sources ([details](docs/plot.md)) | **available** |
-| `piclas-db reservoir --species Ar --temps 1e3:1e5` | `parameter.ini` files for a reservoir parameter study | planned (WP4) |
+| `piclas-db reservoir db.h5 --pair Ar-electron --energies 16 20 50 -o study/` | PICLas reservoir study and its evaluation against the database ([details](docs/reservoir.md)) | **available** |
 | `piclas-db check old.h5` | Detect the layout, report corrupt or inconsistent data ([rules](docs/checks.md)) | **available** |
 | `piclas-db diff old.h5 new.h5` | Changed datasets and attributes, and by how much ([details](docs/diff.md)) | **available** |
 | `piclas-db migrate old.h5 -o new.h5` | Convert any layout or ASCII tables to the current layout ([details](docs/migrate.md)) | **available** |

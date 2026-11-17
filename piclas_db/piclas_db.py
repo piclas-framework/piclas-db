@@ -20,17 +20,14 @@ from typing import Optional
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.args_parser import build_parser
-from piclas_db.commands import COMMANDS, not_implemented
+from piclas_db.commands import COMMANDS
 # ==================================================================================================================================
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     """Entry point of the piclas-db command-line tool, returns the exit code"""
     parser = build_parser()
-    # Planned commands accept any arguments until they are implemented, implemented commands reject unknown arguments
-    args, unknown = parser.parse_known_args(argv)
-    if unknown and (args.command is None or COMMANDS[args.command].run is not not_implemented):
-        parser.error(f'unrecognized arguments: {" ".join(unknown)}')
+    args = parser.parse_args(argv)
 
     # No command given: show the help
     if args.command is None:

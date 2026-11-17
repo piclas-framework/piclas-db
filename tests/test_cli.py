@@ -44,11 +44,6 @@ def test_help_without_command(capsys: pytest.CaptureFixture[str]) -> None:
     assert 'check' in capsys.readouterr().out
 
 
-def test_planned_command_returns_error(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(['reservoir', '--species', 'Ar']) == 1
-    assert 'not implemented yet' in capsys.readouterr().out
-
-
 def make_species_database(path: pathlib.Path) -> None:
     with h5py.File(path, 'w') as h5:
         species = h5.create_group('Species/Ar')

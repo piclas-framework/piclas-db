@@ -25,6 +25,7 @@ have one of three severities, and the exit code is 1 if at least one error is fo
 | `reaction-charge` | ERROR | charge not conserved | |
 | `reaction-mass` | WARNING | mass not conserved, i.e. inconsistent `MassIC` (one finding for all reactions) | CO, CO2 (SpeciesDatabase.h5) |
 | `xsec-name-unknown` | ERROR / WARNING | group or dataset name not read by PICLas; ERROR with a suggestion if it looks like a typo | `ELECTRONIIC` (XSec_Database_O2_O.h5) |
+| `xsec-products-missing` | WARNING | product of a reaction cross-section not in `/Species`: the reaction cannot be used | XeIon2 (SpeciesDatabase.h5) |
 | `xsec-undefined` | WARNING | excitation in `UNDEFINED` (not assigned by the converter) | |
 | `xsec-threshold-name` | ERROR | excitation dataset name is not a number (PICLas parses the threshold from it) | |
 | `xsec-threshold-mismatch` | WARNING | `Threshold [eV]` attribute differs from the dataset name | |

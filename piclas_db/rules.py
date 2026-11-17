@@ -307,6 +307,10 @@ def check_cross_section_names(database: Database, pair: CollisionPair, xsec: Cro
             return
         if xsec.threshold is not None and abs(xsec.threshold - threshold) > 1.0e-3 * max(abs(threshold), 1.0):
             yield Finding(Severity.WARNING, 'xsec-threshold-mismatch', path, f'threshold {xsec.threshold:g} eV in the attributes differs from the name')
+    if xsec.kind is XSecKind.REACTION and database.schema is Schema.SPECIES_DATABASE and database.species:
+        missing = sorted({name for name in xsec.key.split('-') if name not in database.species})
+        if missing:
+            yield Finding(Severity.WARNING, 'xsec-products-missing', path, f'product(s) {", ".join(missing)} not in /Species: the reaction cannot be used')
     if xsec.kind is XSecKind.REACTION:
         products = xsec.key.split('-')
         heavy = [name for name in products if name != 'electron']

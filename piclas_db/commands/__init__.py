@@ -20,7 +20,7 @@ from dataclasses import dataclass
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.commands import build, check, diff, export, fetch, guide, import_, migrate, plot, push, rebuild, store
+from piclas_db.commands import build, check, diff, export, fetch, guide, import_, migrate, plot, push, rebuild, reservoir, store
 # ==================================================================================================================================
 
 
@@ -31,13 +31,6 @@ class Command:
     help: str  # one-line description shown by --help
     work_package: str  # work package of the project plan in which the command is implemented
     run: Callable[[argparse.Namespace], int]  # function executing the command, returns the exit code
-
-
-def not_implemented(args: argparse.Namespace) -> int:
-    """Placeholder for commands that are planned but not implemented yet"""
-    command = COMMANDS[args.command]
-    print(f'{args.command}: not implemented yet (planned in {command.work_package})')
-    return 1
 
 
 # Order defines the order in the --help output
@@ -52,7 +45,7 @@ COMMANDS: dict[str, Command] = {
     # Conversion, visualization and validation
     'export':    Command('Write a database of any layout as ASCII tables (YAML and CSV)', 'WP2', export.run),
     'plot':      Command('Plot cross-sections, rate coefficients or electronic levels from any source, also in comparison', 'WP3', plot.run),
-    'reservoir': Command('Create parameter.ini files for a reservoir parameter study', 'WP4', not_implemented),
+    'reservoir': Command('Generate a PICLas reservoir study (parameter.ini files) or evaluate it against the database', 'WP4', reservoir.run),
     # Analysis of existing (also old) database files
     'check':     Command('Detect the layout of a database file and report corrupt or inconsistent data', 'WP2', check.run),
     'diff':      Command('Compare two databases of any layout: changed datasets and attributes, and by how much', 'WP2', diff.run),
