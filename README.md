@@ -1,5 +1,6 @@
 [![CI](https://github.com/piclas-framework/piclas-db/actions/workflows/ci.yml/badge.svg)](https://github.com/piclas-framework/piclas-db/actions/workflows/ci.yml)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24324389.svg)](https://doi.org/10.5281/zenodo.24324389)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](pyproject.toml)
 
 # piclas-db
@@ -112,7 +113,8 @@ every release is archived by [Zenodo](https://zenodo.org) with a DOI.
 
 # Citing piclas-db
 If you use piclas-db, please cite it as given in [CITATION.cff](CITATION.cff) (GitHub shows the citation under "Cite this
-repository"). Since piclas-db does not contain any data, please also cite the original data sources of your database, e.g. the
+repository"). The DOI [10.5281/zenodo.24324389](https://doi.org/10.5281/zenodo.24324389) refers to all versions and resolves to
+the latest one; every release also has its own DOI on Zenodo. Since piclas-db does not contain any data, please also cite the original data sources of your database, e.g. the
 LXCat databases, NIST or ATcT, as stated in the references stored in the database.
 
 # License and contributors

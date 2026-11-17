@@ -3,6 +3,13 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.14.1
+
+* Concept DOI 10.5281/zenodo.24324389 (all versions) in `CITATION.cff` and as badge in `README.md`; first release 0.14.0 archived
+  on Zenodo (10.5281/zenodo.24324390)
+* Release workflow builds with Python 3.14 (no h5py wheels for Python 3.15 yet)
+* `.gitignore`: store directories anchored to the repository root (`piclas_db/sources/` was ignored)
+
 ## 0.14.0
 
 * Release workflow (`.github/workflows/release.yml`): on a tag `v<version>` it checks that tag, `pyproject.toml` and `CHANGELOG.md`

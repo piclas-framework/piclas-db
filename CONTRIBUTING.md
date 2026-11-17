@@ -32,7 +32,7 @@ defined in `pyproject.toml`.
 
 5. The release workflow (`.github/workflows/release.yml`) checks that tag, `pyproject.toml`, `CITATION.cff` and `CHANGELOG.md` agree, builds and tests
    the wheel, and creates the GitHub release with the changelog section and the distribution files.
-6. Zenodo archives the published release and assigns a version DOI (metadata from `CITATION.cff`). After the first release, add the
-   concept DOI (valid for all versions) to `CITATION.cff` and the DOI badge to `README.md`.
+6. Zenodo archives the published release and assigns a version DOI (metadata from `CITATION.cff`). `CITATION.cff` and `README.md`
+   carry the concept DOI 10.5281/zenodo.24324389, which covers all versions and does not change.
 7. Optional: publishing to PyPI runs if the repository variable `PUBLISH_PYPI` is `true` and trusted publishing is set up for the
    project `piclas-db` on PyPI (environment `pypi`).
