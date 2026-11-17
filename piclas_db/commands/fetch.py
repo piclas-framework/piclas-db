@@ -50,7 +50,7 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     for resolution in resolutions:
-        location = resolution.entry.relative if resolution.entry else 'download by hand, then piclas-db import (guide: planned)'
+        location = resolution.entry.relative if resolution.entry else f'download by hand (piclas-db guide {resolution.requirement}), then piclas-db import'
         print(f'  {resolution.origin.value:20s} {resolution.requirement}: {location}')
     if resolutions:
         counts = Counter(resolution.origin for resolution in resolutions)

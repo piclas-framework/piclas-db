@@ -60,6 +60,7 @@ piclas-db -v
 | `piclas-db export database.h5 -o tables/` | Write a database of any layout as ASCII tables ([details](docs/migrate.md)) | **available** |
 | `piclas-db plot db.h5 lxcat.txt --pair Ar-electron --compare` | Plot σ(E), k(T) or electronic levels from any sources ([details](docs/plot.md)) | **available** |
 | `piclas-db reservoir db.h5 --pair Ar-electron --energies 16 20 50 -o study/` | PICLas reservoir study and its evaluation against the database ([details](docs/reservoir.md)) | **available** |
+| `piclas-db reservoir [db.h5] --regressioncheck <piclas>/regressioncheck/NIG_Reservoir_single_core` | Compare the reference results of the PICLas reservoir regression checks with a database ([details](docs/reservoir.md#regression-checks-of-piclas)) | **available** |
 | `piclas-db check old.h5` | Detect the layout, report corrupt or inconsistent data ([rules](docs/checks.md)) | **available** |
 | `piclas-db diff old.h5 new.h5` | Changed datasets and attributes, and by how much ([details](docs/diff.md)) | **available** |
 | `piclas-db migrate old.h5 -o new.h5` | Convert any layout or ASCII tables to the current layout ([details](docs/migrate.md)) | **available** |
@@ -72,9 +73,10 @@ moves on to the next one if the dataset was not found:
 1. **Local store**: original files already on your machine.
 2. **Private repository**: the organisation's private backup of the original files, accessed via SSH with your own git
    permissions. Found files are copied into the local store.
-3. **Automatic download**: only from sources whose terms allow it (e.g. the IAEA CollisionDB API).
-4. **Guided manual download**: step-by-step instructions for the source website (e.g. LXCat, ATcT, IAEA ALADDIN), followed
-   by `piclas-db import`.
+3. **Automatic download**: only from sources whose terms allow it (no provider supported yet; a candidate is the IAEA
+   CollisionDB API).
+4. **Guided manual download**: step-by-step instructions for the source website with `piclas-db guide` (LXCat, NIST ASD),
+   followed by `piclas-db import`.
 
 Files obtained in steps 3 and 4 are added to the private repository step by step: each imported file is committed with its
 provenance (source, dataset, retrieval date, sha256) and pushed with `piclas-db push`, if you have write access. Users without

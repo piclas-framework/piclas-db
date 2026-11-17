@@ -94,7 +94,7 @@ def resolve(store: Store, requirements: list[Requirement], update: bool = True) 
             resolution.entry, resolution.origin = find(store, resolution.requirement), Origin.PRIVATE
     for resolution in resolutions:
         if resolution.entry is None:
-            # No provider allows automatic downloads yet (planned: IAEA CollisionDB API); everything else is downloaded by hand
+            # No provider supports automatic downloads yet (candidate: IAEA CollisionDB API); everything is downloaded by hand
             resolution.origin = Origin.MANUAL
     return resolutions
 

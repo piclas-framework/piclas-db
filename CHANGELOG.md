@@ -3,6 +3,11 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## Unreleased
+
+* Documentation: outdated "planned" statements removed (`guide` exists since 0.9.0, no automatic download yet), `reservoir
+  --regressioncheck` in the command table of `README.md`; `fetch --need` names the `guide` command for missing files
+
 ## 0.14.1
 
 * Concept DOI 10.5281/zenodo.24324389 (all versions) in `CITATION.cff` and as badge in `README.md`; first release 0.14.0 archived

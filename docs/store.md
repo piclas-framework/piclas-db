@@ -78,8 +78,8 @@ piclas-db fetch                                                    # later: upda
 
 1. local store
 2. private repository (updates the store once if something is missing locally)
-3. automatic download (no provider supported yet; planned for the IAEA CollisionDB API)
-4. manual download: download by hand and `piclas-db import` (step-by-step instructions with `piclas-db guide` are planned)
+3. automatic download (no provider supported yet; a candidate is the IAEA CollisionDB API)
+4. manual download: step-by-step instructions with `piclas-db guide`, then `piclas-db import`
 
 Example: `piclas-db fetch --need lxcat/biagi-v7.1+phelps/ar nist-asd/levels/ar@1a3ff74d`. The exit code is 1 if a manual
 download is required. `build` and `rebuild` use the same lookup.
