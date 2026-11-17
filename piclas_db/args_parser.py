@@ -40,6 +40,17 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('file', help='database file (.h5) to check')
             sub.add_argument('--info', action='store_true', help='also show findings of severity INFO')
             sub.add_argument('--json', action='store_true', help='print the findings as JSON')
+        elif name == 'import':
+            sub.add_argument('files', nargs='*', help='downloaded files (LXCat, NIST ASD, ...)')
+            sub.add_argument('--source-dir', help='directory to search for downloaded files (e.g. ~/Downloads); unknown files are skipped')
+            sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
+            sub.add_argument('--species', help='species of a NIST ASD level file if not found in the file or its name (e.g. ArIon1)')
+            sub.add_argument('--custom', metavar='NAME', help='store files that are not recognized (e.g. own data) under custom/NAME')
+            sub.add_argument('--retrieved', metavar='YYYY-MM-DD', help='retrieval date if not contained in the file')
+            sub.add_argument('--dry-run', action='store_true', help='only show what would be imported')
+        elif name == 'store':
+            sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
+            sub.add_argument('--verify', action='store_true', help='check that every file still matches its sha256')
         elif name == 'export':
             sub.add_argument('source', help='database file (.h5) of any layout')
             sub.add_argument('-o', '--output', required=True, help='new or empty directory for the tables')

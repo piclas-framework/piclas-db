@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.6.0
+
+* Local store of original files (`piclas_db/store.py`, documented in `docs/store.md`): files kept byte for byte under
+  `<provider>/<dataset>/<retrieved>_<sha8>`, `meta.yaml` with provenance and sha256, generated `index.yaml`; location from
+  `--store`, `$PICLAS_DB_STORE` or `~/.local/share/piclas-db/store`
+* `piclas-db import` identifies files by their content and validates them: LXCat cross-sections (including ion-neutral blocks) and
+  swarm data, NIST ASD level exports (CSV, tab or text), own data with `--custom`; duplicates (same sha256) are detected
+* `piclas-db store` lists the store, `--verify` checks all files against their sha256
+* Parsers for LXCat downloads (`piclas_db/sources/lxcat.py`) and NIST ASD levels (`piclas_db/sources/nist.py`)
+
 ## 0.5.0
 
 * Writer for the current layout (`piclas_db/writer.py`): strings read by PICLas as fixed-length, null-padded ASCII (255

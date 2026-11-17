@@ -51,7 +51,8 @@ piclas-db -v
 | Command | Description | Status |
 | --- | --- | --- |
 | `piclas-db guide lxcat:biagi-ar` | Step-by-step guide for a manual download | planned (WP1) |
-| `piclas-db import --source-dir ~/Downloads` | Identify by content, validate, sort into the local store | planned (WP1) |
+| `piclas-db import --source-dir ~/Downloads` | Identify by content, validate, copy into the local store ([details](docs/store.md)) | **available** |
+| `piclas-db store [--verify]` | List the local store, verify the files against their sha256 | **available** |
 | `piclas-db fetch [--mirror <private repo>]` | Download where the source terms allow it, restore from a private mirror | planned (WP1) |
 | `piclas-db push` | Back up the local store to the private mirror | planned (WP1) |
 | `piclas-db build -o database.h5` | Build the database from the local store | planned (WP1) |
