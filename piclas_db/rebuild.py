@@ -16,6 +16,8 @@ The provenance stored in an old file is used to find out which original data it 
 
 * cross-sections with an LXCat reference ('Biagi-v7.1 database, www.lxcat.net, ...') and an LXCat header in 'Info'
   (SPECIES: e / Ar) -> LXCat database and species; ion-neutral pairs without header (e.g. Ar-ArIon1) -> 'Ar^+ / Ar'
+* cross-sections with an LXCat header but without database name: identified by species, process and update time in the LXCat
+  downloads of the store (the update time is unique per LXCat process)
 * electronic levels with a NIST reference, or all levels with --levels-from-nist -> NIST ASD levels of the species
 
 Everything else cannot be rebuilt automatically and is listed. Species attributes, reactions, diffusion and surface data are not
@@ -37,6 +39,7 @@ from piclas_db.model import CrossSection, Database
 from piclas_db.recipe import CrossSectionSelection, LevelSelection, Recipe
 from piclas_db.resolve import Requirement
 from piclas_db.sources.identify import database_slug, slug
+from piclas_db.sources.lxcat import parse_lxcat
 from piclas_db.store import Store, StoreEntry
 # ==================================================================================================================================
 
@@ -86,9 +89,41 @@ def find_lxcat(store: Store, database: str, species: str) -> Optional[StoreEntry
     return max(matches, key=lambda entry: str(entry.meta.get('retrieved') or ''), default=None)
 
 
+def lxcat_header(xsec: CrossSection) -> dict[str, str]:
+    """LXCat header stored in 'Info' (SPECIES, PROCESS, PARAM., COMMENT, UPDATED), empty if there is none"""
+    if not xsec.provenance.info:
+        return {}
+    try:
+        header = ast.literal_eval(xsec.provenance.info)
+    except (ValueError, SyntaxError):
+        return {}
+    return {str(key): str(value) for key, value in header.items()} if isinstance(header, dict) else {}
+
+
+def fingerprint(species: str, process: str, updated: str) -> tuple[str, str, str]:
+    return species.replace(' ', ''), process.replace(' ', ''), updated.strip()
+
+
+def lxcat_index(store: Store) -> dict[tuple[str, str, str], tuple[str, StoreEntry]]:
+    """Every LXCat process in the store by species, process and update time (unique per process in LXCat) -> database, file"""
+    index: dict[tuple[str, str, str], tuple[str, StoreEntry]] = {}
+    for entry in store.entries():
+        if entry.meta.get('provider') != 'lxcat' or entry.meta.get('kind') != 'cross-sections':
+            continue
+        try:
+            parsed = parse_lxcat(entry.path.read_text(encoding='utf-8', errors='replace'))
+        except (OSError, ValueError):
+            continue
+        for process in parsed.processes:
+            if process.updated:
+                index[fingerprint(process.species, process.process, process.updated)] = (process.database, entry)
+    return index
+
+
 def derive(database: Database, store: Store, levels_from_nist: bool = False) -> Derivation:
     derivation = Derivation(recipe=Recipe(path=f'derived from {database.path}'))
     selections: dict[tuple[str, str], CrossSectionSelection] = {}
+    index = lxcat_index(store)
 
     for pair in database.collision_pairs.values():
         # Database of each LXCat species in this pair, for cross-sections without reference (e.g. ionization written by
@@ -102,6 +137,12 @@ def derive(database: Database, store: Store, levels_from_nist: bool = False) -> 
             name = f'{pair.name}/' + (f'{xsec.group}/' if xsec.group else '') + xsec.key
             species = lxcat_species(xsec, pair.name)
             lxcat = lxcat_database(xsec, pair.provenance.reference) or (known.get(species.replace(' ', '')) if species and xsec.provenance.info else None)
+            header = lxcat_header(xsec)
+            match = index.get(fingerprint(header.get('SPECIES', ''), header.get('PROCESS', ''), header.get('UPDATED', ''))) if header.get('UPDATED') else None
+            if lxcat is None and match is not None:
+                # Identified by the LXCat header (species, process and update time) in a download in the store
+                lxcat = re.split(r'\s+database|\s*\(', match[0], maxsplit=1)[0].strip()
+                species = header['SPECIES']
             if not lxcat or not species:
                 reason = 'no LXCat reference' if not lxcat else 'LXCat species unknown'
                 derivation.unresolved.append(f'/Cross-Sections/{name}: {reason} ({xsec.provenance.reference or "no reference"})')

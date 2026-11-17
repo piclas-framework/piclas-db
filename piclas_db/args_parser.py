@@ -112,6 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--collision-probability', type=float, default=0.01, help='maximum collision probability per time step (default 0.01, rate bias about -0.5 %%)')
             sub.add_argument('-o', '--output', help='new directory for the study')
             sub.add_argument('--evaluate', metavar='DIRECTORY', help='evaluate a finished study')
+            sub.add_argument('--regressioncheck', nargs='+', metavar='DIRECTORY', help='compare the reference results of PICLas reservoir regression checks with DATABASE (default: the database of each check)')
             sub.add_argument('--tolerance', type=float, default=0.05, help='relative tolerance for the evaluation (default 0.05)')
         elif name == 'diff':
             sub.add_argument('a', help='first database (A): file of any layout, table directory or original LXCat/NIST ASD download')

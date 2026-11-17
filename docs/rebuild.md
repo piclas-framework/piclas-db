@@ -24,6 +24,8 @@ If the old file was built by piclas-db, its embedded recipe is used (see the pro
      (`SPECIES: e / Ar`); references stored on a group (e.g. `ELECTRONIC`) count for its datasets; cross-sections without reference
      get the database of other cross-sections of the same LXCat species in the pair; ion-neutral pairs without header
      (`Ar-ArIon1`) are `Ar^+ / Ar`
+   * cross-sections with an LXCat header but without database name: identified by species, process and update time in the LXCat
+     downloads of the store (the update time is unique per LXCat process); download candidates first, then rebuild again
    * electronic levels with a NIST reference, or all levels with `--levels-from-nist`
    * if a matching file is in the store, the recipe pins it with its sha256
 2. **Locate the original files**: local store, private repository; missing files are listed with the download guide, and

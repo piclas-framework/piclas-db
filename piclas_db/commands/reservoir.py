@@ -96,8 +96,55 @@ def plot_results(results: list[Result], mode: str, output: pathlib.Path) -> None
     figure.savefig(output, dpi=150)
 
 
+def regressionchecks(args: argparse.Namespace) -> int:
+    """Compare the reference results of PICLas reservoir regression checks with a database"""
+    from piclas_db.regressioncheck import RegressionCheckError, evaluate_check  # noqa: PLC0415
+
+    directories = []
+    for name in args.regressioncheck:
+        path = pathlib.Path(name)
+        directories += sorted(p.parent for p in path.glob('*/analyze.ini')) if not (path / 'analyze.ini').is_file() else [path]
+    database = pathlib.Path(args.database) if args.database else None
+    worst = 0.0
+    compared = 0
+    missing = 0
+    for directory in directories:
+        try:
+            comparisons = evaluate_check(directory, database)
+        except (RegressionCheckError, DatabaseReadError, ReservoirError) as e:
+            print(f'skipped  {e}')
+            continue
+        if not comparisons:
+            print(f'skipped  {directory.name}: no XSec reaction with a monoenergetic projectile in a background gas')
+            continue
+        print(f'{directory.name} ({database or "database of the check"})')
+        for c in comparisons:
+            if c.deviation is None or c.corrected is None:
+                if c.expected != c.expected:  # NaN: reaction cross-section missing
+                    status = 'cross-section not in the database'
+                    missing += 1
+                elif c.reference_rate > 0.0:
+                    status = 'reaction counted below threshold'
+                    missing += 1
+                else:
+                    status = 'ok (below threshold)'
+                print(f'  R{c.reaction:<2d} {c.equation:42s} {c.energy:9.3f} eV  reference {c.reference_rate:10.3e}  database {c.expected:10.3e}  {status}')
+                continue
+            compared += 1
+            worst = max(worst, abs(c.corrected))
+            flag = '' if abs(c.corrected) <= args.tolerance else '  DIFFERENT'
+            print(
+                f'  R{c.reaction:<2d} {c.equation:42s} {c.energy:9.3f} eV  reference {c.reference_rate:10.3e}  database {c.expected:10.3e}  '
+                f'{c.deviation:+7.2%}  corrected for P={c.probability:.3f}: {c.corrected:+7.2%}{flag}'
+            )
+    print(f'{compared} comparisons, largest corrected deviation {worst:.2%} (tolerance {args.tolerance:.0%}), {missing} without data in the database')
+    return 0 if worst <= args.tolerance and not missing else 1
+
+
 def run(args: argparse.Namespace) -> int:
-    """Generate a reservoir study, or evaluate a finished one (--evaluate DIRECTORY)"""
+    """Generate a reservoir study, evaluate a finished one (--evaluate) or compare PICLas regression checks (--regressioncheck)"""
+    if args.regressioncheck:
+        return regressionchecks(args)
     if not args.evaluate:
         return generate(args)
     directory = pathlib.Path(args.evaluate)

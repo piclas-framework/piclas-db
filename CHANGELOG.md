@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.13.0
+
+* `piclas-db reservoir --regressioncheck DIRECTORY` compares the reference results of the PICLas `NIG_Reservoir` regression checks
+  with the database of each check or with any other database (`piclas_db/regressioncheck.py`); the expected rates take into account
+  the thermal motion of the background, the rotational energy of molecular reactants (PICLas evaluates reaction cross-sections at
+  the collision energy including internal energy), the zero point at the heat of reaction and the collision probability per time
+  step; all 61 comparisons of the six XSec chemistry checks agree within 4.2 %
+* `rebuild` identifies cross-sections with an LXCat header but without database name by species, process and update time in the
+  LXCat downloads of the store
+
 ## 0.12.0
 
 * Provenance in every written database (`piclas_db/provenance.py`, documented in `docs/layout.md`): root attributes with layout

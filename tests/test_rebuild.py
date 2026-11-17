@@ -140,3 +140,14 @@ def test_rebuild_missing_and_nothing(tmp_path: pathlib.Path, capsys: pytest.Capt
     assert main(['rebuild', str(levels), '-o', str(tmp_path / 'l.h5'), '--store', str(tmp_path / 'store'), '--offline', '--levels-from-nist']) == 1
     assert 'Ar I' in capsys.readouterr().out
     assert main(['rebuild', str(tmp_path / 'missing.h5'), '-o', str(tmp_path / 'm.h5')]) == 1
+
+
+def test_identify_by_lxcat_header(store: Store, tmp_path: pathlib.Path) -> None:
+    # Cross-section without database name, but with the LXCat header (species, process, update time) of a download in the store
+    path = tmp_path / 'no_reference.h5'
+    with h5py.File(path, 'w') as h5:
+        elastic = h5.create_dataset('Ar-electron/ELASTIC', data=np.array([[0.0, 1.0e-20], [10.0, 2.0e-20]]))
+        elastic.attrs['Info'] = "{'SPECIES': 'e / Ar', 'PROCESS': 'E + Ar -> E + Ar, Elastic', 'UPDATED': '2020-01-01 00:00:00'}"
+    derivation = derive(read_database(path), store)
+    assert [(selection.database, selection.species) for selection in derivation.recipe.cross_sections] == [('Test-A', 'e / Ar')]
+    assert derivation.unresolved == []

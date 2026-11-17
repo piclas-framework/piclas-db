@@ -56,3 +56,27 @@ point passes if the deviation is within the tolerance (default 5 %) or within th
 below a threshold no reaction may be counted. Points within the tolerance but more than three standard deviations away are marked
 `(systematic?)`; if several deviate in the same direction, a systematic effect is reported. The table and `study/rates.png` (rate coefficients from the database as lines, PICLas
 as points) show the result; the exit code is 1 if a point failed or was not run.
+
+## Regression checks of PICLas
+
+The `NIG_Reservoir` regression checks of PICLas contain reaction rates from real PICLas runs (`PartAnalyze_*_ref.csv`).
+`piclas-db reservoir --regressioncheck DIRECTORY ...` compares them with the rate coefficients expected from a database, without
+running PICLas:
+
+```bash
+piclas-db reservoir --regressioncheck piclas/regressioncheck/NIG_Reservoir_single_core               # database of each check
+piclas-db reservoir database.h5 --regressioncheck piclas/regressioncheck/NIG_Reservoir_single_core   # another database
+```
+
+Every reaction with `ReactionModel = XSec`, a monoenergetic projectile (`velocityDistribution = constant`) and a background gas is
+compared. The expected rate coefficient takes into account what PICLas does:
+
+* the thermal motion of the background (important for heavy projectiles, e.g. H2Ion1 at 0.1 eV in H2 at 300 K)
+* the collision energy at which PICLas evaluates reaction cross-sections includes the rotational and vibrational energy of
+  molecular reactants (`mcc_xsec.f90`); for H2 + H2Ion1 at 0.1 eV this lowers the rate by about 19 %
+* the zero point PICLas prepends at the heat of reaction
+* the collision probability 1 − exp(−x) per time step (shown as "corrected for P")
+
+With the databases of the checks, all 61 comparisons of the six XSec chemistry checks (Ar, He, H2 with electrons, H2Ion1 and H3Ion1)
+agree within 4.2 % after the correction, most within 1 %. Checks that only record collision rates (`CalcReacRates = F`) or use
+other reaction models are skipped. The exit code is 1 if a deviation exceeds `--tolerance` or the database lacks a cross-section.
