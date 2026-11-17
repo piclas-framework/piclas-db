@@ -14,32 +14,41 @@
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import argparse
+import json
+from collections import Counter
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.readers import DatabaseReadError, read_database
-from piclas_db.schema import Schema
+from piclas_db.rules import Severity, run_checks
 # ==================================================================================================================================
 
 
 def run(args: argparse.Namespace) -> int:
-    """Check a database file: layout detection, complete read-in and summary (rules for the content follow in later versions)"""
+    """Check a database file: layout detection, complete read-in and all content rules; exit code 1 if errors are found"""
     try:
         database = read_database(args.file)
     except DatabaseReadError as e:
         print(f'ERROR: {e}')
         return 1
 
-    print(f'File:   {database.path}')
-    print(f'Layout: {database.schema.value}')
-    for category, count in database.summary().items():
-        if count:
-            print(f'  {category:22s} {count}')
+    findings = run_checks(database)
+    shown = findings if args.info else [finding for finding in findings if finding.severity is not Severity.INFO]
+    counts = Counter(finding.severity for finding in findings)
 
-    for name in database.unreadable:
-        print(f'ERROR: dataset cannot be read: {name}')
+    if args.json:
+        print(json.dumps({'file': database.path, 'layout': database.schema.value, 'findings': [finding.as_dict() for finding in shown]}, indent=2))
+    else:
+        print(f'File:   {database.path}')
+        print(f'Layout: {database.schema.value}')
+        for category, count in database.summary().items():
+            if count:
+                print(f'  {category:22s} {count}')
+        if shown:
+            print()
+        for finding in shown:
+            print(f'{finding.severity.value:7s} {finding.path}: {finding.message} [{finding.rule}]')
+        print(f'\n{counts[Severity.ERROR]} error(s), {counts[Severity.WARNING]} warning(s), {counts[Severity.INFO]} info' + ('' if args.info else ' (show with --info)'))
 
-    errors = len(database.unreadable) + (1 if database.schema is Schema.UNKNOWN else 0)
-    print(f'{errors} error(s)')
-    return 1 if errors else 0
+    return 1 if counts[Severity.ERROR] else 0

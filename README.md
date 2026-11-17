@@ -58,7 +58,7 @@ piclas-db -v
 | `piclas-db export database.h5 -o tables/` | Write the `.h5` containers to ASCII tables | planned (WP2) |
 | `piclas-db plot Ar-electron --compare` | Plot data from original files, ASCII tables or `.h5` | planned (WP3) |
 | `piclas-db reservoir --species Ar --temps 1e3:1e5` | `parameter.ini` files for a reservoir parameter study | planned (WP4) |
-| `piclas-db check old.h5` | Detect the layout, report corrupt or inconsistent data | **started** |
+| `piclas-db check old.h5` | Detect the layout, report corrupt or inconsistent data ([rules](docs/checks.md)) | **available** |
 | `piclas-db diff old.h5 new.h5` | Changed datasets and attributes, and by how much | planned |
 | `piclas-db migrate old.h5 -o new.h5` | Convert a legacy layout to the current layout (new file) | planned |
 | `piclas-db rebuild old.h5 -o new.h5` | Re-download the sources of an existing database, rebuild it (old or new layout) and compare | planned |

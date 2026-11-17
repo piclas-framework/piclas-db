@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.3.0
+
+* `piclas-db check` applies content rules to all layouts (`piclas_db/rules.py`, documented in `docs/checks.md`): species attributes,
+  electronic levels (ground state, NIST ground-state degeneracies, cm⁻¹/K units, ionization energy), reaction attributes and
+  conservation, cross-section names, thresholds, product order and ambiguous channels, data values, duplicates, float32 storage
+  and provenance
+* Severities ERROR, WARNING and INFO; exit code 1 on errors; options `--info` and `--json`
+* Reference values from NIST ASD (ionization energies, ground-state degeneracies) in `piclas_db/reference.py`
+
 ## 0.2.0
 
 * Specification of the PICLas database layout derived from the PICLas read paths (`docs/layout.md`)

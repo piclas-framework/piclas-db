@@ -53,6 +53,7 @@ def make_species_database(path: pathlib.Path) -> None:
     with h5py.File(path, 'w') as h5:
         species = h5.create_group('Species/Ar')
         species.attrs['MassIC'] = 6.63e-26
+        species.attrs['InteractionID'] = 1
         species.create_dataset('ElectronicLevel', data=np.array([[1.0, 0.0], [5.0, 134008.74]]))
         h5.create_dataset('Cross-Sections/Ar-electron/ELASTIC', data=np.array([[0.0, 7.0e-20], [1.0, 1.4e-20]]))
 

@@ -38,5 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
         sub = subparsers.add_parser(name, help=command.help, description=command.help)
         if name == 'check':
             sub.add_argument('file', help='database file (.h5) to check')
+            sub.add_argument('--info', action='store_true', help='also show findings of severity INFO')
+            sub.add_argument('--json', action='store_true', help='print the findings as JSON')
 
     return parser

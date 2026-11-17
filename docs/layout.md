@@ -58,7 +58,8 @@ Ions are named `<neutral>Ion<charge>`.
 | `VibrationalLevel` | `(N, 1)` | energy [K] | opt. (currently only N2) |
 
 PICLas sorts the electronic levels by energy after reading (`SortEnergies`), so unsorted levels are tolerated. Species without
-electronic levels (e.g. `electron`, fully ionized ions) currently carry a placeholder `[0]` of shape `(1,)`.
+electronic levels (e.g. `electron`, fully ionized ions) currently carry a placeholder `[0]` of shape `(1,)`. Species with only a
+ground state carry a second dummy level at a very high energy (e.g. 1e32 K).
 
 ### Metadata (not read by PICLas)
 
