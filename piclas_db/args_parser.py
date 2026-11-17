@@ -40,6 +40,15 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('file', help='database file (.h5) to check')
             sub.add_argument('--info', action='store_true', help='also show findings of severity INFO')
             sub.add_argument('--json', action='store_true', help='print the findings as JSON')
+        elif name == 'export':
+            sub.add_argument('source', help='database file (.h5) of any layout')
+            sub.add_argument('-o', '--output', required=True, help='new or empty directory for the tables')
+        elif name == 'migrate':
+            sub.add_argument('source', help='database file (.h5) of any layout, or a directory with ASCII tables')
+            sub.add_argument('-o', '--output', required=True, help='new database file (.h5)')
+            sub.add_argument('--fix', action='store_true', help='rename typos in group and attribute names, sort electronic levels')
+            sub.add_argument('--canonical-products', action='store_true', help='rename reaction cross-sections to heavy species first, electrons last')
+            sub.add_argument('--force', action='store_true', help='overwrite an existing output file')
         elif name == 'diff':
             sub.add_argument('a', help='first database file (A)')
             sub.add_argument('b', help='second database file (B)')

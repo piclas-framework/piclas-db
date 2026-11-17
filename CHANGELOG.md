@@ -3,6 +3,18 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.5.0
+
+* Writer for the current layout (`piclas_db/writer.py`): strings read by PICLas as fixed-length, null-padded ASCII (255
+  characters), logicals as integers, all data as float64, one metadata scheme
+* `piclas-db migrate SOURCE -o OUTPUT.h5` converts any layout or ASCII tables into the current layout; `--fix` renames typos in
+  group and attribute names and sorts electronic levels, `--canonical-products` renames reaction cross-sections to the conventional
+  product order; colliding renames are skipped and reported; the result is checked
+* `piclas-db export SOURCE -o DIRECTORY` writes ASCII tables (YAML and CSV, `piclas_db/tables.py`); tables are read by all commands
+* Round trip h5 -> tables -> h5 reproduces values, attributes and data types exactly
+* `diff`: entries with coinciding keys (e.g. thresholds `14` and `14.0`) are matched by their exact names
+* New dependency: PyYAML
+
 ## 0.4.0
 
 * `piclas-db diff A.h5 B.h5` compares two databases of any layout (`piclas_db/compare.py`, documented in `docs/diff.md`):

@@ -238,8 +238,18 @@ READERS = {
 
 
 def read_database(path: Union[str, pathlib.Path]) -> Database:
-    """Read a database file of any known layout into the data model"""
+    """Read a database file of any known layout, or a directory with ASCII tables, into the data model"""
     path = pathlib.Path(path)
+    if path.is_dir():
+        # Imported here to avoid a circular import (tables uses the data model and the schema only)
+        from piclas_db.tables import TablesError, is_tables, read_tables  # noqa: PLC0415
+
+        if not is_tables(path):
+            raise DatabaseReadError(f'directory is not a piclas-db table export (database.yaml missing): {path}')
+        try:
+            return read_tables(path)
+        except (TablesError, OSError, ValueError, KeyError) as e:
+            raise DatabaseReadError(f'cannot read tables in {path}: {e}') from e
     if not path.is_file():
         raise DatabaseReadError(f'file not found: {path}')
     try:

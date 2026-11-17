@@ -32,6 +32,7 @@ class Schema(Enum):
     SPECIES_DATABASE = 'species database (SpeciesDatabase.h5 layout)'
     LEGACY_XSEC = 'legacy cross-section database (XSec_Database_*.h5)'
     LEGACY_ELECTRONIC = 'legacy electronic state database (DSMCSpecies_electronic_state_*.h5)'
+    ASCII_TABLES = 'ASCII tables (piclas-db export)'
     UNKNOWN = 'unknown layout'
 
 

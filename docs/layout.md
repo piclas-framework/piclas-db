@@ -9,6 +9,10 @@ Conventions used below:
 
 * Python/h5py notation for shapes: `(N, 2)` means N rows with 2 columns. Fortran sees the transposed array `(2, N)`.
 * **req.** = PICLas aborts or reads garbage if missing, **opt.** = PICLas checks for existence and uses a default otherwise.
+* **Strings read by PICLas** (e.g. `Reactants`, `Products`, `ChemistryModel`, `ReactionModel`, `PreviousState`, `Type` of surface
+  reactions) must be fixed-length strings (PICLas reads them into `CHARACTER(LEN=255)`) and must not be null-terminated: PICLas
+  aborts on variable-length and on null-terminated strings (`ReadAttribute` in `hdf5_input.f90`). Null-padded strings, as written
+  by h5py for NumPy `S` arrays, are fine. Logicals are read as integers (0/1).
 * Energies of cross-sections in eV, cross-sections in m², electronic and vibrational levels in K.
 
 ## Top level

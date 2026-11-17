@@ -224,6 +224,14 @@ def matching_key(xsec: CrossSection) -> tuple[str, str]:
     return kind.value, xsec.key
 
 
+def keyed(cross_sections: list[CrossSection]) -> dict[tuple[str, str], CrossSection]:
+    """Cross-sections by matching key; entries whose keys coincide (e.g. thresholds '14' and '14.0') keep their exact names"""
+    counts: dict[tuple[str, str], int] = {}
+    for xsec in cross_sections:
+        counts[matching_key(xsec)] = counts.get(matching_key(xsec), 0) + 1
+    return {(matching_key(xsec) if counts[matching_key(xsec)] == 1 else (effective_kind(xsec).value, xsec.key)): xsec for xsec in cross_sections}
+
+
 def display_path(pair: str, xsec: CrossSection) -> str:
     return f'/Cross-Sections/{pair}/' + (f'{xsec.group}/' if xsec.group else '') + xsec.key
 
@@ -281,8 +289,7 @@ def compare_cross_sections(a: Database, b: Database, rtol: float, comparison: Co
         pair_a, pair_b = pairs_a[key], pairs_b[key]
         if pair_a.name != pair_b.name:
             comparison.differences.append(Difference(Change.RENAMED, f'/Cross-Sections/{pair_b.name}', f'collision pair stored as {pair_a.name} in A'))
-        xsecs_a = {matching_key(xsec): xsec for xsec in pair_a.cross_sections}
-        xsecs_b = {matching_key(xsec): xsec for xsec in pair_b.cross_sections}
+        xsecs_a, xsecs_b = keyed(pair_a.cross_sections), keyed(pair_b.cross_sections)
         for match in sorted(set(xsecs_a) | set(xsecs_b)):
             if match not in xsecs_b:
                 xsec = xsecs_a[match]

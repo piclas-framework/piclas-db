@@ -20,7 +20,7 @@ from dataclasses import dataclass
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.commands import check, diff
+from piclas_db.commands import check, diff, export, migrate
 # ==================================================================================================================================
 
 
@@ -49,12 +49,12 @@ COMMANDS: dict[str, Command] = {
     'push':      Command('Back up the local store to the private mirror repository', 'WP1', not_implemented),
     'build':     Command('Build database.h5 from the local store', 'WP1', not_implemented),
     # Conversion, visualization and validation
-    'export':    Command('Write the containers of a database.h5 to ASCII tables', 'WP2', not_implemented),
+    'export':    Command('Write a database of any layout as ASCII tables (YAML and CSV)', 'WP2', export.run),
     'plot':      Command('Plot data from original files, ASCII tables or database.h5', 'WP3', not_implemented),
     'reservoir': Command('Create parameter.ini files for a reservoir parameter study', 'WP4', not_implemented),
     # Analysis of existing (also old) database files
     'check':     Command('Detect the layout of a database file and report corrupt or inconsistent data', 'WP2', check.run),
     'diff':      Command('Compare two databases of any layout: changed datasets and attributes, and by how much', 'WP2', diff.run),
-    'migrate':   Command('Convert a legacy database layout to the current layout (writes a new file)', 'WP2', not_implemented),
+    'migrate':   Command('Convert a database (any layout or ASCII tables) to the current layout (writes a new file)', 'WP2', migrate.run),
     'rebuild':   Command('Rebuild an existing database from re-downloaded original sources and compare it with the original', 'WP2', not_implemented),
 }  # fmt: skip
