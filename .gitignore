@@ -38,6 +38,11 @@ venv/
 store/
 sources/
 tables/
-!tests/fixtures/**
+# Plots and review images (piclas-db plot, reservoir, extract) show third-party data
 *.png
 *.jpg
+# Papers are copyrighted, extracted and exported data belong in the private store
+*.pdf
+*.csv
+# Exception for synthetic test fixtures; must stay last, later patterns override earlier ones
+!tests/fixtures/**

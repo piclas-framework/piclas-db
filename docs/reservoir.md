@@ -28,11 +28,16 @@ The study contains:
 * `run.sh`: creates the mesh (hopr or pyhope) and runs PICLas (`PICLAS=<binary>`, built with `PICLAS_TIMEDISCMETHOD=DSMC`) for
   every point
 
-The time step limits the collision probability per step to 5 %, and the number of steps is chosen so that about `--events`
+The time step limits the collision probability per step (`--collision-probability`, default 0.01), and the number of steps is chosen so that about `--events`
 reactions (default 1e4, about 1 % statistical error) are counted for the rarest reaction (at most 50000 steps). Points below a
 threshold run 100 steps, where no reaction may be counted. Where a reaction cross-section starts with σ > 0, the expected value
 uses the zero point at the heat of reaction (from `HeatOfFormation_K`) that PICLas prepends. Reactions whose products are not in
 `/Species` are skipped and listed.
+
+PICLas computes collision probabilities as 1 − exp(−nσg·Δt), so the counted rate coefficient is lower than nσg by about half the
+collision probability. A first study for Ar-electron with a collision probability of 0.05 showed exactly this: −2.5 % at 16 eV
+decreasing to −1.7 % at 100 eV (where the excitation cross-sections, which PICLas does not use without the electronic model, make up
+a larger part of the total cross-section). With the default of 0.01 the bias is about −0.5 %, below the statistical error.
 
 Options: `--projectile` (default: electron or the ion of the pair), `--reactions` (only these reaction cross-sections),
 `--background-density` (1e22 m⁻³), `--projectile-density` (1e21 m⁻³), `--events`.
@@ -46,5 +51,6 @@ piclas-db reservoir --evaluate study/ [--tolerance 0.05]
 
 The last line of `PartAnalyze.csv` (columns `NNN-ReactionMMM`) of every point is compared with the expected rate coefficient. A
 point passes if the deviation is within the tolerance (default 5 %) or within three standard deviations of the counting statistics;
-below a threshold no reaction may be counted. The table and `study/rates.png` (rate coefficients from the database as lines, PICLas
+below a threshold no reaction may be counted. Points within the tolerance but more than three standard deviations away are marked
+`(systematic?)`; if several deviate in the same direction, a systematic effect is reported. The table and `study/rates.png` (rate coefficients from the database as lines, PICLas
 as points) show the result; the exit code is 1 if a point failed or was not run.

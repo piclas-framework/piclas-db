@@ -108,6 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--background-density', type=float, default=1.0e22, help='density of the background gas in m^-3 (default 1e22)')
             sub.add_argument('--projectile-density', type=float, default=1.0e21, help='density of the projectiles in m^-3 (default 1e21)')
             sub.add_argument('--events', type=float, default=1.0e4, help='counted reactions aimed for per point (default 1e4, about 1 %% statistical error)')
+            sub.add_argument('--collision-probability', type=float, default=0.01, help='maximum collision probability per time step (default 0.01, rate bias about -0.5 %%)')
             sub.add_argument('-o', '--output', help='new directory for the study')
             sub.add_argument('--evaluate', metavar='DIRECTORY', help='evaluate a finished study')
             sub.add_argument('--tolerance', type=float, default=0.05, help='relative tolerance for the evaluation (default 0.05)')

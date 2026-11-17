@@ -48,7 +48,12 @@ def generate(args: argparse.Namespace) -> int:
     if not args.database or not args.pair or not args.output or bool(args.energies) == bool(args.temperatures):
         print('ERROR: give DATABASE, --pair, -o and either --energies (beam) or --temperatures (Maxwell)')
         return 1
-    settings = Settings(background_density=args.background_density, projectile_density=args.projectile_density, events=args.events)
+    settings = Settings(
+        background_density=args.background_density,
+        projectile_density=args.projectile_density,
+        events=args.events,
+        collision_probability=args.collision_probability,
+    )
     try:
         database = read_database(args.database)
         study = plan(database, args.pair, args.projectile, values(args.energies or []), values(args.temperatures or []), settings, args.reactions)
@@ -106,13 +111,19 @@ def run(args: argparse.Namespace) -> int:
         simulated = f'{result.simulated:11.3e}' if result.simulated is not None else '    not run'
         deviation = f'{result.deviation:+10.2%}' if result.deviation is not None else ' ' * 10
         statistical = f'{result.statistical:7.2%}' if result.statistical is not None else ' ' * 7
-        status = {None: '', True: 'ok', False: 'FAILED'}[result.passed]
+        status = {None: '', True: 'ok', False: 'FAILED'}[result.passed] + (' (systematic?)' if result.passed and result.systematic else '')
         print(f'{result.point:14s} {result.reaction:32s} {result.expected:11.3e} {simulated} {deviation} {statistical} {status}')
     import yaml  # noqa: PLC0415
 
     mode = yaml.safe_load((directory / 'study.yaml').read_text())['mode']
     plot_results(results, mode, directory / 'rates.png')
     failed = sum(result.passed is False for result in results)
+    systematic = [result for result in results if result.passed and result.systematic]
+    if len(systematic) >= 2 and len({result.deviation > 0 for result in systematic if result.deviation is not None}) == 1:
+        print(
+            f'Note: {len(systematic)} points deviate in the same direction by more than three standard deviations: a systematic effect, '
+            'e.g. the collision probability per time step (check with a smaller --collision-probability)'
+        )
     missing = sum(result.simulated is None for result in results)
     print(f'{len(results) - failed - missing} ok, {failed} failed, {missing} not run (tolerance {args.tolerance:.0%} or 3 standard deviations); plot: {directory / "rates.png"}')
     return 1 if failed or missing else 0

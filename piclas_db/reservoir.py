@@ -49,7 +49,9 @@ from piclas_db.plot import BOLTZMANN, EV, rate_coefficient
 CELL_LENGTH = 4.64e-6  # m, single cell as in the PICLas reservoir regression checks (volume 1e-16 m^3)
 CELL_VOLUME = CELL_LENGTH**3
 MAX_STEPS = 50_000
-COLLISION_PROBABILITY = 0.05  # maximum collision probability per time step
+COLLISION_PROBABILITY = 0.01  # default maximum collision probability per time step
+# PICLas computes collision probabilities as 1 - exp(-n sigma g dt), so the counted rate is lower than n sigma g by about half the
+# collision probability (-2.5 % at 0.05, measured in a first Ar reservoir study); 0.01 keeps this below the statistical error.
 
 
 class ReservoirError(Exception):
@@ -68,6 +70,7 @@ class Settings:
     projectile_density: float = 1.0e21  # m^-3
     background_temperature: float = 300.0  # K (beam mode)
     events: float = 1.0e4  # counted reactions aimed for at every point (statistical error about 1 %)
+    collision_probability: float = COLLISION_PROBABILITY  # maximum collision probability per time step
 
 
 @dataclass
@@ -130,7 +133,7 @@ def as_used_by_piclas(database: Database, data: np.ndarray, reactants: list[str]
 
 def plan_point(name: str, rates: dict[str, float], collision_frequency: float, settings: Settings) -> tuple[float, int, dict[str, float]]:
     """Time step (collision probability per step limited) and number of steps (enough counted reactions for the rarest reaction)"""
-    timestep = COLLISION_PROBABILITY / max(collision_frequency, 1.0)
+    timestep = settings.collision_probability / max(collision_frequency, 1.0)
     particles = settings.projectile_density * CELL_VOLUME
     positive = [rate for rate in rates.values() if rate > 0.0]
     if not positive:
@@ -352,6 +355,7 @@ class Result:
     statistical: Optional[float]  # relative standard deviation from the expected number of counted reactions
     deviation: Optional[float]
     passed: Optional[bool]
+    systematic: bool = False  # within the tolerance, but more than three standard deviations from the expected value
 
 
 def read_rates(path: pathlib.Path, count: int) -> Optional[list[float]]:
@@ -395,5 +399,6 @@ def evaluate(directory: pathlib.Path, tolerance: float) -> list[Result]:
                 continue
             deviation = (simulated - expected) / expected
             limit = max(tolerance, 3.0 * statistical) if statistical else tolerance
-            results.append(Result(point['name'], point['value'], key, expected, simulated, statistical, deviation, abs(deviation) <= limit))
+            systematic = statistical is not None and abs(deviation) > 3.0 * statistical
+            results.append(Result(point['name'], point['value'], key, expected, simulated, statistical, deviation, abs(deviation) <= limit, systematic))
     return results

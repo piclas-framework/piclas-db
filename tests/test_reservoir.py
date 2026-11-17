@@ -147,3 +147,20 @@ def test_maxwell_and_command_errors(tmp_path: pathlib.Path) -> None:
     broken = tmp_path / 'maxwell' / 'T_20000K' / 'PartAnalyze.csv'
     broken.write_text('001-TIME,002-Other\n0,0\n')
     assert main(['reservoir', '--evaluate', str(tmp_path / 'maxwell')]) == 1
+
+
+def test_systematic_deviation_is_reported(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # As in the first Ar study with PICLas: all points about -2.5 %, within the tolerance but beyond the counting statistics
+    path = tmp_path / 'database.h5'
+    write_database(database(), path)
+    study_dir = tmp_path / 'study'
+    assert main(['reservoir', str(path), '--pair', 'Ar-electron', '--energies', '50', '100', '--collision-probability', '0.05', '-o', str(study_dir)]) == 0
+    study = yaml.safe_load((study_dir / 'study.yaml').read_text())
+    assert study['settings']['collision_probability'] == pytest.approx(0.05)
+    for point in study['points']:
+        write_output(study_dir, point['name'], [point['expected']['ArIon1-electron-electron'] * 0.975])
+    capsys.readouterr()
+    assert main(['reservoir', '--evaluate', str(study_dir)]) == 0
+    out = capsys.readouterr().out
+    assert 'ok (systematic?)' in out
+    assert 'systematic effect' in out
