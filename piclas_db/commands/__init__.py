@@ -56,4 +56,5 @@ COMMANDS: dict[str, Command] = {
     'check':     Command('Detect the layout of a database file and report corrupt or inconsistent data', 'WP2', check.run),
     'diff':      Command('Compare two databases: changed datasets and attributes, and by how much', 'WP2', not_implemented),
     'migrate':   Command('Convert a legacy database layout to the current layout (writes a new file)', 'WP2', not_implemented),
+    'rebuild':   Command('Rebuild an existing database from re-downloaded original sources and compare it with the original', 'WP2', not_implemented),
 }  # fmt: skip

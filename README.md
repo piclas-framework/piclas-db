@@ -61,6 +61,24 @@ piclas-db -v
 | `piclas-db check old.h5` | Detect the layout, report corrupt or inconsistent data | **started** |
 | `piclas-db diff old.h5 new.h5` | Changed datasets and attributes, and by how much | planned |
 | `piclas-db migrate old.h5 -o new.h5` | Convert a legacy layout to the current layout (new file) | planned |
+| `piclas-db rebuild old.h5 -o new.h5` | Re-download the sources of an existing database, rebuild it (old or new layout) and compare | planned |
+
+## Where the data comes from
+For every dataset a database needs (`build`, `rebuild`), piclas-db looks in the following places, in this order, and only
+moves on to the next one if the dataset was not found:
+
+1. **Local store**: original files already on your machine.
+2. **Private repository**: the organisation's private backup of the original files, accessed via SSH with your own git
+   permissions. Found files are copied into the local store.
+3. **Automatic download**: only from sources whose terms allow it (e.g. the IAEA CollisionDB API).
+4. **Guided manual download**: step-by-step instructions for the source website (e.g. LXCat, ATcT, IAEA ALADDIN), followed
+   by `piclas-db import`.
+
+Files obtained in steps 3 and 4 are added to the private repository step by step: each imported file is committed with its
+provenance (source, dataset, retrieval date, sha256) and pushed with `piclas-db push`, if you have write access. Users without
+access to the private repository continue with steps 1, 3 and 4 only.
+
+The layout of `database.h5` (what PICLas reads and what piclas-db writes) is specified in [docs/layout.md](docs/layout.md).
 
 The database is used in PICLas with
 ```ini
