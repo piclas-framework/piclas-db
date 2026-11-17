@@ -46,6 +46,7 @@ from piclas_db.reference import (
     SPECIES_ATTRIBUTES,
     SPECIES_REQUIRED_ATTRIBUTES,
 )
+from piclas_db import provenance
 from piclas_db.schema import Schema
 # ==================================================================================================================================
 
@@ -420,7 +421,25 @@ def check_provenance(database: Database) -> Iterator[Finding]:
                 yield Finding(Severity.INFO, 'provenance-2d-strings', path, 'string attributes stored as 2D arrays')
 
 
-RULES: tuple[Rule, ...] = (check_species_attributes, check_electronic_levels, check_reactions, check_cross_sections, check_provenance)
+def check_file_provenance(database: Database) -> Iterator[Finding]:
+    """Root attributes written by piclas-db: how the file was made"""
+    record = provenance.read(database.attributes)
+    if not record.present:
+        if database.schema is Schema.SPECIES_DATABASE:
+            yield Finding(Severity.INFO, 'provenance-file', '/', 'not written by piclas-db: origin of the file unknown (rebuild derives a recipe)')
+        return
+    if record.format_version is not None and record.format_version > provenance.FORMAT_VERSION:
+        yield Finding(
+            Severity.WARNING,
+            'provenance-format',
+            '/',
+            f'written by piclas-db {record.version} with layout version {record.format_version}; this version knows up to {provenance.FORMAT_VERSION}',
+        )
+    if record.recipe is not None and not record.recipe_intact:
+        yield Finding(Severity.WARNING, 'provenance-recipe', '/', 'embedded recipe does not match its sha256 (modified after the build)')
+
+
+RULES: tuple[Rule, ...] = (check_file_provenance, check_species_attributes, check_electronic_levels, check_reactions, check_cross_sections, check_provenance)
 
 
 def run_checks(database: Database) -> list[Finding]:

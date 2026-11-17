@@ -37,7 +37,9 @@ uses the zero point at the heat of reaction (from `HeatOfFormation_K`) that PICL
 PICLas computes collision probabilities as 1 − exp(−nσg·Δt), so the counted rate coefficient is lower than nσg by about half the
 collision probability. A first study for Ar-electron with a collision probability of 0.05 showed exactly this: −2.5 % at 16 eV
 decreasing to −1.7 % at 100 eV (where the excitation cross-sections, which PICLas does not use without the electronic model, make up
-a larger part of the total cross-section). With the default of 0.01 the bias is about −0.5 %, below the statistical error.
+a larger part of the total cross-section). With the default of 0.01 the bias is about −0.5 %, below the statistical error: the same study repeated with 0.01 gave
+−0.91 %, −1.87 %, −0.83 % and −0.66 % at statistical errors of 1.0 %, 1.0 %, 0.65 % and 0.56 % (weighted mean −0.9 ± 0.4 %,
+consistent with the expected −0.4 % to −0.5 %), without any point marked as systematic.
 
 Options: `--projectile` (default: electron or the ion of the pair), `--reactions` (only these reaction cross-sections),
 `--background-density` (1e22 m⁻³), `--projectile-density` (1e21 m⁻³), `--events`.

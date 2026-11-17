@@ -20,6 +20,7 @@ from collections import Counter
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db import provenance
 from piclas_db.migrate import migrate
 from piclas_db.readers import DatabaseReadError, read_database
 from piclas_db.rules import Severity, run_checks
@@ -43,7 +44,8 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     report = migrate(database, fix=args.fix, products=args.canonical_products)
-    write_database(database, output)
+    options = ''.join(f' {option}' for option, used in (('--fix', args.fix), ('--canonical-products', args.canonical_products)) if used)
+    write_database(database, output, provenance.create(f'migrate {source}{options}', input_file=(source, database.schema.name)))
 
     print(f'{source} ({database.schema.value}) -> {output} (species database layout)')
     for title, lines in (('Normalized', report.normalized), ('Fixed', report.fixed), ('Not fixed', report.skipped), ('Note', report.notes)):

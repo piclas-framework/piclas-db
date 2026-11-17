@@ -43,6 +43,9 @@ have one of three severities, and the exit code is 1 if at least one error is fo
 | `data-float32` | WARNING | data stored as float32 | several files |
 | `provenance-missing` | WARNING | species or cross-sections without reference or info | several files |
 | `provenance-converter`, `provenance-2d-strings` | INFO | attributes of a generic CSV converter, string attributes stored as 2D arrays | GEC files |
+| `provenance-file` | INFO | file not written by piclas-db (no provenance attributes) | all existing files |
+| `provenance-format` | WARNING | file written with a newer layout version than this piclas-db knows | |
+| `provenance-recipe` | WARNING | embedded recipe modified after the build (sha256 mismatch) | |
 | `file-unreadable`, `file-layout` | ERROR | dataset cannot be read, unknown layout | |
 
 Problems that need a second file or the original source cannot be found by `check` alone. They are covered by `diff` and

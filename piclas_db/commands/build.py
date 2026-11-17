@@ -20,6 +20,7 @@ from collections import Counter
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db import provenance
 from piclas_db.build import BuildError, build
 from piclas_db.git import GitError
 from piclas_db.readers import read_database
@@ -57,7 +58,9 @@ def run(args: argparse.Namespace) -> int:
     except BuildError as e:
         print(f'ERROR: {e}')
         return 1
-    write_database(database, output)
+    sources = [(str(resolution.requirement), resolution.entry.relative, str(resolution.entry.meta.get('sha256')), resolution.entry.meta.get('retrieved')) for resolution in resolutions if resolution.entry is not None]
+    recipe_text = pathlib.Path(args.recipe).read_text(encoding='utf-8')
+    write_database(database, output, provenance.create(f'build {args.recipe}', recipe_text=recipe_text, sources=sources))
 
     for line in report.added:
         print(f'  added  {line}')

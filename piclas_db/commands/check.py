@@ -20,6 +20,7 @@ from collections import Counter
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db import provenance
 from piclas_db.readers import DatabaseReadError, read_database
 from piclas_db.rules import Severity, run_checks
 # ==================================================================================================================================
@@ -42,6 +43,11 @@ def run(args: argparse.Namespace) -> int:
     else:
         print(f'File:   {database.path}')
         print(f'Layout: {database.schema.value}')
+        record = provenance.read(database.attributes)
+        if record.present:
+            print(f'Made:   piclas-db {record.version} (commit {record.commit}), {record.created}: {record.command}')
+            details = [f'{len(record.sources)} original file(s)'] + (['recipe embedded'] if record.recipe else []) + ([f'input {record.input}'] if record.input else [])
+            print(f'        {"; ".join(details)}')
         for category, count in database.summary().items():
             if count:
                 print(f'  {category:22s} {count}')

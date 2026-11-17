@@ -99,8 +99,17 @@ def requirement(entry: dict, context: str) -> Requirement:
 def load_recipe(path: Union[str, pathlib.Path]) -> Recipe:
     path = pathlib.Path(path)
     try:
-        data = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
-    except (OSError, yaml.YAMLError) as e:
+        text = path.read_text(encoding='utf-8')
+    except OSError as e:
+        raise RecipeError(f'cannot read recipe {path}: {e}') from e
+    return parse_recipe(text, str(path))
+
+
+def parse_recipe(text: str, path: str) -> Recipe:
+    """Recipe from YAML text (e.g. the recipe embedded in a database file)"""
+    try:
+        data = yaml.safe_load(text) or {}
+    except yaml.YAMLError as e:
         raise RecipeError(f'cannot read recipe {path}: {e}') from e
     if not isinstance(data, dict):
         raise RecipeError(f'{path}: a recipe is a mapping with cross_sections, levels, species and reactions')

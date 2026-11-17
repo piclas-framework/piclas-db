@@ -26,13 +26,15 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db import provenance
 from piclas_db.build import BuildError, build
 from piclas_db.compare import compare
 from piclas_db.git import GitError
 from piclas_db.guide import guide
 from piclas_db.model import CollisionPair, Database
 from piclas_db.readers import DatabaseReadError, read_database
-from piclas_db.rebuild import derive, recipe_yaml
+from piclas_db.rebuild import Derivation, derive, recipe_yaml
+from piclas_db.recipe import RecipeError, parse_recipe
 from piclas_db.resolve import Origin, resolve
 from piclas_db.store import Store
 from piclas_db.writer import write_database
@@ -80,14 +82,24 @@ def run(args: argparse.Namespace) -> int:
     store = Store(args.store)
     try:
         old = read_database(args.source)
-        derivation = derive(old, store, levels_from_nist=args.levels_from_nist)
-        recipe_file.write_text(yaml.safe_dump(recipe_yaml(derivation.recipe, derivation.unresolved), sort_keys=False, allow_unicode=True, width=1000))
+        embedded = provenance.read(old.attributes)
+        if embedded.recipe_intact and not args.derive:
+            # Built by piclas-db: the embedded recipe (with the exact original files) is used instead of deriving one
+            assert embedded.recipe is not None
+            recipe_text = embedded.recipe
+            derivation = Derivation(recipe=parse_recipe(recipe_text, f'embedded in {args.source}'))
+            origin = f'Recipe embedded in {args.source} (piclas-db {embedded.version}, {embedded.created})'
+        else:
+            derivation = derive(old, store, levels_from_nist=args.levels_from_nist)
+            recipe_text = yaml.safe_dump(recipe_yaml(derivation.recipe, derivation.unresolved), sort_keys=False, allow_unicode=True, width=1000)
+            origin = f'Recipe derived from {args.source}'
+        recipe_file.write_text(recipe_text)
         resolutions = resolve(store, derivation.recipe.requirements, update=not args.offline)
-    except (DatabaseReadError, GitError, OSError) as e:
+    except (DatabaseReadError, GitError, OSError, RecipeError) as e:
         print(f'ERROR: {e}')
         return 1
 
-    print(f'Recipe derived from {args.source}: {recipe_file}')
+    print(f'{origin}: {recipe_file}')
     for resolution in resolutions:
         print(f'  {resolution.origin.value:20s} {resolution.requirement}' + (f': {resolution.entry.relative}' if resolution.entry else ''))
     missing = [resolution.requirement for resolution in resolutions if resolution.origin is Origin.MANUAL]
@@ -110,7 +122,9 @@ def run(args: argparse.Namespace) -> int:
         print(f'ERROR: {e}')
         return 1
     copied = copy_not_rebuilt(old, new)
-    write_database(new, output)
+    sources = [(str(resolution.requirement), resolution.entry.relative, str(resolution.entry.meta.get('sha256')), resolution.entry.meta.get('retrieved')) for resolution in resolutions if resolution.entry is not None]
+    record = provenance.create(f'rebuild {args.source}', recipe_text=recipe_text, sources=sources, input_file=(pathlib.Path(args.source), old.schema.name))
+    write_database(new, output, record)
     print(f'\nRebuilt {len(report.added)} entries from original files, copied {len(copied)} from the old file: {output}')
     for line in copied:
         print(f'  copied (not rebuilt)  {line}')

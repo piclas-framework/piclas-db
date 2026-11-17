@@ -21,7 +21,7 @@ All numerical data are written as float64.
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import pathlib
-from typing import Union
+from typing import Optional, Union
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Third-party libraries
@@ -33,6 +33,7 @@ import numpy as np
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.model import AttrValue, Database, Provenance
+from piclas_db.provenance import PROVENANCE_PREFIX
 # ==================================================================================================================================
 
 STRING_LENGTH = 255  # CHARACTER(LEN=255) in PICLas
@@ -56,9 +57,10 @@ def write_attribute(attrs: h5py.AttributeManager, name: str, value: AttrValue, m
     elif isinstance(value, float):
         attrs[name] = np.float64(value)
     elif isinstance(value, str) or (isinstance(value, list) and value and isinstance(np.ravel(np.array(value, dtype=object))[0], str)):
-        if metadata:
-            text = value if isinstance(value, str) else ' '.join(str(item) for item in np.ravel(np.array(value, dtype=object)))
-            attrs.create(name, text, dtype=h5py.string_dtype('utf-8'))
+        if metadata and isinstance(value, str):
+            attrs.create(name, value, dtype=h5py.string_dtype('utf-8'))
+        elif metadata:
+            attrs.create(name, np.array(value, dtype=object), dtype=h5py.string_dtype('utf-8'))  # list of texts, shape kept
         else:
             attrs.create(name, fixed_strings(value))  # keeps the fixed length also for scalars
     elif isinstance(value, (list, np.ndarray)):
@@ -83,10 +85,16 @@ def write_provenance(attrs: h5py.AttributeManager, provenance: Provenance, refer
             write_attribute(attrs, name, value, metadata=True)
 
 
-def write_database(database: Database, path: Union[str, pathlib.Path]) -> None:
-    """Write the data model in the current layout (always a new file)"""
+def write_database(database: Database, path: Union[str, pathlib.Path], provenance: Optional[dict[str, AttrValue]] = None) -> None:
+    """Write the data model in the current layout (always a new file)
+
+    provenance: root attributes describing how the file was made (piclas_db.provenance); they replace the provenance attributes of
+    the source, whose own file is identified in them by its sha256
+    """
+    attributes = {key: value for key, value in database.attributes.items() if not key.startswith(PROVENANCE_PREFIX)}
+    attributes.update(provenance or {})
     with h5py.File(path, 'w') as h5:
-        for key, value in database.attributes.items():
+        for key, value in attributes.items():
             group_name, _, name = key.rpartition('@')
             target = h5.require_group(group_name).attrs if group_name else h5.attrs
             write_attribute(target, name, value, metadata=name.startswith('* ') or not group_name)

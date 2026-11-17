@@ -138,6 +138,27 @@ species joined by `-`, e.g. `Ar-electron/Biagi-v7.1`.
 | `StickingCoefficient` | `(n_rows, 4)` table, required for boundaries with a sticking-coefficient model | `particle_boundary_init.f90` |
 | `<CatName>` | catalytic reaction: attribute `Type` (req.) and optional attributes `ReactHeat`, `HeatScaling`, `EnergyAccommodation`, `MinimumTotalCoverage`, `MaximumTotalCoverage`, `MinimumTemperature`, `MaximumTemperature`, `StickingCoefficient`, `EqConstant`, `DissOrder`, `LateralInteraction`, `Ca`, `Cb`, `Prefactor`, `Energy` | `surfacemodel_chemistry.f90` |
 
+## Provenance (root attributes)
+
+Every file written by `build`, `migrate` or `rebuild` carries root attributes that say how it was made. PICLas does not read them;
+they are UTF-8 metadata.
+
+| Attribute | Content |
+| --- | --- |
+| `* piclas-db format` | `PICLas species database` |
+| `* piclas-db format version` | version of this layout (currently 1), increased with incompatible changes |
+| `* piclas-db version`, `* piclas-db commit` | version and git commit of piclas-db |
+| `* piclas-db created` | UTC time of creation (ISO 8601) |
+| `* piclas-db command` | command that wrote the file, e.g. `build recipes/gec-argon.yaml`, `migrate old.h5 --fix` |
+| `* piclas-db recipe`, `* piclas-db recipe sha256` | recipe as YAML text and its sha256 (`build`, `rebuild`; recipes contain no third-party data) |
+| `* piclas-db sources` | one line per original file: `<provider>/<dataset> \| <file in the store> \| sha256 <...> \| retrieved <date>` |
+| `* piclas-db input` | input of `migrate` or `rebuild`: `<path> \| sha256 <...> \| <layout>` |
+
+A new file replaces the provenance attributes of its input; the input itself is identified by its sha256 and keeps its own
+provenance. `piclas-db check` shows the provenance and reports files without it (INFO), a newer layout version (WARNING) and an
+embedded recipe that no longer matches its sha256 (WARNING). `piclas-db rebuild` uses the embedded recipe, so a file built by
+piclas-db is rebuilt from exactly the same original files (`--derive` derives the recipe from the data instead).
+
 ## Legacy layouts
 
 | Layout | Structure | Mapping to the current layout |

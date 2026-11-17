@@ -51,6 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('-o', '--output', required=True, help='rebuilt database file (.h5)')
             sub.add_argument('--recipe-out', help='file for the derived recipe (default: <output>.recipe.yaml)')
             sub.add_argument('--levels-from-nist', action='store_true', help='rebuild all electronic levels from NIST ASD (also without NIST reference)')
+            sub.add_argument('--derive', action='store_true', help='derive the recipe from the provenance even if the file contains its recipe')
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
             sub.add_argument('--offline', action='store_true', help='do not update the store from the private repository')
             sub.add_argument('--force', action='store_true', help='overwrite an existing output file')

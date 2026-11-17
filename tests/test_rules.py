@@ -71,7 +71,7 @@ def levels(rows: list[list[float]]) -> np.ndarray:
 # ----------------------------------------------------------------------------------------------------------------------------------
 def test_clean_species_database() -> None:
     ar = Species('Ar', {'MassIC': 6.63e-26, 'InteractionID': 1}, levels([[1, 0], [5, 134013.1]]), provenance=REFERENCE)
-    assert run_checks(species_db(ar)) == []
+    assert [finding.rule for finding in run_checks(species_db(ar))] == ['provenance-file']  # INFO: not written by piclas-db
 
 
 def test_attribute_typo_and_missing() -> None:

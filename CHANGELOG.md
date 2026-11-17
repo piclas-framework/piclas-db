@@ -3,11 +3,20 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.12.0
+
+* Provenance in every written database (`piclas_db/provenance.py`, documented in `docs/layout.md`): root attributes with layout
+  format version, piclas-db version and commit, UTC creation time, command, embedded recipe with sha256, every original file with
+  its store path, sha256 and retrieval date, and the input file of `migrate`/`rebuild` with its sha256
+* `piclas-db check` shows the provenance; new rules `provenance-file`, `provenance-format`, `provenance-recipe`
+* `piclas-db rebuild` uses the embedded recipe of files built by piclas-db (`--derive` for the old behaviour)
+* String metadata lists are written as UTF-8 string arrays
+
 ## 0.11.1
 
 * `reservoir`: first study with PICLas (Ar-electron, 16-100 eV) passes, with a systematic deviation of -1.7 % to -2.5 %, consistent
   with the collision probability 1 - exp(-n sigma g dt) at 0.05 per time step; default lowered to 0.01, new option
-  `--collision-probability`
+  `--collision-probability`; repeated with 0.01: -0.7 % to -1.9 %, all within the counting statistics (validation with PICLas done)
 * `reservoir --evaluate` marks points beyond three standard deviations as `(systematic?)` and reports deviations in the same direction
 * Row count in shapes written as `n_rows` instead of `N` (polynomial degree in PICLas)
 

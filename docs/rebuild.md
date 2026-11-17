@@ -16,6 +16,9 @@ checked by `piclas-db import` anyway. Each guide also states the terms of the pr
 
 Rebuilds an existing database (any layout) from the original files and compares the result with the old file:
 
+If the old file was built by piclas-db, its embedded recipe is used (see the provenance attributes in
+[layout.md](layout.md#provenance-root-attributes)); `--derive` derives it from the data instead.
+
 1. **Derive a recipe** from the provenance in the old file (written to `NEW.recipe.yaml`):
    * cross-sections with an LXCat recommended reference (`Biagi-v7.1 database, www.lxcat.net, ...`) and the LXCat header in `Info`
      (`SPECIES: e / Ar`); references stored on a group (e.g. `ELECTRONIC`) count for its datasets; cross-sections without reference
