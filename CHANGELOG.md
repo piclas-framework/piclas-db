@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.4.0
+
+* `piclas-db diff A.h5 B.h5` compares two databases of any layout (`piclas_db/compare.py`, documented in `docs/diff.md`):
+  species, electronic levels, attributes, reactions, cross-sections, diffusion and surface data
+* Matching across layouts: collision pairs independent of their order, thresholds as numbers, reaction products independent of their
+  order, group names with typos; renamed entries are reported
+* Result classes identical, numerically different, scaled, different structure, attributes differ, renamed, only in A/B; references
+  naming different sources are marked; float32-aware tolerance (`--rtol`); only shared categories unless `--all`; `--json`
+
 ## 0.3.0
 
 * `piclas-db check` applies content rules to all layouts (`piclas_db/rules.py`, documented in `docs/checks.md`): species attributes,

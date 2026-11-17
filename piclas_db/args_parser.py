@@ -40,5 +40,11 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('file', help='database file (.h5) to check')
             sub.add_argument('--info', action='store_true', help='also show findings of severity INFO')
             sub.add_argument('--json', action='store_true', help='print the findings as JSON')
+        elif name == 'diff':
+            sub.add_argument('a', help='first database file (A)')
+            sub.add_argument('b', help='second database file (B)')
+            sub.add_argument('--rtol', type=float, default=1.0e-6, help='relative tolerance for identical values (default: 1e-6, covers float32)')
+            sub.add_argument('--all', action='store_true', help='also report categories that exist in only one of the files')
+            sub.add_argument('--json', action='store_true', help='print the differences as JSON')
 
     return parser

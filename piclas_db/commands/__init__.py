@@ -20,7 +20,7 @@ from dataclasses import dataclass
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.commands import check
+from piclas_db.commands import check, diff
 # ==================================================================================================================================
 
 
@@ -54,7 +54,7 @@ COMMANDS: dict[str, Command] = {
     'reservoir': Command('Create parameter.ini files for a reservoir parameter study', 'WP4', not_implemented),
     # Analysis of existing (also old) database files
     'check':     Command('Detect the layout of a database file and report corrupt or inconsistent data', 'WP2', check.run),
-    'diff':      Command('Compare two databases: changed datasets and attributes, and by how much', 'WP2', not_implemented),
+    'diff':      Command('Compare two databases of any layout: changed datasets and attributes, and by how much', 'WP2', diff.run),
     'migrate':   Command('Convert a legacy database layout to the current layout (writes a new file)', 'WP2', not_implemented),
     'rebuild':   Command('Rebuild an existing database from re-downloaded original sources and compare it with the original', 'WP2', not_implemented),
 }  # fmt: skip
