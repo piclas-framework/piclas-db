@@ -14,7 +14,7 @@ database, and it is never published (see [Where the data comes from](../README.m
 Example: `lxcat/biagi-v7.1+phelps/ar/2026-06-01_95a5d06a.txt` for an LXCat download with the Biagi-v7.1 and Phelps data of argon.
 
 The location is `--store`, otherwise `$PICLAS_DB_STORE`, otherwise `$XDG_DATA_HOME/piclas-db/store`
-(`~/.local/share/piclas-db/store`). Version 0.7.0 makes the store a clone of the private source repository.
+(`~/.local/share/piclas-db/store`).
 
 `meta.yaml` records the provider, kind, dataset, species, retrieval date and where it came from (file content or command line),
 the original file name, sha256, size, import time and tool version, and the provider details: for LXCat the databases with their
@@ -49,3 +49,37 @@ Options: `--store`, `--species`, `--custom NAME`, `--retrieved YYYY-MM-DD`, `--d
 
 Parsers for NIFS, ATcT and the IAEA databases follow once example downloads are available; until then such files can be stored with
 `--custom`.
+
+## Private repository
+
+The local store can be a clone of a private git repository of the organisation, which backs up the original files and shares them
+between users. Access uses the user's own SSH key and repository permissions; piclas-db never handles credentials, and git runs
+non-interactively, so missing access fails immediately with a hint instead of waiting for a password.
+
+```bash
+piclas-db fetch --mirror git@github.com:<org>/<private-repo>.git   # first time: clone (also works for an empty repository)
+piclas-db import --source-dir ~/Downloads                          # every imported file is committed separately
+piclas-db push                                                     # back up the commits
+piclas-db fetch                                                    # later: update from the private repository
+```
+
+* The repository URL is taken from `--mirror`, `$PICLAS_DB_MIRROR` or the remote of an existing clone.
+* An existing local store that is not yet a clone is adopted: the repository is cloned next to it, local files that are not in the
+  repository are added in one commit, and the old store is kept as `<store>.backup-<date>`.
+* Every import is one commit with the provenance in the message, e.g.
+  `Add lxcat cross-sections biagi-v7.1+phelps/ar (retrieved 2026-06-01, sha256 95a5d06a)`. Since imports only add new files, `fetch`
+  and `push` rebase local commits without conflicts. `index.yaml` is generated locally and never committed.
+* `push` refuses to push if a file no longer matches its sha256 (`piclas-db store --verify`).
+* Without access to the private repository, everything works with the local store and manual downloads.
+
+## Locating the files a database needs
+
+`piclas-db fetch --need PROVIDER/DATASET[@SHA] ...` looks for original files in this order and reports where each was found:
+
+1. local store
+2. private repository (updates the store once if something is missing locally)
+3. automatic download (no provider supported yet; planned for the IAEA CollisionDB API)
+4. manual download: download by hand and `piclas-db import` (step-by-step instructions with `piclas-db guide` are planned)
+
+Example: `piclas-db fetch --need lxcat/biagi-v7.1+phelps/ar nist-asd/levels/ar@1a3ff74d`. The exit code is 1 if a manual
+download is required. `build` and `rebuild` use the same lookup.

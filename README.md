@@ -53,8 +53,8 @@ piclas-db -v
 | `piclas-db guide lxcat:biagi-ar` | Step-by-step guide for a manual download | planned (WP1) |
 | `piclas-db import --source-dir ~/Downloads` | Identify by content, validate, copy into the local store ([details](docs/store.md)) | **available** |
 | `piclas-db store [--verify]` | List the local store, verify the files against their sha256 | **available** |
-| `piclas-db fetch [--mirror <private repo>]` | Download where the source terms allow it, restore from a private mirror | planned (WP1) |
-| `piclas-db push` | Back up the local store to the private mirror | planned (WP1) |
+| `piclas-db fetch [--mirror <private repo>] [--need ...]` | Clone or update the store from the private repository, locate required files ([details](docs/store.md#private-repository)) | **available** |
+| `piclas-db push` | Back up the local store to the private repository | **available** |
 | `piclas-db build -o database.h5` | Build the database from the local store | planned (WP1) |
 | `piclas-db export database.h5 -o tables/` | Write a database of any layout as ASCII tables ([details](docs/migrate.md)) | **available** |
 | `piclas-db plot Ar-electron --compare` | Plot data from original files, ASCII tables or `.h5` | planned (WP3) |

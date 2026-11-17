@@ -22,6 +22,8 @@ from typing import Optional
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.sources.identify import IdentifyError, identify
+from piclas_db.git import GitError
+from piclas_db.resolve import store_status
 from piclas_db.store import Store, sha256
 # ==================================================================================================================================
 
@@ -83,9 +85,16 @@ def run(args: argparse.Namespace) -> int:
         if args.dry_run:
             print(f'  would import {path} ({label})')
         else:
-            entry = store.add(path, identified, retrieved=retrieved)
+            try:
+                entry = store.add(path, identified, retrieved=retrieved)
+            except GitError as e:
+                print(f'  ERROR    {path}: copied into the store but not committed: {e}')
+                failed += 1
+                continue
             print(f'  imported {path} -> {entry.relative} ({label})')
         imported += 1
 
     print(f'{imported} imported, {existing} already in the store, {skipped} skipped, {failed} failed')
+    if not args.dry_run and store.root.is_dir():
+        print(f'Store: {store_status(store)}')
     return 1 if failed else 0

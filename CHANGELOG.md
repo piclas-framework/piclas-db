@@ -3,6 +3,17 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.7.0
+
+* The local store can be a clone of the private repository (`piclas_db/git.py`, `piclas_db/resolve.py`, documented in
+  `docs/store.md`): access with the user's own SSH key, git runs non-interactively
+* `piclas-db fetch --mirror URL` clones the private repository (also when it is still empty) or updates the store; an existing local
+  store is adopted, its files are added and the old directory is kept as a backup
+* Every import is committed separately with its provenance in the message; `index.yaml` is excluded from git
+* `piclas-db push` backs up the store, refuses changed files
+* `piclas-db fetch --need PROVIDER/DATASET[@SHA]` locates required files: local store, private repository, automatic download
+  (none yet), manual download
+
 ## 0.6.0
 
 * Local store of original files (`piclas_db/store.py`, documented in `docs/store.md`): files kept byte for byte under

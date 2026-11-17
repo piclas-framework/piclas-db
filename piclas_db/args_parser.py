@@ -48,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--custom', metavar='NAME', help='store files that are not recognized (e.g. own data) under custom/NAME')
             sub.add_argument('--retrieved', metavar='YYYY-MM-DD', help='retrieval date if not contained in the file')
             sub.add_argument('--dry-run', action='store_true', help='only show what would be imported')
+        elif name == 'fetch':
+            sub.add_argument('--mirror', help='private repository (git URL, e.g. git@github.com:<org>/<repo>.git; default: $PICLAS_DB_MIRROR)')
+            sub.add_argument('--need', nargs='+', default=[], metavar='PROVIDER/DATASET[@SHA]', help='locate these original files')
+            sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
+        elif name == 'push':
+            sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
         elif name == 'store':
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
             sub.add_argument('--verify', action='store_true', help='check that every file still matches its sha256')

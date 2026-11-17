@@ -18,9 +18,10 @@ The store keeps every imported file byte for byte, sorted by provider and datase
     <store>/<provider>/<dataset>/<retrieved>_<sha8>.<ext>  original file, never modified or overwritten
     <store>/<provider>/<dataset>/<retrieved>_<sha8>.meta.yaml
 
-The default location is $PICLAS_DB_STORE, otherwise $XDG_DATA_HOME/piclas-db/store (~/.local/share/piclas-db/store). The store is
-meant to be a clone of the private source repository (see 'fetch' and 'push'), so that it can be backed up and shared within the
-organisation; it is never published.
+The default location is $PICLAS_DB_STORE, otherwise $XDG_DATA_HOME/piclas-db/store (~/.local/share/piclas-db/store). The store
+can be a clone of the private source repository ('piclas-db fetch --mirror URL'); then every import is committed and
+'piclas-db push' backs it up. index.yaml is generated locally and excluded from git (.git/info/exclude), so that imports on
+different machines never conflict. The store is never published.
 """
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -42,6 +43,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db import git
 from piclas_db.common.common_vars import Common
 from piclas_db.sources.identify import Identified
 # ==================================================================================================================================
@@ -83,12 +85,16 @@ class Store:
             return []
         entries = []
         for meta_file in sorted(self.root.rglob(f'*{META_SUFFIX}')):
-            if '.git' in meta_file.parts:
+            if '.git' in meta_file.relative_to(self.root).parts:
                 continue
             with meta_file.open(encoding='utf-8') as file:
                 meta = yaml.safe_load(file) or {}
             entries.append(StoreEntry(path=meta_file.with_name(meta_file.name[: -len(META_SUFFIX)]), meta=meta))
         return entries
+
+    @property
+    def is_repository(self) -> bool:
+        return git.is_repository(self.root)
 
     def find(self, checksum: str) -> Optional[StoreEntry]:
         return next((entry for entry in self.entries() if entry.meta.get('sha256') == checksum), None)
@@ -119,14 +125,20 @@ class Store:
             'imported_with': Common().version_string(),
             **identified.details,
         }
-        with target.with_name(target.name + META_SUFFIX).open('w', encoding='utf-8') as file:
+        meta_file = target.with_name(target.name + META_SUFFIX)
+        with meta_file.open('w', encoding='utf-8') as file:
             yaml.safe_dump(meta, file, sort_keys=False, allow_unicode=True, width=1000)
         self.write_index()
+        if self.is_repository:
+            message = f'Add {identified.provider} {identified.kind} {identified.dataset} (retrieved {meta["retrieved"] or "unknown"}, sha256 {checksum[:8]})'
+            git.commit(self.root, [target, meta_file], message)
         return StoreEntry(path=target, meta=meta)
 
     def write_index(self) -> None:
         index = [{key: entry.meta.get(key) for key in ('file', 'provider', 'kind', 'dataset', 'species', 'retrieved', 'sha256')} for entry in self.entries()]
         self.root.mkdir(parents=True, exist_ok=True)
+        if self.is_repository:
+            git.exclude(self.root, 'index.yaml')
         with (self.root / 'index.yaml').open('w', encoding='utf-8') as file:
             yaml.safe_dump({'files': index}, file, sort_keys=False, allow_unicode=True, width=1000)
 
