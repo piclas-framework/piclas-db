@@ -21,14 +21,15 @@ from collections import Counter
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.compare import compare
-from piclas_db.readers import DatabaseReadError, read_database
+from piclas_db.readers import DatabaseReadError
+from piclas_db.sources.any import read_any
 # ==================================================================================================================================
 
 
 def run(args: argparse.Namespace) -> int:
     """Compare two databases of any layout; exit code 0 if they are equal, 1 if they differ, 2 on read errors"""
     try:
-        a, b = read_database(args.a), read_database(args.b)
+        a, b = read_any(args.a), read_any(args.b)
     except DatabaseReadError as e:
         print(f'ERROR: {e}')
         return 2

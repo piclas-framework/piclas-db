@@ -42,7 +42,7 @@ import numpy as np
 from piclas_db.model import CollisionPair, CrossSection, Database, Provenance, Reaction, Species, XSecKind
 from piclas_db.recipe import CrossSectionSelection, LevelSelection, Recipe
 from piclas_db.reference import CM_TO_K, EV_TO_K
-from piclas_db.resolve import Origin, Resolution
+from piclas_db.resolve import Origin, Requirement, Resolution
 from piclas_db.schema import Schema
 from piclas_db.sources.lxcat import LXCatFile, LXCatProcess, parse_lxcat
 from piclas_db.sources.nist import parse_nist_levels
@@ -187,6 +187,49 @@ def classify(process: LXCatProcess, selection: CrossSectionSelection, report: Bu
     if kind in (XSecKind.ELASTIC, XSecKind.EFFECTIVE, XSecKind.BACKSCATTER):
         return kind, None, kind.value
     return kind, kind.value, ''
+
+
+def lxcat_database(text: str, path: str) -> Database:
+    """All processes of an LXCat download as a database (for plot and diff of original files)"""
+    file = parse_lxcat(text)
+    database = Database(path=path, schema=Schema.SPECIES_DATABASE)
+    report = BuildReport()
+    groups: dict[tuple[str, str], list[LXCatProcess]] = {}
+    for process in file.processes:
+        groups.setdefault((process.database, process.species), []).append(process)
+    for (name, species), processes in groups.items():
+        pair_name = f'{piclas_name(processes[0].target)}-{piclas_name(processes[0].projectile)}'
+        pair = database.collision_pairs.setdefault(pair_name, CollisionPair(name=pair_name))
+        selection = CrossSectionSelection(source=Requirement('lxcat', 'file'), species=species, database=name)
+        for process in processes:
+            kind, group, key = classify(process, selection, report)
+            if kind is None:
+                continue
+            value = threshold(process)
+            if group in ('ROTATION', 'VIBRATION', 'ELECTRONIC'):
+                if value is None:
+                    continue
+                key = str(value)
+            if any(existing.group == group and existing.key == key for existing in pair.cross_sections):
+                continue
+            provenance = Provenance(reference=reference(file, process.database), info=info(process))
+            pair.cross_sections.append(CrossSection(kind=kind, key=key, data=process.data.copy(), group=group, threshold=value, provenance=provenance))
+    return database
+
+
+def nist_database(text: str, path: str, species: Optional[str] = None) -> Database:
+    """Electronic levels of a NIST ASD export as a database (for plot and diff of original files)"""
+    parsed = parse_nist_levels(text, name_hint=path)
+    name = species or parsed.species
+    if not name:
+        raise BuildError(f'{path}: species of the NIST ASD file unknown')
+    factor = {'cm-1': CM_TO_K, 'eV': EV_TO_K, 'Ry': RYDBERG_EV * EV_TO_K}[parsed.unit]
+    levels = parsed.levels.copy()
+    levels[:, 1] *= factor
+    database = Database(path=path, schema=Schema.LEGACY_ELECTRONIC)
+    database.species[name] = Species(name=name, electronic_levels=levels[np.argsort(levels[:, 1], kind='stable')])
+    database.species[name].provenance.reference = 'NIST Atomic Spectra Database'
+    return database
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------

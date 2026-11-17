@@ -45,7 +45,7 @@ def test_help_without_command(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_planned_command_returns_error(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(['plot', 'Ar-electron', '--compare']) == 1
+    assert main(['reservoir', '--species', 'Ar']) == 1
     assert 'not implemented yet' in capsys.readouterr().out
 
 

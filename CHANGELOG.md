@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.10.0
+
+* `piclas-db plot` (WP3, `piclas_db/plot.py`, documented in `docs/plot.md`): cross-sections σ(E), Maxwellian rate coefficients k(T)
+  (`--rate`) and electronic levels (`--species`) from any combination of database files, table directories and original LXCat /
+  NIST ASD downloads; same cross-section in the same color in every source, `--compare` adds the relative deviation from the first
+  source; output as PNG, PDF or SVG
+* Original downloads can be read directly (`piclas_db/sources/any.py`), also by `piclas-db diff`
+* Rate coefficient integral tested against the analytic solutions for a constant and a step cross-section
+* New dependency: matplotlib
+
 ## 0.9.0
 
 * `piclas-db guide` prints step-by-step download instructions per provider (from `piclas_db/guides.yaml`), for given files or for

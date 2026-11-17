@@ -57,7 +57,7 @@ piclas-db -v
 | `piclas-db push` | Back up the local store to the private repository | **available** |
 | `piclas-db build recipe.yaml -o database.h5` | Build a database from the original files according to a recipe ([details](docs/build.md)) | **available** |
 | `piclas-db export database.h5 -o tables/` | Write a database of any layout as ASCII tables ([details](docs/migrate.md)) | **available** |
-| `piclas-db plot Ar-electron --compare` | Plot data from original files, ASCII tables or `.h5` | planned (WP3) |
+| `piclas-db plot db.h5 lxcat.txt --pair Ar-electron --compare` | Plot σ(E), k(T) or electronic levels from any sources ([details](docs/plot.md)) | **available** |
 | `piclas-db reservoir --species Ar --temps 1e3:1e5` | `parameter.ini` files for a reservoir parameter study | planned (WP4) |
 | `piclas-db check old.h5` | Detect the layout, report corrupt or inconsistent data ([rules](docs/checks.md)) | **available** |
 | `piclas-db diff old.h5 new.h5` | Changed datasets and attributes, and by how much ([details](docs/diff.md)) | **available** |

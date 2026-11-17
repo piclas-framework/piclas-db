@@ -20,7 +20,7 @@ from dataclasses import dataclass
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.commands import build, check, diff, export, fetch, guide, import_, migrate, push, rebuild, store
+from piclas_db.commands import build, check, diff, export, fetch, guide, import_, migrate, plot, push, rebuild, store
 # ==================================================================================================================================
 
 
@@ -51,7 +51,7 @@ COMMANDS: dict[str, Command] = {
     'build':     Command('Build a database from the original files in the store according to a recipe', 'WP1', build.run),
     # Conversion, visualization and validation
     'export':    Command('Write a database of any layout as ASCII tables (YAML and CSV)', 'WP2', export.run),
-    'plot':      Command('Plot data from original files, ASCII tables or database.h5', 'WP3', not_implemented),
+    'plot':      Command('Plot cross-sections, rate coefficients or electronic levels from any source, also in comparison', 'WP3', plot.run),
     'reservoir': Command('Create parameter.ini files for a reservoir parameter study', 'WP4', not_implemented),
     # Analysis of existing (also old) database files
     'check':     Command('Detect the layout of a database file and report corrupt or inconsistent data', 'WP2', check.run),

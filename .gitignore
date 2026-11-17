@@ -39,3 +39,5 @@ store/
 sources/
 tables/
 !tests/fixtures/**
+*.png
+*.jpg
