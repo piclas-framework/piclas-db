@@ -46,7 +46,7 @@ def detect_schema(h5: h5py.File) -> Schema:
     if any(key in SPECIES_DATABASE_GROUPS for key in keys):
         return Schema.SPECIES_DATABASE
 
-    # Legacy electronic state database: one (N,2) dataset per species directly in the root
+    # Legacy electronic state database: one (n_rows, 2) dataset per species directly in the root
     if all(isinstance(h5[key], h5py.Dataset) and h5[key].ndim == 2 and h5[key].shape[1] == 2 for key in keys):
         return Schema.LEGACY_ELECTRONIC
 

@@ -266,7 +266,7 @@ def check_cross_section_data(database: Database, pair: CollisionPair, xsec: Cros
     data = xsec.data
     minimum_points = 1 if xsec.kind is XSecKind.SPECTRUM else 2  # a spectrum can be a single photon energy
     if data.ndim != 2 or data.shape[1] != 2 or data.shape[0] < minimum_points:
-        yield Finding(Severity.ERROR, 'xsec-shape', path, f'shape {data.shape} instead of (N, 2) with N >= {minimum_points}')
+        yield Finding(Severity.ERROR, 'xsec-shape', path, f'shape {data.shape} instead of (n_rows, 2) with n_rows >= {minimum_points}')
         return
     energy, sigma = data[:, 0], data[:, 1]
     if not np.all(np.isfinite(data)) or np.any(energy < 0.0) or np.any(sigma < 0.0):

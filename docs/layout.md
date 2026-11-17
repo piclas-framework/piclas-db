@@ -7,7 +7,8 @@ they must match exactly. Everything else (metadata, provenance) is normalized by
 
 Conventions used below:
 
-* Python/h5py notation for shapes: `(N, 2)` means N rows with 2 columns. Fortran sees the transposed array `(2, N)`.
+* Python/h5py notation for shapes: `(n_rows, 2)` means `n_rows` rows with 2 columns (`n_rows` is used instead of `N`, which denotes
+  the polynomial degree in PICLas). Fortran sees the transposed array `(2, n_rows)`.
 * **req.** = PICLas aborts or reads garbage if missing, **opt.** = PICLas checks for existence and uses a default otherwise.
 * **Strings read by PICLas** (e.g. `Reactants`, `Products`, `ChemistryModel`, `ReactionModel`, `PreviousState`, `Type` of surface
   reactions) must be fixed-length strings (PICLas reads them into `CHARACTER(LEN=255)`) and must not be null-terminated: PICLas
@@ -58,8 +59,8 @@ Ions are named `<neutral>Ion<charge>`.
 
 | Dataset | Shape | Columns | Status |
 | --- | --- | --- | --- |
-| `ElectronicLevel` | `(N, 2)` | degeneracy [–], energy [K] | req. when the electronic model is active |
-| `VibrationalLevel` | `(N, 1)` | energy [K] | opt. (currently only N2) |
+| `ElectronicLevel` | `(n_rows, 2)` | degeneracy [–], energy [K] | req. when the electronic model is active |
+| `VibrationalLevel` | `(n_rows, 1)` | energy [K] | opt. (currently only N2) |
 
 PICLas sorts the electronic levels by energy after reading (`SortEnergies`), so unsorted levels are tolerated. Species without
 electronic levels (e.g. `electron`, fully ionized ions) currently carry a placeholder `[0]` of shape `(1,)`. Species with only a
@@ -97,13 +98,13 @@ Collision pair of species `A` and `B`. PICLas first looks for `<B>-<A>`, then `<
 
 | Path | Shape | Columns | Read when |
 | --- | --- | --- | --- |
-| `EFFECTIVE` | `(N, 2)` | energy [eV], σ [m²] | always (used instead of `ELASTIC` if present) |
-| `ELASTIC` | `(N, 2)` | energy [eV], σ [m²] | if no `EFFECTIVE` |
-| `BACKSCATTER` | `(N, 2)` | energy [eV], σ [m²] | ion–neutral charge exchange |
-| `VIBRATION/<threshold>` | `(N, 2)` | energy [eV], σ [m²] | vibrational excitation |
-| `ELECTRONIC/<threshold>` | `(N, 2)` | energy [eV], σ [m²] | electronic excitation |
-| `REACTION/<products>` | `(N, 2)` | energy [eV], σ [m²] | reactions with `ReactionModel = XSec` |
-| `SPECTRUM/<pair>` | `(N, 2)` | photon energy, intensity | photoionization |
+| `EFFECTIVE` | `(n_rows, 2)` | energy [eV], σ [m²] | always (used instead of `ELASTIC` if present) |
+| `ELASTIC` | `(n_rows, 2)` | energy [eV], σ [m²] | if no `EFFECTIVE` |
+| `BACKSCATTER` | `(n_rows, 2)` | energy [eV], σ [m²] | ion–neutral charge exchange |
+| `VIBRATION/<threshold>` | `(n_rows, 2)` | energy [eV], σ [m²] | vibrational excitation |
+| `ELECTRONIC/<threshold>` | `(n_rows, 2)` | energy [eV], σ [m²] | electronic excitation |
+| `REACTION/<products>` | `(n_rows, 2)` | energy [eV], σ [m²] | reactions with `ReactionModel = XSec` |
+| `SPECTRUM/<pair>` | `(n_rows, 2)` | photon energy, intensity | photoionization |
 
 Rules taken from the read code:
 
@@ -134,7 +135,7 @@ species joined by `-`, e.g. `Ar-electron/Biagi-v7.1`.
 
 | Path | Content | Read in |
 | --- | --- | --- |
-| `StickingCoefficient` | `(N, 4)` table, required for boundaries with a sticking-coefficient model | `particle_boundary_init.f90` |
+| `StickingCoefficient` | `(n_rows, 4)` table, required for boundaries with a sticking-coefficient model | `particle_boundary_init.f90` |
 | `<CatName>` | catalytic reaction: attribute `Type` (req.) and optional attributes `ReactHeat`, `HeatScaling`, `EnergyAccommodation`, `MinimumTotalCoverage`, `MaximumTotalCoverage`, `MinimumTemperature`, `MaximumTemperature`, `StickingCoefficient`, `EqConstant`, `DissOrder`, `LateralInteraction`, `Ca`, `Cb`, `Prefactor`, `Energy` | `surfacemodel_chemistry.f90` |
 
 ## Legacy layouts
@@ -142,7 +143,7 @@ species joined by `-`, e.g. `Ar-electron/Biagi-v7.1`.
 | Layout | Structure | Mapping to the current layout |
 | --- | --- | --- |
 | Legacy XSec database (`XSec_Database_*.h5`, `LXCat_Database_*.h5`) | `/<A>-<B>/...` in the root | `/Cross-Sections/<A>-<B>/...`, product order of reactions has to be checked |
-| Legacy electronic state database (`DSMCSpecies_electronic_state_*.h5`, `Electronic-State-Database.h5`) | `/<species>` `(N, 2)` in the root | `/Species/<species>/ElectronicLevel` |
+| Legacy electronic state database (`DSMCSpecies_electronic_state_*.h5`, `Electronic-State-Database.h5`) | `/<species>` `(n_rows, 2)` in the root | `/Species/<species>/ElectronicLevel` |
 
 ## What piclas-db normalizes
 

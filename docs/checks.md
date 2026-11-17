@@ -34,7 +34,7 @@ have one of three severities, and the exit code is 1 if at least one error is fo
 | `xsec-product-order` | WARNING | product order differs from the convention (heavy species first, electrons last); it must match `parameter.ini` | XSec_Database_Xe_Plasma-Biagi7-1.h5 |
 | `xsec-reaction-threshold` | WARNING | reaction cross-section starts with σ > 0; PICLas prepends σ = 0 at the heat of reaction | Xe ionization (SpeciesDatabase.h5) |
 | `xsec-double-counting` | WARNING | dissociative excitation stored as excitation while the pair also has reactions | O2 (XSec_Database_O2_O.h5), H2 (SpeciesDatabase.h5) |
-| `xsec-shape`, `xsec-values`, `xsec-energy-order` | ERROR | shape not (N, 2), negative or non-finite values, decreasing energies | |
+| `xsec-shape`, `xsec-values`, `xsec-energy-order` | ERROR | shape not (n_rows, 2), negative or non-finite values, decreasing energies | |
 | `xsec-energy-duplicate` | ERROR / WARNING | duplicate energy points; ERROR from 3 duplicates on (rounded energies) | ionization (GEC `_1` file), O2 (XSec_Database_O2*.h5) |
 | `xsec-magnitude` | WARNING | σ above 1e-16 m² (probably cm²) | |
 | `xsec-rounded` | INFO | cross-sections with at most 3 significant digits (compare with the original source) | Ar-ArIon1 (GEC files) |

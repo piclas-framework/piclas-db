@@ -58,7 +58,7 @@ class Source:
 def rate_coefficient(data: np.ndarray, temperatures: np.ndarray, reduced_mass: float, points: int = 4000) -> np.ndarray:
     """Maxwellian rate coefficient k(T) = sqrt(8/(pi mu)) (k_B T)^(-3/2) int sigma(E) E exp(-E/(k_B T)) dE in m^3/s
 
-    data: (N, 2) collision energy [eV] and cross-section [m^2]; the cross-section is linearly interpolated and zero outside the table
+    data: (n_rows, 2) collision energy [eV] and cross-section [m^2]; the cross-section is linearly interpolated and zero outside the table
     """
     energy_ev = data[:, 0]
     rates = np.empty_like(temperatures, dtype=np.float64)

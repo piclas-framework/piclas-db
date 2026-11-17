@@ -82,9 +82,9 @@ class Species:
 
     name: str
     attributes: dict[str, AttrValue] = field(default_factory=dict)  # PICLas attributes, e.g. MassIC, omega
-    electronic_levels: Optional[FloatArray] = None  # (N, 2): degeneracy, energy [K]
+    electronic_levels: Optional[FloatArray] = None  # (n_rows, 2): degeneracy, energy [K]
     electronic_placeholder: bool = False  # True if the file holds a placeholder (e.g. [0]) instead of levels
-    vibrational_levels: Optional[FloatArray] = None  # (N, 1): energy [K]
+    vibrational_levels: Optional[FloatArray] = None  # (n_rows, 1): energy [K]
     provenance: Provenance = field(default_factory=Provenance)
     dtypes: dict[str, str] = field(default_factory=dict)  # on-disk dtype of each dataset (e.g. ElectronicLevel: float32)
 
@@ -112,7 +112,7 @@ class CrossSection:
 
     kind: XSecKind
     key: str  # dataset name: kind name for top-level datasets, threshold or products for datasets in a sub-group
-    data: FloatArray  # (N, 2): energy [eV], cross-section [m^2]
+    data: FloatArray  # (n_rows, 2): energy [eV], cross-section [m^2]
     group: Optional[str] = None  # sub-group name as found in the file (keeps typos such as 'ELECTRONIIC')
     threshold: Optional[float] = None  # [eV] from the dataset name or the 'Threshold [eV]' attribute
     dtype: str = 'float64'  # dtype on disk

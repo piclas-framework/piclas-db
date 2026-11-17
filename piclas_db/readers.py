@@ -224,7 +224,7 @@ def read_legacy_xsec(h5: h5py.File, database: Database) -> None:
 
 
 def read_legacy_electronic(h5: h5py.File, database: Database) -> None:
-    """Legacy electronic state database: one (N, 2) dataset per species directly in the root"""
+    """Legacy electronic state database: one (n_rows, 2) dataset per species directly in the root"""
     for name, dataset in h5.items():
         array = read_array(dataset, database)
         if array is None:
