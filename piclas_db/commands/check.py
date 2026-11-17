@@ -14,57 +14,32 @@
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import argparse
-import pathlib
-
-# ----------------------------------------------------------------------------------------------------------------------------------
-# Third-party libraries
-# ----------------------------------------------------------------------------------------------------------------------------------
-import h5py
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.schema import Schema, detect_schema
+from piclas_db.readers import DatabaseReadError, read_database
+from piclas_db.schema import Schema
 # ==================================================================================================================================
 
 
-def read_all_datasets(h5: h5py.File) -> list[str]:
-    """Read every dataset completely, return the paths of datasets that cannot be read (e.g. corrupt chunks)"""
-    unreadable: list[str] = []
-
-    def visit(name: str, obj: object) -> None:
-        if isinstance(obj, h5py.Dataset):
-            try:
-                obj[()]
-            except (OSError, ValueError, KeyError):
-                unreadable.append(name)
-
-    h5.visititems(visit)
-    return unreadable
-
-
 def run(args: argparse.Namespace) -> int:
-    """Check a database file: file integrity and layout detection (further checks follow in later versions)"""
-    path = pathlib.Path(args.file)
-    if not path.is_file():
-        print(f'ERROR: file not found: {path}')
-        return 1
-
+    """Check a database file: layout detection, complete read-in and summary (rules for the content follow in later versions)"""
     try:
-        h5 = h5py.File(path, 'r')
-    except OSError as e:
-        print(f'ERROR: cannot open {path} as HDF5 file: {e}')
+        database = read_database(args.file)
+    except DatabaseReadError as e:
+        print(f'ERROR: {e}')
         return 1
 
-    with h5:
-        schema = detect_schema(h5)
-        print(f'File:   {path}')
-        print(f'Layout: {schema.value}')
-        unreadable = read_all_datasets(h5)
+    print(f'File:   {database.path}')
+    print(f'Layout: {database.schema.value}')
+    for category, count in database.summary().items():
+        if count:
+            print(f'  {category:22s} {count}')
 
-    for name in unreadable:
+    for name in database.unreadable:
         print(f'ERROR: dataset cannot be read: {name}')
 
-    errors = len(unreadable) + (1 if schema is Schema.UNKNOWN else 0)
+    errors = len(database.unreadable) + (1 if database.schema is Schema.UNKNOWN else 0)
     print(f'{errors} error(s)')
     return 1 if errors else 0
