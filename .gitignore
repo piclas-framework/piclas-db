@@ -35,9 +35,10 @@ venv/
 # ----------------------------------------------------------------------------------------------------------------------------------
 *.h5
 *.hdf5
-store/
-sources/
-tables/
+# Anchored to the repository root: piclas_db/sources/ is source code and must not be ignored
+/store/
+/sources/
+/tables/
 # Plots and review images (piclas-db plot, reservoir, extract) show third-party data
 *.png
 *.jpg
