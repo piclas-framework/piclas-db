@@ -1,0 +1,236 @@
+# ==================================================================================================================================
+# Copyright (c) 2026 Stephen Copplestone and the piclas-db contributors (see CONTRIBUTORS.md)
+#
+# This file is part of piclas-db (github.com/piclas-framework/piclas-db). piclas-db is free software: you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
+# of the License, or (at your option) any later version.
+#
+# piclas-db is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+#
+# You should have received a copy of the GNU General Public License along with piclas-db. If not, see <https://www.gnu.org/licenses/>.
+# ==================================================================================================================================
+"""Assembly of a database from original files in the store according to a recipe ('piclas-db build')
+
+LXCat processes are mapped to PICLas groups as follows (fixing the classification errors of the former create_xsec_db_lxcat.py):
+
+* ELASTIC, EFFECTIVE -> ELASTIC, EFFECTIVE dataset of the pair
+* EXCITATION -> ROTATION, VIBRATION or ELECTRONIC/<threshold>: rotational if the process names a rotational state (rot, J=),
+  vibrational if it names a vibrational state (v=, vib), otherwise electronic
+* IONIZATION -> REACTION/<products>, products in PICLas names, heavy species first, electrons last (e.g. ArIon1-electron-electron)
+* ion-neutral processes (no type keyword) by their name in PROCESS: Backscat -> BACKSCATTER, Isotropic -> ELASTIC
+* ATTACHMENT is not supported by PICLas cross-section chemistry and is skipped with a note
+
+The collision pair is named <target>-<projectile> in PICLas names (e.g. Ar-electron, Ar-ArIon1); PICLas finds both orders.
+"""
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Standard libraries
+# ----------------------------------------------------------------------------------------------------------------------------------
+import re
+from dataclasses import dataclass, field
+from typing import Optional
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Third-party libraries
+# ----------------------------------------------------------------------------------------------------------------------------------
+import numpy as np
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Local imports
+# ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db.model import CollisionPair, CrossSection, Database, Provenance, Reaction, Species, XSecKind
+from piclas_db.recipe import CrossSectionSelection, LevelSelection, Recipe
+from piclas_db.reference import CM_TO_K, EV_TO_K
+from piclas_db.resolve import Origin, Resolution
+from piclas_db.schema import Schema
+from piclas_db.sources.lxcat import LXCatFile, LXCatProcess, parse_lxcat
+from piclas_db.sources.nist import parse_nist_levels
+from piclas_db.store import StoreEntry
+# ==================================================================================================================================
+
+RYDBERG_EV = 13.605693122990  # Rydberg energy in eV (CODATA 2022)
+ION_NEUTRAL_TYPES = {'backscat': XSecKind.BACKSCATTER, 'isotropic': XSecKind.ELASTIC}
+
+
+class BuildError(Exception):
+    """Database cannot be built"""
+
+
+@dataclass
+class BuildReport:
+    added: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Names
+# ----------------------------------------------------------------------------------------------------------------------------------
+def piclas_name(name: str) -> str:
+    """LXCat species name in PICLas notation: 'E' -> 'electron', 'Ar+' / 'Ar^+' -> 'ArIon1', 'Ar++' -> 'ArIon2', 'Ar*' -> 'Ar'"""
+    name = name.strip().rstrip('*').strip()
+    name = re.sub(r'\(.*\)$', '', name).strip()  # excited state in parentheses, e.g. Ar*(11.55eV) or Ar(1S5)
+    name = name.rstrip('*')
+    if name.lower() in ('e', 'e-', 'electron'):
+        return 'electron'
+    match = re.fullmatch(r'(.+?)\^(\d+)\+', name) or re.fullmatch(r'(.+?)\^?\+(\d+)', name)
+    if match:
+        return f'{match.group(1)}Ion{match.group(2)}'
+    match = re.fullmatch(r'(.+?)\^?(\++)', name)
+    if match:
+        return f'{match.group(1)}Ion{len(match.group(2))}'
+    return name
+
+
+def products(process: str) -> list[str]:
+    """Products of an LXCat process in PICLas names, heavy species first, electrons last"""
+    right = process.split('->', 1)[1].split(',', 1)[0] if '->' in process else ''
+    names = [piclas_name(part) for part in right.split(' + ') if part.strip()]
+    heavy = [name for name in names if name != 'electron']
+    return heavy + ['electron'] * (len(names) - len(heavy))
+
+
+def threshold(process: LXCatProcess) -> Optional[float]:
+    match = re.search(r'E\s*=\s*([0-9.eE+-]+)\s*eV', process.parameters)
+    return float(match.group(1)) if match else None
+
+
+def excitation_kind(process: LXCatProcess) -> XSecKind:
+    text = process.process.split(',', 1)[0]
+    if re.search(r'\brot|\bJ\s*=|\(J', text, re.IGNORECASE):
+        return XSecKind.ROTATION
+    if re.search(r'v\s*=\s*\d|\bvib', text, re.IGNORECASE):
+        return XSecKind.VIBRATION
+    return XSecKind.ELECTRONIC
+
+
+def info(process: LXCatProcess) -> str:
+    """LXCat header of the process, in the same form as written by the former create_xsec_db_lxcat.py"""
+    fields = {'SPECIES': process.species, 'PROCESS': process.process, 'PARAM.': process.parameters}
+    if process.comments:
+        fields['COMMENT'] = ' '.join(process.comments)
+    if process.updated:
+        fields['UPDATED'] = process.updated
+    return str(fields)
+
+
+def reference(file: LXCatFile, database: str) -> Optional[str]:
+    """Recommended reference line of the database, e.g. 'Biagi-v7.1 database, www.lxcat.net, retrieved on June 1, 2026.'"""
+    short = database.split(' ', maxsplit=1)[0].lower()
+    return next((line for line in file.references if line.lower().startswith(short)), None)
+
+
+def source_provenance(entry: StoreEntry) -> dict[str, object]:
+    return {'* Source': f'{entry.meta.get("file")} (sha256 {entry.meta.get("sha256")})'}
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Cross-sections
+# ----------------------------------------------------------------------------------------------------------------------------------
+def select_processes(file: LXCatFile, selection: CrossSectionSelection) -> list[LXCatProcess]:
+    candidates = [process for process in file.processes if process.species.replace(' ', '') == selection.species.replace(' ', '')]
+    databases = sorted({process.database for process in candidates})
+    if selection.database:
+        databases = [name for name in databases if name.lower().startswith(selection.database.lower())]
+    if not databases:
+        raise BuildError(f'{selection.source}: no data for {selection.species!r}' + (f' in database {selection.database!r}' if selection.database else ''))
+    if len(databases) > 1:
+        raise BuildError(f'{selection.source}: {selection.species!r} is in several databases ({", ".join(databases)}); select one with "database"')
+    chosen = [process for process in candidates if process.database == databases[0]]
+    if selection.processes:
+        chosen = [process for process in chosen if any(part in process.process for part in selection.processes)]
+    return chosen
+
+
+def add_cross_sections(database: Database, selection: CrossSectionSelection, entry: StoreEntry, report: BuildReport) -> None:
+    file = parse_lxcat(entry.path.read_text(encoding='utf-8', errors='replace'))
+    processes = select_processes(file, selection)
+    first = processes[0]
+    pair_name = selection.pair or f'{piclas_name(first.target)}-{piclas_name(first.projectile)}'
+    pair = database.collision_pairs.setdefault(pair_name, CollisionPair(name=pair_name))
+
+    for process in processes:
+        kind, group, key = classify(process, selection, report)
+        if kind is None:
+            continue
+        value = threshold(process)
+        if group in ('ROTATION', 'VIBRATION', 'ELECTRONIC'):
+            if value is None:
+                report.notes.append(f'{pair_name}: {process.process}: no threshold in PARAM., skipped')
+                continue
+            key = str(value)
+        if any(existing.group == group and existing.key == key for existing in pair.cross_sections):
+            report.notes.append(f'{pair_name}: {group + "/" if group else ""}{key} exists already, {process.process} skipped')
+            continue
+        provenance = Provenance(reference=reference(file, process.database), info=info(process), extra=source_provenance(entry))
+        pair.cross_sections.append(CrossSection(kind=kind, key=key, data=process.data.copy(), group=group, threshold=value, provenance=provenance))
+        report.added.append(f'/Cross-Sections/{pair_name}/' + (f'{group}/' if group else '') + key)
+
+
+def classify(process: LXCatProcess, selection: CrossSectionSelection, report: BuildReport) -> tuple[Optional[XSecKind], Optional[str], str]:
+    """PICLas kind, group and dataset name of an LXCat process"""
+    if process.type in selection.types:
+        kind = XSecKind(selection.types[process.type])
+    elif process.type in ('ELASTIC', 'EFFECTIVE'):
+        kind = XSecKind(process.type)
+    elif process.type == 'EXCITATION':
+        kind = excitation_kind(process)
+    elif process.type == 'IONIZATION':
+        kind = XSecKind.REACTION
+    elif process.type.lower() in ION_NEUTRAL_TYPES:
+        kind = ION_NEUTRAL_TYPES[process.type.lower()]
+    else:
+        report.notes.append(f'{process.species}: {process.process}: type {process.type} not supported, skipped (map it with "types")')
+        return None, None, ''
+    if kind is XSecKind.REACTION:
+        return kind, 'REACTION', '-'.join(products(process.process))
+    if kind in (XSecKind.ELASTIC, XSecKind.EFFECTIVE, XSecKind.BACKSCATTER):
+        return kind, None, kind.value
+    return kind, kind.value, ''
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Electronic levels
+# ----------------------------------------------------------------------------------------------------------------------------------
+def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry, report: BuildReport) -> None:
+    parsed = parse_nist_levels(entry.path.read_text(encoding='utf-8', errors='replace'), name_hint=entry.path.name)
+    factor = {'cm-1': CM_TO_K, 'eV': EV_TO_K, 'Ry': RYDBERG_EV * EV_TO_K}[parsed.unit]
+    levels = parsed.levels.copy()
+    levels[:, 1] *= factor
+    levels = levels[np.argsort(levels[:, 1], kind='stable')]
+    species = database.species.setdefault(selection.species, Species(name=selection.species))
+    species.electronic_levels = levels
+    retrieved = entry.meta.get('retrieved')
+    species.provenance.reference = 'NIST Atomic Spectra Database (https://physics.nist.gov/asd)' + (f', retrieved on {retrieved}' if retrieved else '')
+    species.provenance.extra.update(source_provenance(entry))
+    report.added.append(f'/Species/{selection.species}/ElectronicLevel ({len(levels)} levels, converted from {parsed.unit} to K)')
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Build
+# ----------------------------------------------------------------------------------------------------------------------------------
+def build(recipe: Recipe, resolutions: list[Resolution]) -> tuple[Database, BuildReport]:
+    """Assemble the database; all requirements must have been resolved to files in the store"""
+    missing = [str(resolution.requirement) for resolution in resolutions if resolution.origin is Origin.MANUAL or resolution.entry is None]
+    if missing:
+        raise BuildError('original files missing in the store: ' + ', '.join(missing))
+    entries = {str(resolution.requirement): resolution.entry for resolution in resolutions}
+
+    database = Database(path=recipe.path, schema=Schema.SPECIES_DATABASE)
+    report = BuildReport()
+    for selection in recipe.cross_sections:
+        entry = entries[str(selection.source)]
+        assert entry is not None
+        add_cross_sections(database, selection, entry, report)
+    for level_selection in recipe.levels:
+        entry = entries[str(level_selection.source)]
+        assert entry is not None
+        add_levels(database, level_selection, entry, report)
+    for name, attributes in recipe.species.items():
+        species = database.species.setdefault(name, Species(name=name))
+        species.attributes.update(attributes)
+        report.added.append(f'/Species/{name} ({len(attributes)} attribute(s) from the recipe)')
+    for name, attributes in recipe.reactions.items():
+        database.reactions[name] = Reaction(name=name, attributes=dict(attributes), provenance=Provenance(reference=f'recipe {recipe.path}'))
+        report.added.append(f'/Reactions/{name} (from the recipe)')
+    return database, report

@@ -1,0 +1,10 @@
+description: >
+  Argon for the GEC reference cell tutorial: electron collisions from Biagi-v7.1, Ar+/Ar ion collisions from Phelps
+  (LXCat download with both databases for Ar, see piclas-db guide).
+cross_sections:
+  - source: lxcat/biagi-v7.1+phelps/ar
+    database: Biagi
+    species: e / Ar
+  - source: lxcat/biagi-v7.1+phelps/ar
+    database: Phelps
+    species: Ar^+ / Ar

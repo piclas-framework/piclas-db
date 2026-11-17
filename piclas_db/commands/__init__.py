@@ -20,7 +20,7 @@ from dataclasses import dataclass
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.commands import check, diff, export, fetch, import_, migrate, push, store
+from piclas_db.commands import build, check, diff, export, fetch, import_, migrate, push, store
 # ==================================================================================================================================
 
 
@@ -48,7 +48,7 @@ COMMANDS: dict[str, Command] = {
     'fetch':     Command('Clone or update the local store from the private repository; --need locates required files', 'WP1', fetch.run),
     'push':      Command('Back up the local store to the private repository', 'WP1', push.run),
     'store':     Command('List the local store or verify its files (--verify)', 'WP1', store.run),
-    'build':     Command('Build database.h5 from the local store', 'WP1', not_implemented),
+    'build':     Command('Build a database from the original files in the store according to a recipe', 'WP1', build.run),
     # Conversion, visualization and validation
     'export':    Command('Write a database of any layout as ASCII tables (YAML and CSV)', 'WP2', export.run),
     'plot':      Command('Plot data from original files, ASCII tables or database.h5', 'WP3', not_implemented),

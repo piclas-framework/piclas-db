@@ -3,6 +3,17 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.8.0
+
+* `piclas-db build RECIPE -o OUTPUT.h5` builds a database from the original files in the store (`piclas_db/build.py`, documented in
+  `docs/build.md`); missing files are located in the private repository or listed for a manual download; the result is checked
+* Recipes (`piclas_db/recipe.py`): selection of LXCat databases, species, processes and type mappings per collision pair, NIST ASD
+  levels per species, own species and reaction attributes; files can be pinned by sha256
+* LXCat mapping fixes the classification of the former `create_xsec_db_lxcat.py` (rotational, vibrational and electronic excitation,
+  several ionization channels, ion-neutral data); reference, LXCat header, threshold and source file with sha256 on every dataset
+* NIST ASD levels converted to K with exact constants and sorted
+* Example recipe `recipes/gec-argon.yaml`: reproduces the electron data of the GEC tutorial file exactly
+
 ## 0.7.0
 
 * The local store can be a clone of the private repository (`piclas_db/git.py`, `piclas_db/resolve.py`, documented in
