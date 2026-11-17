@@ -1,0 +1,144 @@
+# -*- coding: utf-8 -*-
+# ==================================================================================================================================
+# Copyright (c) 2026 Stephen Copplestone and the piclas-db contributors (see CONTRIBUTORS.md)
+#
+# This file is part of piclas-db (github.com/piclas-framework/piclas-db). piclas-db is free software: you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
+# of the License, or (at your option) any later version.
+#
+# piclas-db is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+#
+# You should have received a copy of the GNU General Public License along with piclas-db. If not, see <https://www.gnu.org/licenses/>.
+# ==================================================================================================================================
+
+
+# Workflow for releases: runs when a tag v<version> is pushed (e.g. v0.14.0)
+# 1. build and check the distribution (version of the tag = version in pyproject.toml, guides.yaml in the wheel, CLI works)
+# 2. create the GitHub release with the notes of CHANGELOG.md and the distribution files; Zenodo archives every published release
+#    of this repository and assigns a DOI (metadata from CITATION.cff)
+# 3. optional: publish to PyPI with trusted publishing, if the repository variable PUBLISH_PYPI is 'true'
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+# ----------------------------------------------------------------------------------------------------------------------------------------------------
+# Build
+# ----------------------------------------------------------------------------------------------------------------------------------------------------
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Check tag matches version
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*= *"\(.*\)"/\1/')
+          if [[ "${TAG#v}" != "$VERSION" ]]; then
+            echo "ERROR: Tag '${TAG}' does not match pyproject.toml version '${VERSION}'"
+            exit 1
+          fi
+          echo "OK: Tag and version match (${VERSION})"
+
+      - name: Check changelog entry and citation version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          grep -q "^## ${VERSION}$" CHANGELOG.md || { echo "ERROR: no section '## ${VERSION}' in CHANGELOG.md"; exit 1; }
+          grep -q "^version: \"${VERSION}\"$" CITATION.cff || { echo "ERROR: version in CITATION.cff is not ${VERSION}"; exit 1; }
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.x
+
+      - name: Build with Poetry
+        shell: bash
+        run: |
+          pip install poetry twine
+          poetry check
+          poetry build
+          twine check dist/*
+
+      - name: Test the wheel
+        shell: bash
+        run: |
+          python -m zipfile -l dist/*.whl | grep -q 'piclas_db/guides.yaml' || { echo "ERROR: guides.yaml missing in the wheel"; exit 1; }
+          python -m venv /tmp/release-test
+          /tmp/release-test/bin/pip install dist/*.whl
+          /tmp/release-test/bin/piclas-db --version
+          /tmp/release-test/bin/piclas-db guide lxcat/biagi-v7.1/ar > /dev/null
+
+      - name: Upload distribution artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+# ----------------------------------------------------------------------------------------------------------------------------------------------------
+# GitHub release (archived by Zenodo)
+# ----------------------------------------------------------------------------------------------------------------------------------------------------
+  github-release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    needs: [build]
+    permissions:
+      contents: write   # create the release
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Download distribution artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Release notes from CHANGELOG.md
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk -v version="## ${VERSION}" '$0 == version {found = 1; next} found && /^## / {exit} found {print}' CHANGELOG.md > release-notes.md
+          cat release-notes.md
+
+      - name: Create release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* --repo "${GITHUB_REPOSITORY}" --title "piclas-db ${GITHUB_REF_NAME#v}" --notes-file release-notes.md
+
+# ----------------------------------------------------------------------------------------------------------------------------------------------------
+# PyPI (optional)
+# ----------------------------------------------------------------------------------------------------------------------------------------------------
+  publish:
+    name: Publish to PyPI
+    if: ${{ vars.PUBLISH_PYPI == 'true' }}
+    runs-on: ubuntu-latest
+    needs: [build]
+    environment:
+      name: pypi
+      url: https://pypi.org/p/piclas-db
+    permissions:
+      id-token: write  # trusted publishing (OIDC)
+    steps:
+      - name: Download distribution artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

@@ -3,6 +3,13 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.14.0
+
+* Release workflow (`.github/workflows/release.yml`): on a tag `v<version>` it checks that tag, `pyproject.toml` and `CHANGELOG.md`
+  agree, builds and tests the wheel (including `guides.yaml` and the CLI), creates the GitHub release with the changelog section as
+  release notes; Zenodo archives every release with a DOI; optional PyPI publishing (repository variable `PUBLISH_PYPI`)
+* `CONTRIBUTING.md` with development setup, versioning and release checklist
+
 ## 0.13.0
 
 * `piclas-db reservoir --regressioncheck DIRECTORY` compares the reference results of the PICLas `NIG_Reservoir` regression checks

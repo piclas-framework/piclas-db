@@ -107,7 +107,8 @@ The same checks run in the [GitHub Actions CI](.github/workflows/ci.yml) for eve
 # Versioning
 piclas-db starts with version 0.1.0 and increments the minor version (0.x.0) with each development step. Version 1.0.0 is
 released once the tool is feature complete. The version is defined in `pyproject.toml` only and changes are listed in
-[CHANGELOG.md](CHANGELOG.md).
+[CHANGELOG.md](CHANGELOG.md). Releases are created by pushing a tag `v<version>` ([release checklist](CONTRIBUTING.md#release-checklist));
+every release is archived by [Zenodo](https://zenodo.org) with a DOI.
 
 # Citing piclas-db
 If you use piclas-db, please cite it as given in [CITATION.cff](CITATION.cff) (GitHub shows the citation under "Cite this
