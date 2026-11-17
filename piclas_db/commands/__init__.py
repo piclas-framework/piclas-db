@@ -20,7 +20,7 @@ from dataclasses import dataclass
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.commands import build, check, diff, export, fetch, import_, migrate, push, store
+from piclas_db.commands import build, check, diff, export, fetch, guide, import_, migrate, push, rebuild, store
 # ==================================================================================================================================
 
 
@@ -43,7 +43,7 @@ def not_implemented(args: argparse.Namespace) -> int:
 # Order defines the order in the --help output
 COMMANDS: dict[str, Command] = {
     # Data acquisition and build
-    'guide':     Command('Step-by-step guide for a manual download of a dataset', 'WP1', not_implemented),
+    'guide':     Command('Step-by-step download instructions for original files or for the missing files of a recipe', 'WP1', guide.run),
     'import':    Command('Identify downloaded files by content, validate and copy them into the local store', 'WP1', import_.run),
     'fetch':     Command('Clone or update the local store from the private repository; --need locates required files', 'WP1', fetch.run),
     'push':      Command('Back up the local store to the private repository', 'WP1', push.run),
@@ -57,5 +57,5 @@ COMMANDS: dict[str, Command] = {
     'check':     Command('Detect the layout of a database file and report corrupt or inconsistent data', 'WP2', check.run),
     'diff':      Command('Compare two databases of any layout: changed datasets and attributes, and by how much', 'WP2', diff.run),
     'migrate':   Command('Convert a database (any layout or ASCII tables) to the current layout (writes a new file)', 'WP2', migrate.run),
-    'rebuild':   Command('Rebuild an existing database from re-downloaded original sources and compare it with the original', 'WP2', not_implemented),
+    'rebuild':   Command('Rebuild an existing database from the original files and compare it with the original', 'WP2', rebuild.run),
 }  # fmt: skip

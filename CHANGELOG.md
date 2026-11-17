@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.9.0
+
+* `piclas-db guide` prints step-by-step download instructions per provider (from `piclas_db/guides.yaml`), for given files or for
+  the files of a recipe missing in the store (`--recipe`)
+* `piclas-db rebuild OLD -o NEW` derives a recipe from the provenance of an old file (LXCat references and headers, NIST levels),
+  locates the original files (guide for missing ones), builds the database, copies what cannot be rebuilt and compares with the
+  old file (`piclas_db/rebuild.py`, documented in `docs/rebuild.md`)
+* Readers: references stored on a cross-section group (e.g. `ELECTRONIC`) apply to its datasets
+* Recipes may contain `notes`
+
 ## 0.8.0
 
 * `piclas-db build RECIPE -o OUTPUT.h5` builds a database from the original files in the store (`piclas_db/build.py`, documented in

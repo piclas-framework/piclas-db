@@ -50,7 +50,7 @@ piclas-db -v
 
 | Command | Description | Status |
 | --- | --- | --- |
-| `piclas-db guide lxcat:biagi-ar` | Step-by-step guide for a manual download | planned (WP1) |
+| `piclas-db guide lxcat/biagi-v7.1/ar` | Step-by-step guide for a manual download ([details](docs/rebuild.md)) | **available** |
 | `piclas-db import --source-dir ~/Downloads` | Identify by content, validate, copy into the local store ([details](docs/store.md)) | **available** |
 | `piclas-db store [--verify]` | List the local store, verify the files against their sha256 | **available** |
 | `piclas-db fetch [--mirror <private repo>] [--need ...]` | Clone or update the store from the private repository, locate required files ([details](docs/store.md#private-repository)) | **available** |
@@ -62,7 +62,7 @@ piclas-db -v
 | `piclas-db check old.h5` | Detect the layout, report corrupt or inconsistent data ([rules](docs/checks.md)) | **available** |
 | `piclas-db diff old.h5 new.h5` | Changed datasets and attributes, and by how much ([details](docs/diff.md)) | **available** |
 | `piclas-db migrate old.h5 -o new.h5` | Convert any layout or ASCII tables to the current layout ([details](docs/migrate.md)) | **available** |
-| `piclas-db rebuild old.h5 -o new.h5` | Re-download the sources of an existing database, rebuild it (old or new layout) and compare | planned |
+| `piclas-db rebuild old.h5 -o new.h5` | Rebuild an existing database from the original files and compare ([details](docs/rebuild.md)) | **available** |
 
 ## Where the data comes from
 For every dataset a database needs (`build`, `rebuild`), piclas-db looks in the following places, in this order, and only

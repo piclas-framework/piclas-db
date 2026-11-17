@@ -40,6 +40,20 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('file', help='database file (.h5) to check')
             sub.add_argument('--info', action='store_true', help='also show findings of severity INFO')
             sub.add_argument('--json', action='store_true', help='print the findings as JSON')
+        elif name == 'guide':
+            sub.add_argument('requirements', nargs='*', metavar='PROVIDER/DATASET', help='original files, e.g. lxcat/biagi-v7.1/ar or nist-asd/levels/arion1')
+            sub.add_argument('--recipe', help='show the instructions for the files of this recipe that are missing in the store')
+            sub.add_argument('--all', action='store_true', help='with --recipe: all files of the recipe, also those in the store')
+            sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
+            sub.add_argument('--offline', action='store_true', help='do not update the store from the private repository')
+        elif name == 'rebuild':
+            sub.add_argument('source', help='existing database (any layout)')
+            sub.add_argument('-o', '--output', required=True, help='rebuilt database file (.h5)')
+            sub.add_argument('--recipe-out', help='file for the derived recipe (default: <output>.recipe.yaml)')
+            sub.add_argument('--levels-from-nist', action='store_true', help='rebuild all electronic levels from NIST ASD (also without NIST reference)')
+            sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
+            sub.add_argument('--offline', action='store_true', help='do not update the store from the private repository')
+            sub.add_argument('--force', action='store_true', help='overwrite an existing output file')
         elif name == 'import':
             sub.add_argument('files', nargs='*', help='downloaded files (LXCat, NIST ASD, ...)')
             sub.add_argument('--source-dir', help='directory to search for downloaded files (e.g. ~/Downloads); unknown files are skipped')

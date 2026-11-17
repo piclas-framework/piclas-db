@@ -144,9 +144,13 @@ def read_collision_pair(name: str, group: h5py.Group, database: Database) -> Col
             kind = XSecKind(member_name) if member_name in [k.value for k in XSEC_GROUP_KINDS] else XSecKind.UNKNOWN
             if len(member) == 0:
                 pair.empty_groups.append(member_name)
+            # create_xsec_db_lxcat.py stored the reference on the group (e.g. ELECTRONIC), not on its datasets
+            _, group_provenance = split_attributes(member.attrs, all_metadata=True)
             for dataset_name, dataset in member.items():
                 if isinstance(dataset, h5py.Dataset):
                     add_cross_section(pair, kind, dataset_name, member_name, dataset, database)
+                    if pair.cross_sections and pair.cross_sections[-1].provenance.reference is None:
+                        pair.cross_sections[-1].provenance.reference = group_provenance.reference
     return pair
 
 

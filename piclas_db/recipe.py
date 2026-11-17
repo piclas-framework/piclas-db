@@ -104,7 +104,7 @@ def load_recipe(path: Union[str, pathlib.Path]) -> Recipe:
         raise RecipeError(f'cannot read recipe {path}: {e}') from e
     if not isinstance(data, dict):
         raise RecipeError(f'{path}: a recipe is a mapping with cross_sections, levels, species and reactions')
-    unknown = set(data) - {'cross_sections', 'levels', 'species', 'reactions', 'description'}
+    unknown = set(data) - {'cross_sections', 'levels', 'species', 'reactions', 'description', 'notes'}
     if unknown:
         raise RecipeError(f'{path}: unknown sections {", ".join(sorted(unknown))}')
 

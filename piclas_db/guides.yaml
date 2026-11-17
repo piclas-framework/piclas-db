@@ -1,0 +1,33 @@
+# Step-by-step download instructions per provider, shown by 'piclas-db guide'.
+# Websites change: the steps describe the current navigation, the downloaded file is always checked by 'piclas-db import'.
+# Placeholders: {databases}, {species}, {spectrum}, {permlinks}
+lxcat:
+  name: LXCat (www.lxcat.net)
+  terms: >
+    LXCat does not allow third parties to redistribute its data. Download the files yourself and cite the databases as given in
+    the file ('RECOMMENDED REFERENCE FORMAT').
+  steps:
+    - Open https://www.lxcat.net and go to the data center for scattering cross sections (https://fr.lxcat.net/data/set_type.php).
+    - Select "Scattering Cross Sections" and press "Next".
+    - "Deselect all databases (minus button), then select: {databases}. Press \"Next\"."
+    - "Select the species: {species}. Press \"Next\"."
+    - Keep all processes selected (or select the ones you need) and press "Next".
+    - Download the data in text format ("Download data"), save the file e.g. in ~/Downloads.
+    - "Database pages: {permlinks}"
+nist-asd:
+  name: NIST Atomic Spectra Database, energy levels (https://physics.nist.gov/asd)
+  terms: >
+    NIST Standard Reference Data are copyrighted by the U.S. Secretary of Commerce; redistribution requires permission. Download
+    the levels yourself and cite the database.
+  steps:
+    - Open the levels form https://physics.nist.gov/PhysRefData/ASD/levels_form.html
+    - "Enter the spectrum: {spectrum}"
+    - Select the level units (cm-1 or eV) and as output format "CSV (to file)" or "Tab-delimited (to file)".
+    - Make sure the columns Configuration, Term, J and Level are selected; press "Retrieve Data".
+    - "Save the file with the spectrum in its name, e.g. {spectrum_file}.csv, or give the species to import with --species {species}."
+custom:
+  name: own or other data
+  terms: Make sure you are allowed to store the data in the private repository of your organisation.
+  steps:
+    - Locate the original file of the data (the file as received, not a converted copy).
+    - "Import it with: piclas-db import <file> --custom {dataset} --retrieved YYYY-MM-DD"
