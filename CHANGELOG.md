@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.20.0
+
+* Scanned figures: open symbols (filled before the opening, named `<shape>-open`, linked apart from filled symbols, short open
+  tracks from letters dropped); `--seeds` follows one curve per seed (one or two points, keeps filled/open, no symbol skipped) for
+  crossing curves; `--frame-box`, `--x-points`, `--y-points` for scans whose axes are not found, read from the grid image that
+  `extract --list` writes; symbols outside the calibrated range are ignored
+* Matić and Čobić 1971, Fig. 1: the three C- + N2 curves with seeds agree with the prototype within 1 %; the small open symbols of
+  this scan are not detected reliably (documented, entered by hand)
+
 ## 0.19.0
 
 * Fit formulas from papers (`piclas_db/formula.py`, documented in `docs/literature.md`): `literature template --formula --equation`

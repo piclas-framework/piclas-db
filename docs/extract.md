@@ -58,7 +58,25 @@ piclas-db extract tsuji-1989 --page 3 --frame 1 --figure 5 --name fig5 \
 | flags | `split` (from touching symbols) and `shape` (shape differs from the series) are listed in the record notes and marked orange in the review image |
 
 The record has `method: raster`, the resolution and symbol radius, the digitization accuracy (one pixel in axis units) and the
-scikit-image and Tesseract versions. Open symbols (○ △ ×) and curves without symbols are not read from scans yet.
+scikit-image and Tesseract versions.
+
+### Open symbols, crossing curves and difficult scans
+
+* **Open symbols** (○ △ □) are filled before the opening and named `circle-open` etc.; filled and open symbols are linked
+  separately, and short open tracks (letters such as o, e, a in the figure) are dropped. Crosses (×) and curves without symbols are
+  not read.
+* **Crossing curves**: `--seeds "x,y;x,y,x2,y2"` (axis values) gives one curve per seed. A curve starts at the symbol nearest to
+  the seed and follows symbols to the right along the local slope, keeping its kind (filled or open) and taking the next symbol
+  where several fit; a second point gives the direction where the first step is ambiguous.
+* **Axes not found** (dotted or broken in the scan): `extract --list` writes a grid image (`p<page>-grid.png`, 10 pt grid); read
+  the frame (`--frame-box x0,y0,x1,y1`) and calibration points (`--x-points "pt=value,…"`, `--y-points …`, with `--y-scale log`
+  for logarithmic axes) from it. Symbols outside the calibrated range are ignored.
+
+Matić and Čobić 1971, Fig. 1 (two panels, logarithmic, 1-bit scan, dotted axes, about 28 crossing curves): with the frame and
+calibration points from the grid image and one seed per curve, the C⁻ + N₂ one-, two- and three-electron loss curves agree with the
+earlier prototype within 1 %, including the three-electron points at 8 and 10 keV that the prototype needed a second look for. The
+small open symbols (○ Ne, △ Ar) of this scan are broken by the 1-bit scan and not detected reliably; such curves are entered by hand
+(`literature template`).
 
 Tsuji et al. 1989, Fig. 5 (Si⁻, C⁻, O⁻ in N₂): all 36 points in the right series, fully automatic (x labels 1–8, y labels with
 two misread labels rejected); they agree with the earlier prototype within 0.003 × 10⁻¹⁵ cm²; two points split from touching symbols

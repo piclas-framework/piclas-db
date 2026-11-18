@@ -25,6 +25,7 @@ Accuracy: about one pixel (0.085 pt at 300 dpi) for the symbol centre, given in 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import math
 from typing import Any, Optional
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -189,14 +190,16 @@ def shape_of(image: np.ndarray) -> str:
 
 
 def symbols(ink: np.ndarray, frame: tuple[int, int, int, int], radius: int) -> list[tuple[float, float, Optional[str], bool]]:
-    """Filled symbols inside the frame: (x, y, shape or None, split)"""
+    """Symbols inside the frame: (x, y, shape or None, split); open symbols (○ △ □) are filled before the opening and named
+    '<shape>-open' by the low ink fraction of their area"""
+    from scipy import ndimage  # noqa: PLC0415
+
     measure, morphology = require_skimage()
     x0, y0, x1, y1 = frame
     region = np.zeros_like(ink)
     region[y0 + 6 : y1 - 6, x0 + 6 : x1 - 6] = ink[y0 + 6 : y1 - 6, x0 + 6 : x1 - 6]
-    from scipy import ndimage  # noqa: PLC0415
-
-    opened = ndimage.binary_opening(region, structure=morphology.disk(radius))
+    solid = ndimage.binary_fill_holes(region)  # outlines of open symbols become solid
+    opened = ndimage.binary_opening(solid, structure=morphology.disk(radius))
     blobs = [p for p in measure.regionprops(measure.label(opened)) if p.area >= (2 * radius) ** 2 and max(p.bbox[2] - p.bbox[0], p.bbox[3] - p.bbox[1]) <= 25 * radius]
     if not blobs:
         return []
@@ -206,6 +209,9 @@ def symbols(ink: np.ndarray, frame: tuple[int, int, int, int], radius: int) -> l
     blobs = [p for p in blobs if p.area >= 0.4 * area and min(p.bbox[2] - p.bbox[0], p.bbox[3] - p.bbox[1]) <= 1.8 * size and p.area / ((p.bbox[2] - p.bbox[0]) * (p.bbox[3] - p.bbox[1])) > 0.35]
     found: list[tuple[float, float, Optional[str], bool]] = []
     for blob in blobs:
+        top, left, bottom, right = blob.bbox
+        ink_fraction = float(region[top:bottom, left:right][blob.image].mean())
+        fill = '' if ink_fraction > 0.75 else '-open'
         coords = blob.coords.astype(float)
         centred = coords - coords.mean(axis=0)
         direction = np.linalg.svd(centred, full_matrices=False)[2][0]
@@ -213,13 +219,46 @@ def symbols(ink: np.ndarray, frame: tuple[int, int, int, int], radius: int) -> l
         count = max(1, round(extent / size))
         if count == 1:
             y, x = blob.centroid
-            found.append((float(x), float(y), shape_of(blob.image), False))
+            found.append((float(x), float(y), shape_of(blob.image) + fill, False))
         else:
             order = np.argsort(centred @ direction)
             for part in np.array_split(order, count):
                 cy, cx = coords[part].mean(axis=0)
                 found.append((float(cx), float(cy), None, True))
     return found
+
+
+def follow(points: list[tuple[float, float, Optional[str], bool]], seeds: list[tuple[float, float]], tolerance: float, max_step: float) -> list[tuple[float, float, Optional[str], bool]]:
+    """One curve from one or two seed points (pixels): the nearest symbols, then symbols to the right along the local slope; for
+    crossing curves, where automatic linking mixes series (a second seed point gives the direction where the first step is
+    ambiguous)"""
+    snapped = []
+    for seed in seeds:
+        nearest = min(points, key=lambda p: math.hypot(p[0] - seed[0], p[1] - seed[1]))
+        if math.hypot(nearest[0] - seed[0], nearest[1] - seed[1]) > 3 * tolerance:
+            return []
+        snapped.append(nearest)
+    start = snapped[0]
+    # a curve keeps its kind of symbol: filled or open (reliable even where the exact shape is not)
+    hollow = (start[2] or '').endswith('-open')
+    points = [p for p in points if p[3] or (p[2] or '').endswith('-open') == hollow]
+    curve = sorted(set(snapped))
+    while True:
+        last = curve[-1]
+        ahead = [p for p in points if 0.3 * tolerance < p[0] - last[0] < max_step]
+        if not ahead:
+            return curve
+        if len(curve) == 1:
+            best = min(ahead, key=lambda p: math.hypot(p[0] - last[0], p[1] - last[1]))
+            if math.hypot(best[0] - last[0], best[1] - last[1]) > max_step:
+                return curve
+        else:
+            slope = (curve[-1][1] - curve[-2][1]) / max(curve[-1][0] - curve[-2][0], 1.0)
+            # closest to the extrapolation; among equally good candidates the next one to the right (no symbol is skipped)
+            best = min(ahead, key=lambda p: (round(abs(p[1] - (last[1] + slope * (p[0] - last[0]))) / (0.2 * tolerance)), p[0]))
+            if abs(best[1] - (last[1] + slope * (best[0] - last[0]))) > tolerance + 0.3 * abs(slope * (best[0] - last[0])):
+                return curve
+        curve.append(best)
 
 
 def predicted(track: list[tuple[float, float, Optional[str], bool]], x: float) -> float:
@@ -268,6 +307,36 @@ def to_pt(box: tuple[int, int, int, int]) -> Box:
     return (box[0] / SCALE, box[1] / SCALE, box[2] / SCALE, box[3] / SCALE)
 
 
+def axis_to_pixel(axis: Any, value: float) -> float:
+    """Coordinate (pt) of an axis value: inverse of the calibration"""
+    target = math.log10(value) if axis.scale == 'log' else value
+    return (target - axis.a) / axis.b
+
+
+def grid_image(path: str, page_number: int, output: str) -> None:
+    """Page with a grid every 10 pt (labels every 50 pt), to read the frame of a figure for --frame-box"""
+    from PIL import ImageDraw  # noqa: PLC0415
+
+    pdfplumber = require_pdfplumber()
+    with pdfplumber.open(path) as pdf:
+        page = pdf.pages[page_number - 1]
+        image = page.to_image(resolution=150).original.convert('RGB')
+        width, height = float(page.width), float(page.height)
+    draw = ImageDraw.Draw(image)
+    scale = 150 / 72
+    for value in range(0, int(max(width, height)) + 1, 10):
+        tone = (255, 120, 120) if value % 50 == 0 else (255, 210, 210)
+        if value <= width:
+            draw.line([(value * scale, 0), (value * scale, height * scale)], fill=tone, width=1)
+            if value % 50 == 0:
+                draw.text((value * scale + 2, 2), str(value), fill=(200, 0, 0))
+        if value <= height:
+            draw.line([(0, value * scale), (width * scale, value * scale)], fill=tone, width=1)
+            if value % 50 == 0:
+                draw.text((2, value * scale + 2), str(value), fill=(200, 0, 0))
+    image.save(output)
+
+
 def raster_figure_frames(path: str, page_number: int) -> list[Box]:
     pdfplumber = require_pdfplumber()
     with pdfplumber.open(path) as pdf:
@@ -284,6 +353,10 @@ def extract_raster(
     x_scale: Optional[str] = None,
     y_scale: Optional[str] = None,
     radius: int = 2,
+    frame_box: Optional[Box] = None,
+    seeds: Optional[list[tuple[float, ...]]] = None,
+    x_points: Optional[list[tuple[float, float]]] = None,
+    y_points: Optional[list[tuple[float, float]]] = None,
 ) -> Figure:
     pdfplumber = require_pdfplumber()
     with pdfplumber.open(path) as pdf:
@@ -291,15 +364,23 @@ def extract_raster(
             raise ExtractError(f'page {page_number} does not exist ({len(pdf.pages)} pages)')
         page = pdf.pages[page_number - 1]
         ink = render(page)
-        candidates = raster_frames(ink)
-        if not candidates:
-            raise ExtractError(f'no plot frame found on page {page_number}')
-        if frame_index >= len(candidates):
-            raise ExtractError(f'frame {frame_index} does not exist ({len(candidates)} frames on page {page_number})')
-        frame = candidates[frame_index]
+        if frame_box is not None:
+            # given in pt, e.g. read from the grid image of 'extract --list': for figures whose axes are broken or dotted in the scan
+            frame = (round(frame_box[0] * SCALE), round(frame_box[1] * SCALE), round(frame_box[2] * SCALE), round(frame_box[3] * SCALE))
+        else:
+            candidates = raster_frames(ink)
+            if not candidates:
+                raise ExtractError(f'no plot frame found on page {page_number}: give it with --frame-box (see the grid image of --list)')
+            if frame_index >= len(candidates):
+                raise ExtractError(f'frame {frame_index} does not exist ({len(candidates)} frames on page {page_number})')
+            frame = candidates[frame_index]
         axes = {}
-        for axis, given, scale in (('x', x_labels, x_scale), ('y', y_labels, y_scale)):
+        for axis, given, scale, points in (('x', x_labels, x_scale, x_points), ('y', y_labels, y_scale, y_points)):
             major, minor = raster_ticks(ink, frame, axis)
+            if points:
+                # calibration points (coordinate in pt = value), read from the grid image: for axes whose ticks are not found
+                axes[axis] = calibrate([p for p, _ in points], list(points), 'points', scale)
+                continue
             if given:
                 if len(given) != len(major):
                     raise ExtractError(f'{len(given)} {axis} labels given for {len(major)} major ticks')
@@ -321,18 +402,38 @@ def extract_raster(
                 pairs, source = sorted((tick / SCALE, value) for tick, (_, value) in closest.items()), 'ocr'
             axes[axis] = calibrate([p / SCALE for p in major], pairs, source, scale)
     found = symbols(ink, frame, radius)
+    # only symbols within the calibrated range (labels, text or symbols of a neighbouring panel are outside)
+    low, high = sorted(axes['x'].value(position) for position in (min(p for p, _ in axes['x'].labels), max(p for p, _ in axes['x'].labels)))
+    margin = 0.05 * (high - low)
+    found = [point for point in found if low - margin <= axes['x'].value(point[0] / SCALE) <= high + margin]
     if not found:
         raise ExtractError(f'no filled symbols found in frame {frame_index} (open symbols and lines are not supported for scans yet)')
     tolerance = 0.045 * (frame[3] - frame[1])
+    max_step = 0.25 * (frame[2] - frame[0])
+    if seeds:
+        # one curve per seed point (axis values -> pixels via the calibration)
+        tracks = []
+        for seed in seeds:
+            pixels = [(axis_to_pixel(axes['x'], seed[i]) * SCALE, axis_to_pixel(axes['y'], seed[i + 1]) * SCALE) for i in range(0, len(seed), 2)]
+            curve = follow(found, pixels, tolerance, max_step)
+            if not curve:
+                raise ExtractError(f'no symbol near the seed point(s) {seed}')
+            tracks.append(curve)
+    else:
+        # filled and open symbols are linked separately; short open tracks are letters of the figure text (o, e, a), not data
+        filled = [point for point in found if not (point[2] or '').endswith('-open')]
+        hollow = [point for point in found if (point[2] or '').endswith('-open')]
+        tracks = link(filled, tolerance, max_step) + [track for track in link(hollow, tolerance, max_step) if len(track) >= 3]
     series = []
-    for index, track in enumerate(link(found, tolerance, 0.25 * (frame[2] - frame[0]))):
+    for index, track in enumerate(tracks):
         votes = [shape for _, _, shape, _ in track if shape]
         majority = max(set(votes), key=votes.count) if votes else 'unknown'
         points = []
         for x, y, shape, split in sorted(track):
             flag = 'split' if split else ('shape' if shape != majority else None)
             points.append(Point(x / SCALE, y / SCALE, flag=flag))
-        series.append(Series(f'{majority}-filled-{index}', 'marker', points))
+        name = majority if majority.endswith('-open') else f'{majority}-filled'
+        series.append(Series(f'{name}-{index}', 'marker', points))
     return Figure(page_number, to_pt(frame), axes['x'], axes['y'], series, (len(raster_ticks(ink, frame, 'x')[0]), len(raster_ticks(ink, frame, 'y')[0])))
 
 

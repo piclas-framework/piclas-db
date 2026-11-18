@@ -28,7 +28,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.extract.raster import RESOLUTION, SCALE, extract_raster, is_scanned, raster_figure_frames
+from piclas_db.extract.raster import RESOLUTION, SCALE, extract_raster, grid_image, is_scanned, raster_figure_frames
 from piclas_db.extract.table import Table, extract_table, header_unit, parse_number
 from piclas_db.extract.vector import ExtractError, extract, figure_frames, require_pdfplumber, review_image, tesseract_version, values
 from piclas_db.literature import LiteratureError, papers, template
@@ -39,6 +39,27 @@ from piclas_db.store import Store, StoreEntry
 
 def numbers(text: Optional[str]) -> Optional[list[float]]:
     return [float(part) for part in text.split(',')] if text else None
+
+
+def seed_points(text: Optional[str]) -> Optional[list[tuple[float, ...]]]:
+    """'x,y;x,y,x2,y2': one or two points per curve"""
+    if not text:
+        return None
+    seeds = [tuple(float(value) for value in group.split(',')) for group in text.split(';')]
+    if any(len(seed) not in (2, 4) for seed in seeds):
+        raise ValueError('--seeds: one or two points (x,y or x,y,x2,y2) per curve, curves separated by ";"')
+    return seeds
+
+
+def pairs(text: Optional[str], separator: str) -> Optional[list[tuple[float, float]]]:
+    """'a=b,c=d' (calibration points, coordinate=value) or 'x,y;x,y' (seed points)"""
+    if not text:
+        return None
+    result = []
+    for item in text.split(',' if separator == '=' else ';'):
+        first, second = item.split(separator)
+        result.append((float(first), float(second)))
+    return result
 
 
 def page_list(text: str) -> list[int]:
@@ -110,11 +131,30 @@ def run(args: argparse.Namespace) -> int:
         page = page_list(args.page)[0]
         scanned = args.raster or is_scanned(path, page)
         if args.list:
+            if scanned:
+                grid = pathlib.Path(args.output) / f'p{page}-grid.png'
+                grid.parent.mkdir(parents=True, exist_ok=True)
+                grid_image(path, page, str(grid))
+                print(f'grid image (10 pt grid) for --frame-box, --x-points, --y-points and --seeds: {grid}')
             for index, frame in enumerate(raster_figure_frames(path, page) if scanned else figure_frames(path, page)):
                 print(f'frame {index}: x {frame[0]:.1f}-{frame[2]:.1f} pt, y {frame[1]:.1f}-{frame[3]:.1f} pt (from the top of page {args.page})')
             return 0
         if scanned:
-            figure = extract_raster(path, page, args.frame, numbers(args.x_labels), numbers(args.y_labels), args.x_scale, args.y_scale, args.symbol_radius)
+            box = numbers(args.frame_box)
+            figure = extract_raster(
+                path,
+                page,
+                args.frame,
+                numbers(args.x_labels),
+                numbers(args.y_labels),
+                args.x_scale,
+                args.y_scale,
+                args.symbol_radius,
+                (box[0], box[1], box[2], box[3]) if box else None,
+                seed_points(args.seeds),
+                pairs(args.x_points, '='),
+                pairs(args.y_points, '='),
+            )
         else:
             figure = extract(path, page, args.frame, numbers(args.x_labels), numbers(args.y_labels), args.x_scale, args.y_scale)
     except (ExtractError, LiteratureError, ValueError) as e:
@@ -150,7 +190,16 @@ def run(args: argparse.Namespace) -> int:
         record['parameters'] = {'page': figure.page, 'frame': args.frame, 'frame_pt': [round(v, 2) for v in figure.frame], 'series': series.name, 'kind': series.kind}
         if scanned:
             pixel = 1.0 / SCALE  # pt
-            record['parameters'].update({'resolution_dpi': RESOLUTION, 'symbol_radius_px': args.symbol_radius})
+            record['parameters'].update(
+                {
+                    'resolution_dpi': RESOLUTION,
+                    'symbol_radius_px': args.symbol_radius,
+                    **({'frame_box_pt': args.frame_box} if args.frame_box else {}),
+                    **({'seeds': args.seeds} if args.seeds else {}),
+                    **({'x_points': args.x_points} if args.x_points else {}),
+                    **({'y_points': args.y_points} if args.y_points else {}),
+                }
+            )
             record['accuracy']['extraction'] = (
                 f'symbol centre to about one pixel at {RESOLUTION} dpi: {abs(figure.x.b) * pixel:.2g} in x and {abs(figure.y.b) * pixel:.2g} in y '
                 + ('(decades)' if figure.y.scale == 'log' else '(axis units)')
