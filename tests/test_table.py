@@ -152,7 +152,7 @@ def test_command(paper: pathlib.Path, tmp_path: pathlib.Path, monkeypatch: pytes
     assert np.allclose(data[:, 1], np.array([1.25, 2.5, 0.0565, 9.7e-7, 3.75, 4.5]) * 1e-20)
     capsys.readouterr()
     assert main(['extract', 'test-2008', '--page', '3', '--table', '2', '-o', str(output)]) == 0
-    assert 'kept as raw table' in capsys.readouterr().out
+    assert 'parameter table' in capsys.readouterr().out
     assert main(['extract', 'test-2008', '--page', '3', '--table', '9', '-o', str(output)]) == 1
 
 
@@ -165,3 +165,42 @@ def test_redo_table(paper: pathlib.Path, tmp_path: pathlib.Path, monkeypatch: py
     capsys.readouterr()
     assert main(['extract', '--redo', 'test-2008/table3-c1', '-o', str(tmp_path / 'redo')]) == 0
     assert '6 points, identical' in capsys.readouterr().out
+
+
+def test_formula_with_parameters_from_table(paper: pathlib.Path, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    assert main(['import', str(paper), '--literature', 'test-2003', '--reference', 'A. Author, Report (2003)']) == 0
+    work = tmp_path / 'work'
+    assert main(['extract', 'test-2003', '--page', '3', '--table', '2', '-o', str(work)]) == 0
+    record = yaml.safe_load((work / 'table2.extraction.yaml').read_text())
+    assert record['parameter_table'] is True and record['data'] == 'table2-table.csv'
+    assert main(['literature', 'add', str(work / 'table2.extraction.yaml')]) == 0
+
+    # one formula per column: parameters a1, a2 from the column '1s -> 2p' (the second value column)
+    assert main(['literature', 'template', 'test-2003', 'fit', '--page', '3', '--equation', '5', '--formula', '--parameters-from', 'test-2003/table2', '--column', '2', '-o', str(work)]) == 0
+    formula = yaml.safe_load((work / 'fit.formula.yaml').read_text())
+    assert formula['parameters_from'] == {'table': 'test-2003/table2', 'column': 2, 'rows': {}}
+    formula.update({'expression': 'a1 + a2 * E + c', 'parameters': {'c': 1.0}, 'range': [1.0, 10.0], 'points': 5})
+    (work / 'fit.formula.yaml').write_text(yaml.safe_dump(formula))
+    assert main(['literature', 'add', str(work / 'fit.extraction.yaml')]) == 0
+    stored = find_extraction(Store(tmp_path / 'store'), 'test-2003/fit')
+    resolved = stored.meta['extraction']['formula']
+    assert resolved['parameters'] == {'c': 1.0, 'a1': pytest.approx(33.777), 'a2': pytest.approx(62.880)}
+    assert resolved['parameters_from']['sha256'] == find_extraction(Store(tmp_path / 'store'), 'test-2003/table2').meta['sha256']
+    data = read_extraction(stored)
+    assert np.allclose(data[:, 1], (33.777 + 62.880 * data[:, 0] + 1.0) * 1.0e-20)
+
+    # errors: unknown row, unknown column, a table that is not a parameter table
+    for change, message in (
+        ({'expression': 'a9 * E'}, 'parameter a9'),
+        ({'parameters_from': {'table': 'test-2003/table2', 'column': 'nope'}}, 'column'),
+        ({'parameters_from': {'table': 'test-2003/table2', 'column': 7}}, 'column 7'),
+    ):
+        (work / 'fit.formula.yaml').write_text(yaml.safe_dump({**formula, **change}))
+        assert main(['literature', 'add', str(work / 'fit.extraction.yaml')]) == 1
+        assert message in capsys.readouterr().out
+    assert main(['extract', 'test-2003', '--page', '1-2', '--table', '3', '-o', str(work)]) == 0
+    assert main(['literature', 'add', str(work / 'table3-c1.extraction.yaml')]) == 0
+    (work / 'fit.formula.yaml').write_text(yaml.safe_dump({**formula, 'parameters_from': {'table': 'test-2003/table3-c1', 'column': 1}}))
+    assert main(['literature', 'add', str(work / 'fit.extraction.yaml')]) == 1
+    assert 'not a parameter table' in capsys.readouterr().out

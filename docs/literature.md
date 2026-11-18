@@ -94,6 +94,33 @@ Only arithmetic (`+ - * / **`, also `^`), `exp`, `log`, `log10`, `sqrt`, `abs`, 
 expression is parsed, never executed as code. `literature add` evaluates it and refuses values that are not finite or negative in
 the range (threshold or range missing).
 
+### Parameters from a table
+
+Many review papers give one formula and a table of parameters, one column per process (Janev et al. 2003: Eq. (14) and Table 3 for
+ionization from 1s, 2s, 2p, n = 2, 3). `extract --table` stores such a table as a **parameter table** (no energy column, first column:
+row labels), and a formula takes its parameters from one column:
+
+```bash
+piclas-db extract janev-2003 --page 130 --table 3 -o work/            # -> work/table3.extraction.yaml (parameter table)
+piclas-db literature add work/table3.extraction.yaml
+piclas-db literature template janev-2003 h-ion-1s --page 13 --equation 14 --formula --parameters-from janev-2003/table3 --column 1s -o work/
+```
+
+```yaml
+# work/h-ion-1s.formula.yaml
+expression: 1e-13 / (I * E) * (A0 * log(E / I) + A1 * (1 - I / E) + A2 * (1 - I / E)**2 + A3 * (1 - I / E)**3 + A4 * (1 - I / E)**4 + A5 * (1 - I / E)**5)
+parameters_from:
+  table: janev-2003/table3
+  column: 1s                  # header text or number (1 = first value column)
+  rows: {I: In (eV)}          # only where parameter name and row label differ (compared without spaces and case)
+threshold: 13.6
+range: [13.6, 1.0e5]
+```
+
+`literature add` reads the parameters from the stored table (every parameter of the expression must be found, otherwise the rows of
+the table are listed) and freezes them into the record together with the sha256 of the table. One formula per column: for the
+other states only `column` changes. Janev Eq. (14) with Table 3, 1s: maximum 6.2 × 10⁻¹⁷ cm² at 57 eV.
+
 ### Example: H₂⁺ + H₂ in SpeciesDatabase.h5
 
 `SpeciesDatabase.h5` has `H2-H2Ion1/REACTION/H2Ion1-H2` and `H-H2-HIon1` from Janev et al. 2003, Eqs. (207) and (209). Evaluated
@@ -102,6 +129,29 @@ impact energy, while PICLas uses the collision energy, which is half of it for H
 differ from the database by +18 % (charge transfer) and −10 % (dissociation) in the median and up to a factor of two near the
 thresholds: the database (and the regression checks built on the same data) evaluate these cross-sections at twice the intended
 energy.
+
+## Combining extractions
+
+One cross-section can be put together from several extractions, each used in an energy range (collision energy in eV):
+
+```yaml
+literature:
+  - parts:
+      - {source: literature/yoon-2008/table12-c1, range: [16, 25]}     # total ionization (dissociative part < 1 % there)
+      - {source: literature/yoon-2008/table13-c1, range: [30, 1000]}   # partial ionization H2+
+    zero_at: 15.4             # optional: sigma = 0 at this energy (threshold) before the first point
+    pair: H2-electron
+    kind: REACTION
+    key: H2Ion1-electron-electron
+```
+
+The ranges must not overlap; every part must have data in its range. `build` reports the jump of the cross-section at every seam, so
+that a mismatch between two sources does not go unnoticed. The dataset carries the citations of all parts, `* Parts` with the ranges,
+`* Zero at` and the review of every part; `check` warns if one part is not reviewed.
+
+This reproduces `H2-electron/REACTION/H2Ion1-electron-electron` of `SpeciesDatabase.h5`: Yoon Table 12 (16–25 eV) and Table 13,
+column H₂⁺ (30–1000 eV) give the same 58 values (to the float32 precision of the database); the database starts with σ = 0 at
+**15.4 eV**, while the paper gives 15.426 eV as ionization potential (seam 25 → 30 eV: +22.5 %, total vs. partial values).
 
 ## Use in recipes
 

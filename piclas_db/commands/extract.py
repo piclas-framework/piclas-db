@@ -100,7 +100,18 @@ def write_table(args: argparse.Namespace, paper: StoreEntry, table: Table, outpu
     parsed = [parse_number(row[0]) for row in table.rows]
     energies = [value for value in parsed if value is not None]
     if len(energies) != len(parsed) or any(b <= a for a, b in itertools.pairwise(energies)):
-        print('  no increasing energy column: kept as raw table (e.g. fit parameters)')
+        # parameters of fit formulas (e.g. Janev et al. 2003): stored as a parameter table, used by formulas (parameters_from)
+        record = template(paper, name, ', '.join(str(p) for p in table.pages), table.number, None, table.source)
+        record['created']['by'] = args.by
+        record['data'] = f'{name}-table.csv'
+        record['parameter_table'] = True
+        record['quantity'] = {'description': f'{table.caption} (parameters, first column: row labels)'}
+        record['parameters'] = {'pages': table.pages, 'table': table.number, 'command': command_of(args)}
+        for key in ('columns', 'accuracy'):
+            record.pop(key, None)
+        (output / f'{name}.extraction.yaml').write_text(yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=1000))
+        print(f'  no increasing energy column: parameter table ({", ".join(table.header[1:])}) -> {output / name}.extraction.yaml')
+        print(f'  store it with piclas-db literature add {output / name}.extraction.yaml; formulas use it with parameters_from')
         return
     pdfplumber = require_pdfplumber()
     for column in range(1, len(table.header)):

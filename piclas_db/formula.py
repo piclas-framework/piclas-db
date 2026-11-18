@@ -22,6 +22,13 @@ sqrt and abs, the variable E and the named parameters are allowed: an expression
       threshold: 2.0          # eV (in the energy unit of the record), cross-section zero below
       range: [2.0, 1.0e5]     # validity range given in the paper
       points: 200             # logarithmic grid over the range
+
+Parameters can come from a stored parameter table (a table of the paper read with 'extract --table'), one column per formula:
+
+    parameters_from:
+      table: janev-2003/table3   # [@sha256]
+      column: 1s                 # header text or number (1 = first value column)
+      rows: {I: In (eV)}         # parameter name -> row label where they differ (compared without spaces and case)
 """
 
 # ----------------------------------------------------------------------------------------------------------------------------------

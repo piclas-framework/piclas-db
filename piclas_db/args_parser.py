@@ -81,6 +81,8 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--figure', help='template: figure number')
             sub.add_argument('--equation', help='template: equation number of a fit formula, e.g. 209')
             sub.add_argument('--formula', action='store_true', help='template: a fit formula instead of a table (writes <name>.formula.yaml)')
+            sub.add_argument('--parameters-from', metavar='PAPER/TABLE', help='template --formula: parameters from a stored parameter table')
+            sub.add_argument('--column', help='template --formula: column of the parameter table (header text or number, 1 = first value column)')
             sub.add_argument('--method', default='manual', help='template: manual, text, ocr, vector or raster (default manual)')
             sub.add_argument('-o', '--output', default='.', help='template: directory for the files (default .)')
             sub.add_argument('--approve', action='store_true', help='review: approve')

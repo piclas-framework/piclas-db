@@ -25,6 +25,7 @@ reviewed. Only reviewed extractions are used by 'build' unless explicitly allowe
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import ast
 import csv
 import datetime
 import io
@@ -177,15 +178,9 @@ def energy_frame(energy: dict) -> str:
     return str(energy.get('frame', default))
 
 
-def validate(record: dict, table: Table) -> list[str]:
-    """Problems that prevent storing the extraction (empty list: fine)"""
+def validate_source(record: dict) -> list[str]:
+    """Where the data come from: method, paper, page and table/figure/equation"""
     problems = []
-    energy_column = (record.get('columns') or {}).get('energy') or {}
-    frame = energy_frame(energy_column)
-    if frame not in ('collision', 'lab'):
-        problems.append('columns.energy.frame must be "collision" or "lab"')
-    elif frame == 'lab' and not all(isinstance(energy_column.get(key), (int, float)) for key in ('mass_amu', 'target_mass_amu')):
-        problems.append('columns.energy: laboratory energies or velocities need mass_amu (projectile) and target_mass_amu to give the collision energy PICLas uses')
     if record.get('method') not in METHODS:
         problems.append(f'method must be one of {", ".join(METHODS)}')
     source = record.get('source') or {}
@@ -195,6 +190,18 @@ def validate(record: dict, table: Table) -> list[str]:
         problems.append('source: table, figure or equation required')
     if not source.get('page'):
         problems.append('source: page required')
+    return problems
+
+
+def validate(record: dict, table: Table) -> list[str]:
+    """Problems that prevent storing the extraction (empty list: fine)"""
+    problems = validate_source(record)
+    energy_column = (record.get('columns') or {}).get('energy') or {}
+    frame = energy_frame(energy_column)
+    if frame not in ('collision', 'lab'):
+        problems.append('columns.energy.frame must be "collision" or "lab"')
+    elif frame == 'lab' and not all(isinstance(energy_column.get(key), (int, float)) for key in ('mass_amu', 'target_mass_amu')):
+        problems.append('columns.energy: laboratory energies or velocities need mass_amu (projectile) and target_mass_amu to give the collision energy PICLas uses')
     if (record.get('review') or {}).get('status', 'pending') not in REVIEW_STATES:
         problems.append(f'review status must be one of {", ".join(REVIEW_STATES)}')
     if np.any(~np.isfinite(table.energy)) or np.any(~np.isfinite(table.cross_section)):
@@ -268,6 +275,55 @@ def extractions(store: Store) -> list[StoreEntry]:
     return [entry for entry in store.entries() if entry.meta.get('provider') == 'literature' and entry.meta.get('kind') == 'extraction']
 
 
+def read_parameter_table(text: str) -> tuple[list[str], list[list[str]]]:
+    """Raw table of parameters (header and rows of text cells, first column: row labels such as 'A 0')"""
+    rows = list(csv.reader(io.StringIO(text)))
+    if len(rows) < 2 or len(rows[0]) < 2:
+        raise LiteratureError('a parameter table needs a header and at least one row with a label and a value')
+    return rows[0], rows[1:]
+
+
+def label_key(text: str) -> str:
+    """Row labels compared without spaces and case: 'A 0' = 'A0', 'I n (eV )' = 'In(eV)'"""
+    return re.sub(r'\s+', '', text).lower()
+
+
+def resolve_parameters(store: Store, formula: dict) -> dict:
+    """Parameters of a formula taken from a stored parameter table (one column), frozen into the formula with the table's sha256"""
+    from piclas_db.extract.table import parse_number  # noqa: PLC0415
+    from piclas_db.formula import FUNCTIONS  # noqa: PLC0415
+
+    source = formula.get('parameters_from')
+    if not source:
+        return formula
+    entry = find_extraction(store, str(source.get('table', '')))
+    if not (entry.meta.get('extraction') or {}).get('parameter_table'):
+        raise LiteratureError(f'{source.get("table")} is not a parameter table')
+    header, rows = read_parameter_table(entry.path.read_text(encoding='utf-8'))
+    column = source.get('column')
+    if isinstance(column, int):
+        index = column  # 1 = first value column
+    else:
+        matches = [i for i, title in enumerate(header) if i > 0 and label_key(title) == label_key(str(column))]
+        if not matches:
+            raise LiteratureError(f'column {column!r} not in {source.get("table")} (columns: {", ".join(header[1:])})')
+        index = matches[0]
+    if not 1 <= index < len(header):
+        raise LiteratureError(f'column {column} not in {source.get("table")} ({len(header) - 1} value columns)')
+    names = {node.id for node in ast.walk(ast.parse(str(formula.get('expression', '0')).replace('^', '**'), mode='eval')) if isinstance(node, ast.Name)}
+    wanted = sorted(names - {'E'} - set(FUNCTIONS) - set(formula.get('parameters') or {}))
+    mapping = {str(k): str(v) for k, v in (source.get('rows') or {}).items()}
+    by_label = {label_key(row[0]): row for row in rows if row}
+    parameters = dict(formula.get('parameters') or {})
+    for name in wanted:
+        row = by_label.get(label_key(mapping.get(name, name)))
+        value = parse_number(row[index]) if row is not None and index < len(row) else None
+        if value is None:
+            raise LiteratureError(f'parameter {name}: no number in row {mapping.get(name, name)!r}, column {header[index]!r} of {source.get("table")} (rows: {", ".join(r[0] for r in rows)})')
+        parameters[name] = value
+    return {**formula, 'parameters': parameters, 'parameters_from': {**source, 'column': header[index], 'sha256': entry.meta.get('sha256')}}
+
+
 def add_extraction(store: Store, record_path: pathlib.Path) -> StoreEntry:
     """Validate an extraction (record + raw CSV next to it) and store it; the paper must be in the store"""
     from piclas_db.sources.identify import Identified  # noqa: PLC0415
@@ -276,13 +332,20 @@ def add_extraction(store: Store, record_path: pathlib.Path) -> StoreEntry:
     data_path = record_path.parent / str(record.get('data', ''))
     if not data_path.is_file():
         raise LiteratureError(f'data file not found: {data_path}')
-    if record.get('formula'):
-        record['formula'] = yaml.safe_load(data_path.read_text(encoding='utf-8')) or {}  # the stored file is the formula itself
+    if record.get('parameter_table'):
+        header, rows = read_parameter_table(data_path.read_text(encoding='utf-8'))
+        problems = validate_source(record)
+        table = Table(np.zeros(0), np.zeros(0), None)
+        record.setdefault('result', {}).update({'rows': len(rows), 'columns': header[1:]})
+    elif record.get('formula'):
+        formula = yaml.safe_load(data_path.read_text(encoding='utf-8')) or {}  # the stored file is the formula itself
+        record['formula'] = resolve_parameters(store, formula)
         record['method'] = record.get('method') or 'manual'
         table = formula_table(record)
+        problems = validate(record, table)
     else:
         table = read_raw(data_path.read_text(encoding='utf-8'))
-    problems = validate(record, table)
+        problems = validate(record, table)
     paper_name = (record.get('source') or {}).get('paper')
     known = papers(store)
     if paper_name not in known:
@@ -291,7 +354,8 @@ def add_extraction(store: Store, record_path: pathlib.Path) -> StoreEntry:
         problems.append(f'file_sha256 does not match the paper {paper_name} in the store')
     if problems:
         raise LiteratureError('; '.join(problems))
-    record.setdefault('result', {})['rows'] = len(table.energy)
+    if not record.get('parameter_table'):
+        record.setdefault('result', {})['rows'] = len(table.energy)
     zeroed = int(np.sum(table.cross_section < 0.0))
     if zeroed:
         record.setdefault('notes', []).append(f'{zeroed} value(s) below zero but zero within the uncertainty: used as zero')

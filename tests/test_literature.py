@@ -152,3 +152,52 @@ def test_recipe_errors(tmp_path: pathlib.Path) -> None:
         path.write_text(text)
         with pytest.raises(RecipeError, match=message):
             load_recipe(path)
+
+
+def add_rows(tmp_path: pathlib.Path, name: str, rows: str) -> pathlib.Path:
+    """A second extraction of the test paper with other values"""
+    assert main(['literature', 'template', 'test-2008', name, '--page', '15', '--table', '13', '-o', str(tmp_path / 'work')]) == 0
+    record_file = tmp_path / 'work' / f'{name}.extraction.yaml'
+    (tmp_path / 'work' / f'{name}.csv').write_text((tmp_path / 'work' / f'{name}.csv').read_text() + rows)
+    record = yaml.safe_load(record_file.read_text())
+    record['created']['by'] = 'tester'
+    record_file.write_text(yaml.safe_dump(record))
+    return record_file
+
+
+def test_combined_parts(store: Store, tmp_path: pathlib.Path) -> None:
+    assert main(['literature', 'add', str(entered(tmp_path))]) == 0  # total-ionization: 16, 20, 50, 100 eV
+    assert main(['literature', 'add', str(add_rows(tmp_path, 'partial', '30,0.60\n50,0.80\n100,0.85\n1000,0.20\n'))]) == 0
+    recipe = tmp_path / 'recipe.yaml'
+    recipe.write_text(
+        """literature:
+  - parts:
+      - {source: literature/test-2008/partial, range: [30, 1000]}
+      - {source: literature/test-2008/total-ionization, range: [15, 25]}
+    zero_at: 15.4
+    pair: H2-electron
+    kind: REACTION
+    key: H2Ion1-electron-electron
+"""
+    )
+    loaded = load_recipe(recipe)
+    assert [str(part) for part, _ in loaded.literature[0].parts] == ['literature/test-2008/total-ionization', 'literature/test-2008/partial']  # sorted
+    assert {str(r) for r in loaded.requirements} == {'literature/test-2008/total-ionization', 'literature/test-2008/partial'}
+    output = tmp_path / 'combined.h5'
+    assert main(['build', str(recipe), '-o', str(output), '--offline', '--allow-unreviewed']) == 0
+    xsec = read_database(output).collision_pairs['H2-electron'].cross_sections[0]
+    assert xsec.data[:, 0].tolist() == [15.4, 16.0, 20.0, 30.0, 50.0, 100.0, 1000.0]
+    assert np.allclose(xsec.data[1:, 1], np.array([0.03, 0.28, 0.60, 0.80, 0.85, 0.20]) * 1e-20)
+    assert 'total-ionization: 15-25 eV' in str(xsec.provenance.extra['* Parts']) and '15.4 eV' in str(xsec.provenance.extra['* Zero at'])
+    assert 'literature-unreviewed' in [finding.rule for finding in run_checks(read_database(output))]
+
+    for text, message in (
+        ('  - parts:\n      - {source: literature/a/b, range: [1, 5]}\n      - {source: literature/a/c, range: [4, 9]}\n', 'overlap'),
+        ('  - parts:\n      - {source: literature/a/b}\n', 'range'),
+        ('  - parts:\n      - {source: lxcat/a/b, range: [1, 5]}\n', 'literature/'),
+    ):
+        recipe.write_text(f'literature:\n{text}    pair: H2-electron\n    kind: REACTION\n    key: x\n')
+        with pytest.raises(RecipeError, match=message):
+            load_recipe(recipe)
+    recipe.write_text('literature:\n  - parts:\n      - {source: literature/test-2008/partial, range: [2000, 3000]}\n    pair: H2-electron\n    kind: REACTION\n    key: x\n')
+    assert main(['build', str(recipe), '-o', str(tmp_path / 'empty.h5'), '--offline', '--allow-unreviewed']) == 1  # no data in the range

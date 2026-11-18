@@ -67,7 +67,16 @@ def run(args: argparse.Namespace) -> int:
                 data_file = directory / f'{name}.formula.yaml'
                 if data_file.exists():
                     raise LiteratureError(f'{data_file} exists already')
-                data_file.write_text(FORMULA_TEMPLATE)
+                text = FORMULA_TEMPLATE
+                if args.parameters_from:
+                    column = int(args.column) if str(args.column or '').isdigit() else args.column
+                    text = text.replace(
+                        'parameters: {a: 1.0, b: 0.5}\n',
+                        'parameters: {}   # further constants\n'
+                        + yaml.safe_dump({'parameters_from': {'table': args.parameters_from, 'column': column or 1, 'rows': {}}}, sort_keys=False, allow_unicode=True)
+                        + '# rows: parameter name -> row label of the table, only where they differ (labels compared without spaces)\n',
+                    )
+                data_file.write_text(text)
             else:
                 data_file.write_text(CSV_TEMPLATE)
             record_file.write_text(yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=1000))

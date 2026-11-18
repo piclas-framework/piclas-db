@@ -444,7 +444,7 @@ def check_literature_review(database: Database) -> Iterator[Finding]:
     for pair in database.collision_pairs.values():
         for xsec in pair.cross_sections:
             status = str(xsec.provenance.extra.get('* Review', ''))
-            if status and not status.startswith('approved'):
+            if status and not all(part.strip().startswith('approved') for part in status.split(';')):
                 path = f'/Cross-Sections/{pair.name}/' + (f'{xsec.group}/' if xsec.group else '') + xsec.key
                 yield Finding(Severity.WARNING, 'literature-unreviewed', path, f'data from a paper, extraction {status.split(" ", maxsplit=1)[0]}')
 

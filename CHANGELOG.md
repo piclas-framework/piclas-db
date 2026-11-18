@@ -3,6 +3,21 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.24.0
+
+* Combined datasets (`docs/literature.md`): recipe entries with `parts` (several extractions, each in an energy range) and `zero_at`
+  (sigma = 0 at the threshold); overlapping ranges and empty parts are refused, the jump at every seam is reported; provenance with
+  all citations, `* Parts`, `* Zero at` and the review of every part
+* Reproduces `H2Ion1-electron-electron` of `SpeciesDatabase.h5` from Yoon et al. 2008 Tables 12 and 13 (database zero point 15.4 eV)
+
+## 0.23.0
+
+* Parameter tables: `extract --table` stores tables without energy column (fit parameters, first column: row labels) as parameter
+  tables, `literature add` accepts them
+* Formulas with `parameters_from` (table, column, row mapping): parameters read from a stored parameter table and frozen into the
+  record with the table's sha256; `literature template --formula --parameters-from TABLE --column C`
+* Janev et al. 2003, Eq. (14) with Table 3: H(1s) ionization
+
 ## 0.22.0
 
 * Configuration file (`piclas_db/config.py`, documented in `docs/configuration.md`): `~/.config/piclas-db/config.yaml` or

@@ -32,6 +32,13 @@ inline. Example:
         pair: H2-electron
         kind: REACTION
         key: H2Ion1-electron-electron
+      - parts:                               # one cross-section from several extractions, each in an energy range (eV)
+          - {source: literature/yoon-2008/table12-c1, range: [16, 25]}
+          - {source: literature/yoon-2008/table13-c1, range: [30, 1000]}
+        zero_at: 15.426                      # optional: sigma = 0 at the threshold
+        pair: H2-electron
+        kind: REACTION
+        key: H2Ion1-electron-electron
     species:                                 # own data, written as attributes
       Ar: {MassIC: 6.63E-26, InteractionID: 1}
 """
@@ -39,6 +46,7 @@ inline. Example:
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import itertools
 import pathlib
 from dataclasses import dataclass, field
 from typing import Optional, Union
@@ -76,11 +84,13 @@ class CrossSectionSelection:
 class LiteratureSelection:
     """Extraction from a paper (literature provider) used as one cross-section"""
 
-    source: Requirement  # literature/<paper>/<dataset>[@sha256]
+    source: Requirement  # literature/<paper>/<dataset>[@sha256]; the first part if the dataset is combined from parts
     pair: str  # collision pair in PICLas names, e.g. H2-electron
     kind: str  # PICLas group: ELASTIC, EFFECTIVE, REACTION, ELECTRONIC, ...
     key: Optional[str] = None  # products for REACTION, e.g. H2Ion1-electron-electron; threshold for ELECTRONIC/VIBRATION/ROTATION
     threshold: Optional[float] = None  # eV
+    parts: list[tuple[Requirement, Optional[tuple[float, float]]]] = field(default_factory=list)  # several extractions, each in an energy range
+    zero_at: Optional[float] = None  # eV: sigma = 0 inserted at this energy (threshold) before the first point
 
 
 @dataclass
@@ -103,6 +113,9 @@ class Recipe:
         unique: dict[str, Requirement] = {}
         for selection in [*self.cross_sections, *self.levels, *self.literature]:
             unique.setdefault(str(selection.source), selection.source)
+        for literature in self.literature:
+            for part, _ in literature.parts:
+                unique.setdefault(str(part), part)
         return list(unique.values())
 
 
@@ -162,14 +175,30 @@ def parse_recipe(text: str, path: str) -> Recipe:
         context = f'literature #{number}'
         if not isinstance(entry, dict) or not entry.get('pair') or entry.get('kind') not in KINDS:
             raise RecipeError(f'{context}: "pair" and "kind" ({", ".join(KINDS)}) required')
+        parts: list[tuple[Requirement, Optional[tuple[float, float]]]] = []
+        if entry.get('parts'):
+            # one cross-section from several extractions, each used in an energy range (collision energy, eV)
+            for index, part in enumerate(entry['parts'], start=1):
+                limits = part.get('range') if isinstance(part, dict) else None
+                if not isinstance(part, dict) or not (isinstance(limits, list) and len(limits) == 2 and float(limits[0]) < float(limits[1])):
+                    raise RecipeError(f'{context}, part {index}: "source" and "range: [min, max]" (eV) required')
+                parts.append((requirement(part, f'{context}, part {index}'), (float(limits[0]), float(limits[1]))))
+            ordered = sorted(parts, key=lambda item: item[1][0] if item[1] else 0.0)
+            for (_, left), (_, right) in itertools.pairwise(ordered):
+                high, low = (left or (0.0, 0.0))[1], (right or (0.0, 0.0))[0]
+                if low <= high:
+                    raise RecipeError(f'{context}: ranges of the parts overlap ({high:g} >= {low:g} eV)')
+            parts = ordered
         selection = LiteratureSelection(
-            source=requirement(entry, context),
+            source=parts[0][0] if parts else requirement(entry, context),
             pair=str(entry['pair']),
             kind=str(entry['kind']),
             key=str(entry['key']) if entry.get('key') is not None else None,
             threshold=float(entry['threshold']) if entry.get('threshold') is not None else None,
+            parts=parts,
+            zero_at=float(entry['zero_at']) if entry.get('zero_at') is not None else None,
         )
-        if selection.source.provider != 'literature':
+        if any(item.provider != 'literature' for item in [selection.source, *(part for part, _ in parts)]):
             raise RecipeError(f'{context}: source must be literature/<paper>/<dataset>')
         if selection.kind == 'REACTION' and not selection.key:
             raise RecipeError(f'{context}: "key" (products, e.g. H2Ion1-electron-electron) required for REACTION')

@@ -27,6 +27,7 @@ The collision pair is named <target>-<projectile> in PICLas names (e.g. Ar-elect
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import itertools
 import re
 from dataclasses import dataclass, field
 from typing import Optional
@@ -252,34 +253,69 @@ def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry,
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Literature
 # ----------------------------------------------------------------------------------------------------------------------------------
-def add_literature(database: Database, selection: LiteratureSelection, entry: StoreEntry, report: BuildReport, allow_unreviewed: bool) -> None:
+def literature_part(entry: StoreEntry, label: str, allow_unreviewed: bool) -> tuple[np.ndarray, dict, str]:
+    """Data (eV, m^2), record and review status of one stored extraction; refuses unreviewed (unless allowed) and rejected ones"""
     from piclas_db.literature import read_extraction  # noqa: PLC0415
 
     record = entry.meta.get('extraction') or {}
     status = (record.get('review') or {}).get('status', 'pending')
     if status == 'rejected' or (status != 'approved' and not allow_unreviewed):
-        raise BuildError(f'{selection.source}: extraction is {status} (review it with piclas-db literature review, or build with --allow-unreviewed)')
+        raise BuildError(f'{label}: extraction is {status} (review it with piclas-db literature review, or build with --allow-unreviewed)')
+    return read_extraction(entry), record, status
+
+
+def citation(record: dict) -> str:
+    source = record.get('source') or {}
+    where = ', '.join(f'{label} {source[label]}' for label in ('table', 'figure', 'equation', 'page') if source.get(label))
+    return f'{source.get("reference") or source.get("doi")}' + (f' (doi:{source["doi"]})' if source.get('doi') and source.get('reference') else '') + f', {where}'
+
+
+def add_literature(database: Database, selection: LiteratureSelection, entries: dict[str, Optional[StoreEntry]], report: BuildReport, allow_unreviewed: bool) -> None:
     kind = XSecKind(selection.kind)
     group = None if kind in (XSecKind.ELASTIC, XSecKind.EFFECTIVE, XSecKind.BACKSCATTER) else kind.value
     key = kind.value if group is None else (str(selection.key) if kind is XSecKind.REACTION else str(selection.threshold))
     pair = database.collision_pairs.setdefault(selection.pair, CollisionPair(name=selection.pair))
+    name = f'/Cross-Sections/{selection.pair}/' + (f'{group}/' if group else '') + key
     if any(existing.group == group and existing.key == key for existing in pair.cross_sections):
         report.notes.append(f'{selection.pair}: {group + "/" if group else ""}{key} exists already, {selection.source} skipped')
         return
-    source = record.get('source') or {}
-    where = ', '.join(f'{label} {source[label]}' for label in ('table', 'figure', 'equation', 'page') if source.get(label))
-    created = record.get('created') or {}
+    parts = selection.parts or [(selection.source, None)]
+    pieces, records, statuses = [], [], []
+    for requirement, limits in parts:
+        entry = entries[str(requirement)]
+        assert entry is not None
+        data, record, status = literature_part(entry, str(requirement), allow_unreviewed)
+        if limits is not None:
+            data = data[(data[:, 0] >= limits[0]) & (data[:, 0] <= limits[1])]
+            if len(data) == 0:
+                raise BuildError(f'{requirement}: no data in the range {limits[0]:g}-{limits[1]:g} eV')
+        pieces.append((requirement, data))
+        records.append((entry, record))
+        statuses.append(status)
+    data = np.vstack([piece for _, piece in pieces])
+    # seams between parts: the jump is reported, so that a mismatch between two sources does not go unnoticed
+    for (first, left), (second, right) in itertools.pairwise(pieces):
+        jump = (right[0, 1] - left[-1, 1]) / left[-1, 1] if left[-1, 1] > 0.0 else 0.0
+        report.notes.append(f'{name}: seam {left[-1, 0]:g} -> {right[0, 0]:g} eV between {first} and {second}, sigma {jump:+.1%}')
+    if selection.zero_at is not None and data[0, 0] > selection.zero_at:
+        data = np.vstack([[selection.zero_at, 0.0], data])
+    review = 'approved' if all(status == 'approved' for status in statuses) else ('pending' if 'pending' in statuses else statuses[0])
     provenance = Provenance(
-        reference=f'{source.get("reference") or source.get("doi")}' + (f' (doi:{source["doi"]})' if source.get('doi') and source.get('reference') else '') + f', {where}',
-        info=(record.get('quantity') or {}).get('description'),
+        reference='; '.join(dict.fromkeys(citation(record) for _, record in records)),
+        info=' + '.join(str((record.get('quantity') or {}).get('description')) for _, record in records),
         extra={
-            **source_provenance(entry),
-            '* Extraction': f'{record.get("method")} by {created.get("by") or "unknown"} with {created.get("tool")}, {created.get("date")}',
-            '* Review': f'{status}' + (f' by {record["review"].get("reviewer")}, {record["review"].get("date")}' if status != 'pending' else ''),
+            '* Source': '; '.join(str(source_provenance(entry)['* Source']) for entry, _ in records),
+            '* Extraction': '; '.join(f'{record.get("method")} by {(record.get("created") or {}).get("by") or "unknown"} with {(record.get("created") or {}).get("tool")}' for _, record in records),
+            '* Review': '; '.join(
+                f'{status}' + (f' by {(record.get("review") or {}).get("reviewer")}, {(record.get("review") or {}).get("date")}' if status != 'pending' else '')
+                for (_, record), status in zip(records, statuses, strict=True)
+            ),
+            **({'* Parts': '; '.join(f'{requirement}: {limits[0]:g}-{limits[1]:g} eV' for requirement, limits in parts if limits)} if selection.parts else {}),
+            **({'* Zero at': f'{selection.zero_at:g} eV (inserted)'} if selection.zero_at is not None else {}),
         },
     )
-    pair.cross_sections.append(CrossSection(kind=kind, key=key, data=read_extraction(entry), group=group, threshold=selection.threshold, provenance=provenance))
-    report.added.append(f'/Cross-Sections/{selection.pair}/' + (f'{group}/' if group else '') + f'{key} (from {selection.source}, review {status})')
+    pair.cross_sections.append(CrossSection(kind=kind, key=key, data=data, group=group, threshold=selection.threshold, provenance=provenance))
+    report.added.append(f'{name} (from {" + ".join(str(requirement) for requirement, _ in parts)}, review {review})')
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -299,9 +335,7 @@ def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool 
         assert entry is not None
         add_cross_sections(database, selection, entry, report)
     for literature_selection in recipe.literature:
-        entry = entries[str(literature_selection.source)]
-        assert entry is not None
-        add_literature(database, literature_selection, entry, report, allow_unreviewed)
+        add_literature(database, literature_selection, entries, report, allow_unreviewed)
     for level_selection in recipe.levels:
         entry = entries[str(level_selection.source)]
         assert entry is not None
