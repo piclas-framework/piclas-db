@@ -25,6 +25,8 @@ piclas-db literature review yoon-2008/ionization-h2plus --approve --reviewer "Na
 piclas-db literature list
 ```
 
+Data series of vector figures are read automatically with [`piclas-db extract`](extract.md), which writes the same files.
+
 The values are stored as printed (e.g. in 10⁻¹⁷ cm²); the units in the record convert them to eV and m² when they are used. This
 keeps the comparison with the paper simple and makes unit errors visible in the record instead of hiding them in the numbers.
 

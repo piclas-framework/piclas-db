@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.16.0
+
+* `piclas-db extract PAPER --page N` reads the data series of vector figures (`piclas_db/extract/vector.py`, documented in
+  `docs/extract.md`): plot frame, ticks, axis labels from the text (superscripts as powers of ten) or by OCR or from the command line,
+  linear or logarithmic scale, robust calibration with residual, markers grouped by shape, fill and colour, lines, error bars; writes
+  CSV files and extraction records (`method: vector`) and a review image
+* Literature: velocity axes (`m/s`, `cm/s`, `a.u.`) converted to energy with `mass_amu`; values below zero that are zero within their
+  uncertainty are used as zero
+* Optional dependency group `extract` (pdfplumber)
+
 ## 0.15.0
 
 * `literature` provider (`piclas_db/literature.py`, documented in `docs/literature.md`): papers (PDF) into the store with

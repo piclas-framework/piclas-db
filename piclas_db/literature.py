@@ -55,6 +55,9 @@ REVIEW_STATES = ('pending', 'approved', 'rejected')
 BOHR_RADIUS = 5.29177210544e-11  # m
 
 ENERGY_UNITS = {'ev': 1.0, 'mev': 1.0e-3, 'kev': 1.0e3}
+VELOCITY_UNITS = {'m/s': 1.0, 'cm/s': 1.0e-2, 'a.u.': 2.18769126364e6, 'au': 2.18769126364e6}  # converted with columns.energy.mass_amu
+AMU = 1.66053906892e-27  # kg
+ELEMENTARY_CHARGE = 1.602176634e-19  # C
 AREA_UNITS = {
     'm^2': 1.0,
     'm2': 1.0,
@@ -180,22 +183,37 @@ def validate(record: dict, table: Table) -> list[str]:
     elif np.any(np.diff(table.energy) <= 0.0):
         index = int(np.argmax(np.diff(table.energy) <= 0.0))
         problems.append(f'energies not increasing at row {index + 3} ({table.energy[index]} -> {table.energy[index + 1]}): typing error?')
-    if np.any(table.cross_section < 0.0):
-        problems.append('negative cross-section')
+    negative = table.cross_section < 0.0
+    if table.uncertainty is not None:
+        # values below zero but zero within their error bar (e.g. a measured zero) are kept and used as zero
+        negative &= ~(np.abs(table.cross_section) <= np.nan_to_num(table.uncertainty) * np.abs(table.cross_section))
+    if np.any(negative):
+        problems.append('negative cross-section (not zero within its uncertainty)')
     try:
         columns = record.get('columns') or {}
-        unit_factor(str((columns.get('energy') or {}).get('unit', '')), ENERGY_UNITS)
+        energy = columns.get('energy') or {}
+        try:
+            unit_factor(str(energy.get('unit', '')), ENERGY_UNITS)
+        except LiteratureError:
+            unit_factor(str(energy.get('unit', '')), VELOCITY_UNITS)
+            if not isinstance(energy.get('mass_amu'), (int, float)):
+                problems.append('columns.energy: a velocity needs mass_amu (mass of the projectile) to convert it to an energy')
         unit_factor(str((columns.get('cross_section') or {}).get('unit', '')), AREA_UNITS)
     except LiteratureError as e:
-        problems.append(str(e))
+        problems.append(f'{e} (energy units: {", ".join(ENERGY_UNITS)}; velocity units: {", ".join(VELOCITY_UNITS)})')
     return problems
 
 
 def to_si(record: dict, table: Table) -> np.ndarray:
     """(n_rows, 2): energy [eV], cross-section [m^2]"""
     columns = record['columns']
-    energy = table.energy * unit_factor(str(columns['energy']['unit']), ENERGY_UNITS)
-    sigma = table.cross_section * unit_factor(str(columns['cross_section']['unit']), AREA_UNITS)
+    unit = str(columns['energy']['unit'])
+    try:
+        energy = table.energy * unit_factor(unit, ENERGY_UNITS)
+    except LiteratureError:
+        velocity = table.energy * unit_factor(unit, VELOCITY_UNITS)
+        energy = 0.5 * float(columns['energy']['mass_amu']) * AMU * velocity**2 / ELEMENTARY_CHARGE  # kinetic energy in the laboratory frame
+    sigma = np.maximum(table.cross_section, 0.0) * unit_factor(str(columns['cross_section']['unit']), AREA_UNITS)
     return np.column_stack([energy, sigma])
 
 
@@ -235,6 +253,9 @@ def add_extraction(store: Store, record_path: pathlib.Path) -> StoreEntry:
     if problems:
         raise LiteratureError('; '.join(problems))
     record.setdefault('result', {})['rows'] = len(table.energy)
+    zeroed = int(np.sum(table.cross_section < 0.0))
+    if zeroed:
+        record.setdefault('notes', []).append(f'{zeroed} value(s) below zero but zero within the uncertainty: used as zero')
     identified = Identified(provider='literature', kind='extraction', dataset=f'{paper_name}/{record["name"]}', details={'extraction': record})
     created = datetime.date.fromisoformat(str(record['created']['date'])[:10]) if record.get('created', {}).get('date') else None
     return store.add(data_path, identified, retrieved=created)

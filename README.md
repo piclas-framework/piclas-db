@@ -57,6 +57,7 @@ piclas-db -v
 | `piclas-db fetch [--mirror <private repo>] [--need ...]` | Clone or update the store from the private repository, locate required files ([details](docs/store.md#private-repository)) | **available** |
 | `piclas-db push` | Back up the local store to the private repository | **available** |
 | `piclas-db literature template\|add\|review\|list` | Data from papers with extraction record and review ([details](docs/literature.md)) | **available** |
+| `piclas-db extract paper --page 4 -o work/` | Read the data series of a vector figure into extraction records ([details](docs/extract.md)) | **available** |
 | `piclas-db build recipe.yaml -o database.h5` | Build a database from the original files according to a recipe ([details](docs/build.md)) | **available** |
 | `piclas-db export database.h5 -o tables/` | Write a database of any layout as ASCII tables ([details](docs/migrate.md)) | **available** |
 | `piclas-db plot db.h5 lxcat.txt --pair Ar-electron --compare` | Plot σ(E), k(T) or electronic levels from any sources ([details](docs/plot.md)) | **available** |
