@@ -32,6 +32,7 @@ Order: command line, then environment variables ($PICLAS_DB_STORE, $PICLAS_DB_MI
 import argparse
 import os
 import pathlib
+import re
 from functools import cache
 from typing import Any, Optional
 
@@ -41,8 +42,12 @@ from typing import Any, Optional
 import yaml
 # ==================================================================================================================================
 
-GLOBAL_KEYS = ('store', 'mirror')
+GLOBAL_KEYS = ('store', 'mirror', 'user')
+EMAIL = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 TEMPLATE = """# piclas-db configuration (see 'piclas-db config --help'); command line and environment variables take precedence
+# user:                                        # who adds data (imports, extractions, reviews), like git config user.*
+#   name: Your Name
+#   email: you@example.org
 # store: ~/data/piclas-db-store                 # local store of original files
 # mirror: git@github.com:<org>/<private-repo>.git   # private source repository
 # extract:
@@ -98,7 +103,8 @@ def apply(args: argparse.Namespace, subparser: argparse.ArgumentParser) -> list[
     content = load()
     known_commands = set(getattr(subparser, '_piclas_db_commands', ()))
     warnings = [f'unknown entry {key!r} in {config_path()}' for key in content if key not in GLOBAL_KEYS and known_commands and key not in known_commands]
-    section = content.get(args.command) or {}
+    # 'store' is both a global setting (path of the store) and a command: the global setting wins
+    section = {} if args.command in GLOBAL_KEYS else (content.get(args.command) or {})
     if not isinstance(section, dict):
         return [*warnings, f'{args.command}: the entry in {config_path()} must be a mapping of options']
     for option, setting in section.items():
@@ -109,3 +115,66 @@ def apply(args: argparse.Namespace, subparser: argparse.ArgumentParser) -> list[
         if getattr(args, dest) == subparser.get_default(dest):  # not given on the command line
             setattr(args, dest, setting)
     return warnings
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Identity: who adds data to the store (like 'git config user.name / user.email')
+# ----------------------------------------------------------------------------------------------------------------------------------
+IDENTITY_HELP = """Please tell piclas-db who you are (recorded with every import, extraction and review):
+
+    piclas-db config --set user.name "Your Name"
+    piclas-db config --set user.email you@example.org
+
+or set $PICLAS_DB_USER_NAME and $PICLAS_DB_USER_EMAIL."""
+
+
+def identity() -> Optional[tuple[str, str]]:
+    """(name, email) from $PICLAS_DB_USER_NAME/$PICLAS_DB_USER_EMAIL or the configuration file; None if incomplete"""
+    user = load().get('user') or {}
+    name = os.environ.get('PICLAS_DB_USER_NAME') or (user.get('name') if isinstance(user, dict) else None)
+    email = os.environ.get('PICLAS_DB_USER_EMAIL') or (user.get('email') if isinstance(user, dict) else None)
+    if not name or not email:
+        return None
+    return str(name), str(email)
+
+
+def require_identity() -> str:
+    """'Name <email>' of the person adding data; raises ConfigError with instructions if it is not set or the email is invalid"""
+    found = identity()
+    if found is None:
+        raise ConfigError(IDENTITY_HELP)
+    name, email = found
+    if not EMAIL.match(email):
+        raise ConfigError(f'user.email {email!r} is not an email address (piclas-db config --set user.email you@example.org)')
+    return f'{name} <{email}>'
+
+
+def set_value(key: str, setting: Optional[str]) -> pathlib.Path:
+    """Set (or with None remove) a dotted key such as 'user.name', 'store' or 'extract.by' in the configuration file"""
+    path = config_path()
+    content = dict(load())
+    parts = key.split('.')
+    if len(parts) > 2 or not all(parts):
+        raise ConfigError(f'key {key!r}: use name or section.name (e.g. user.email, store, extract.by)')
+    if parts[0] == 'user' and len(parts) == 2 and parts[1] not in ('name', 'email'):
+        raise ConfigError('user has the keys name and email')
+    if key == 'user.email' and setting is not None and not EMAIL.match(setting):
+        raise ConfigError(f'{setting!r} is not an email address')
+    if len(parts) == 1:
+        if setting is None:
+            content.pop(key, None)
+        else:
+            content[key] = setting
+    else:
+        section = dict(content.get(parts[0]) or {})
+        if setting is None:
+            section.pop(parts[1], None)
+        else:
+            section[parts[1]] = setting
+        if section:
+            content[parts[0]] = section
+        else:
+            content.pop(parts[0], None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('# piclas-db configuration (written by piclas-db config --set)\n' + yaml.safe_dump(content, sort_keys=False, allow_unicode=True))
+    return path

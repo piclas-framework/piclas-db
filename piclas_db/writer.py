@@ -137,3 +137,25 @@ def write_database(database: Database, path: Union[str, pathlib.Path], provenanc
             dataset = h5.require_group('Surface-Chemistry').create_dataset(entry.name, data=data)
             write_attributes(dataset.attrs, entry.attributes)
             write_provenance(dataset.attrs, entry.provenance)
+
+
+def write_xsec_database(database: Database, path: Union[str, pathlib.Path], provenance: Optional[dict[str, AttrValue]] = None) -> list[str]:
+    """Write only the cross-sections in the layout of 'Particles-CollXSec-Database' (collision pairs at the root of the file),
+    for PICLas simulations that take the species from parameter.ini; returns what is not written (species, reactions, ...)"""
+    attributes = {key: value for key, value in database.attributes.items() if not key.startswith(PROVENANCE_PREFIX) and '@' not in key}
+    attributes.update(provenance or {})
+    skipped = [f'{count} {name}' for name, count in database.summary().items() if count and name not in ('collision pairs', 'cross-sections')]
+    with h5py.File(path, 'w') as h5:
+        for key, value in attributes.items():
+            write_attribute(h5.attrs, key, value, metadata=True)
+        for pair in database.collision_pairs.values():
+            group = h5.require_group(pair.name)
+            write_provenance(group.attrs, pair.provenance)
+            for xsec in pair.cross_sections:
+                parent = group.require_group(xsec.group) if xsec.group else group
+                dataset = parent.create_dataset(xsec.key, data=xsec.data.astype(np.float64))
+                dataset.attrs.create('Type', fixed_strings(xsec.kind.value))
+                if xsec.threshold is not None:
+                    dataset.attrs['Threshold [eV]'] = np.float64(xsec.threshold)
+                write_provenance(dataset.attrs, xsec.provenance, skip=REGENERATED)
+    return skipped

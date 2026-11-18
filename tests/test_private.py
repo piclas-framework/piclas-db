@@ -35,10 +35,10 @@ from tests.test_import import LXCAT, NIST_CSV
 
 @pytest.fixture(autouse=True)
 def git_identity(monkeypatch: pytest.MonkeyPatch) -> None:
-    for variable in ('GIT_AUTHOR_NAME', 'GIT_COMMITTER_NAME'):
-        monkeypatch.setenv(variable, 'piclas-db test')
-    for variable in ('GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_EMAIL'):
-        monkeypatch.setenv(variable, 'test@example.com')
+    # commits in the store get the piclas-db user (set for all tests in conftest.py), not a git configuration
+    for variable in ('GIT_AUTHOR_NAME', 'GIT_COMMITTER_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_EMAIL'):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv('GIT_CONFIG_GLOBAL', '/dev/null')  # no user.name of the machine running the tests
     monkeypatch.delenv('PICLAS_DB_MIRROR', raising=False)
 
 
@@ -69,6 +69,7 @@ def test_clone_import_push_and_second_machine(remote: str, files: pathlib.Path, 
     assert '1 local commit(s) not pushed' in capsys.readouterr().out
     assert main(['push', '--store', str(first)]) == 0
     assert log(remote) == ['Add lxcat cross-sections test-a+test-b/ar (retrieved 2026-06-01, sha256 ' + Store(first).entries()[0].meta['sha256'][:8] + ')']
+    assert git.git(['log', '-1', '--format=%an <%ae>'], cwd=pathlib.Path(remote)) == 'piclas-db test <test@example.com>'  # the piclas-db user
     assert main(['push', '--store', str(first)]) == 0
     assert 'Nothing to push' in capsys.readouterr().out
 

@@ -108,7 +108,7 @@ class Store:
         stamp = retrieved.isoformat() if retrieved else 'undated'
         return self.root / identified.provider / identified.dataset / f'{stamp}_{checksum[:8]}{suffix}'
 
-    def add(self, source: pathlib.Path, identified: Identified, retrieved: Optional[datetime.date] = None) -> StoreEntry:
+    def add(self, source: pathlib.Path, identified: Identified, retrieved: Optional[datetime.date] = None, by: Optional[str] = None) -> StoreEntry:
         """Copy a file into the store and write its meta.yaml; the caller checks for duplicates first"""
         checksum = sha256(source)
         retrieved = retrieved or identified.retrieved
@@ -128,6 +128,7 @@ class Store:
             'size': source.stat().st_size,
             'imported': datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat(),
             'imported_with': Common().version_string(),
+            **({'imported_by': by} if by else {}),
             **identified.details,
         }
         meta_file = target.with_name(target.name + META_SUFFIX)

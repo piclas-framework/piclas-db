@@ -24,6 +24,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db import config
 from piclas_db.git import GitError
 from piclas_db.literature import LiteratureError, add_extraction, extractions, find_extraction, papers, review, template
 from piclas_db.sources.identify import slug
@@ -85,12 +86,13 @@ def run(args: argparse.Namespace) -> int:
         elif args.action == 'add':
             if len(args.arguments) != 1:
                 raise LiteratureError('usage: piclas-db literature add RECORD.yaml')
-            entry = add_extraction(store, pathlib.Path(args.arguments[0]))
+            entry = add_extraction(store, pathlib.Path(args.arguments[0]), by=config.require_identity())
             print(f'stored  literature/{entry.meta["dataset"]}@{str(entry.meta["sha256"])[:8]} ({entry.meta["extraction"]["result"]["rows"]} rows, review pending)')
-            print(f'Review it against the paper: piclas-db literature review {entry.meta["dataset"]} --approve --reviewer "<name>"')
+            print(f'Review it against the paper: piclas-db literature review {entry.meta["dataset"]} --approve')
         elif args.action == 'review':
-            if len(args.arguments) != 1 or args.approve == args.reject or not args.reviewer:
-                raise LiteratureError('usage: piclas-db literature review PAPER/NAME[@SHA] (--approve | --reject) --reviewer NAME [--notes TEXT]')
+            if len(args.arguments) != 1 or args.approve == args.reject:
+                raise LiteratureError('usage: piclas-db literature review PAPER/NAME[@SHA] (--approve | --reject) [--reviewer NAME] [--notes TEXT]')
+            args.reviewer = args.reviewer or config.require_identity()  # default: the configured user
             entry = find_extraction(store, args.arguments[0])
             status = 'approved' if args.approve else 'rejected'
             review(store, entry, status, args.reviewer, args.notes)
@@ -105,7 +107,7 @@ def run(args: argparse.Namespace) -> int:
                         where = ', '.join(f'{label} {source[label]}' for label in ('table', 'figure', 'page') if source.get(label))
                         status = (record.get('review') or {}).get('status')
                         print(f'  {entry.meta["dataset"]}@{str(entry.meta["sha256"])[:8]}  {record.get("method")}, {where}, review {status}')
-    except (LiteratureError, GitError) as e:
+    except (LiteratureError, GitError, config.ConfigError) as e:
         print(f'ERROR: {e}')
         return 1
     return 0

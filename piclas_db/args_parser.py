@@ -73,6 +73,12 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--offline', action='store_true', help='do not update the store from the private repository')
             sub.add_argument('--force', action='store_true', help='overwrite an existing output file')
             sub.add_argument('--allow-unreviewed', action='store_true', help='also use extractions from papers that have not been reviewed yet')
+            sub.add_argument(
+                '--layout',
+                choices=['species-database', 'xsec'],
+                default='species-database',
+                help='species-database (Particles-Species-Database, default) or xsec (cross-sections only, for Particles-CollXSec-Database)',
+            )
         elif name == 'literature':
             sub.add_argument('action', choices=['template', 'add', 'review', 'list'], help='template: files to enter data; add: store an extraction; review: approve or reject; list')
             sub.add_argument('arguments', nargs='*', help='template: PAPER NAME; add: RECORD.yaml; review: PAPER/NAME[@SHA]')
@@ -127,6 +133,8 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
         elif name == 'config':
             sub.add_argument('--init', action='store_true', help='write a commented template of the configuration file')
+            sub.add_argument('--set', nargs=2, metavar=('KEY', 'VALUE'), help='set a value, e.g. user.name "Your Name", user.email, store, mirror, extract.by')
+            sub.add_argument('--unset', metavar='KEY', help='remove a value')
         elif name == 'store':
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
             sub.add_argument('--verify', action='store_true', help='check that every file still matches its sha256')

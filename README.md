@@ -69,7 +69,10 @@ piclas-db -v
 | `piclas-db migrate old.h5 -o new.h5` | Convert any layout or ASCII tables to the current layout ([details](docs/migrate.md)) | **available** |
 | `piclas-db rebuild old.h5 -o new.h5` | Rebuild an existing database from the original files and compare ([details](docs/rebuild.md)) | **available** |
 
-## Where the data comes from
+## Tutorials
+[Getting started](docs/tutorials/T1-getting-started.md), [adding data](docs/tutorials/T3-adding-data.md), [the private source repository](docs/tutorials/T4-private-repository.md); overview in [docs/tutorials](docs/tutorials/README.md).
+
+# Where the data comes from
 For every dataset a database needs (`build`, `rebuild`), piclas-db looks in the following places, in this order, and only
 moves on to the next one if the dataset was not found:
 

@@ -32,6 +32,7 @@ import yaml
 from piclas_db.extract.raster import RESOLUTION, SCALE, extract_raster, grid_image, is_scanned, raster_figure_frames
 from piclas_db.extract.table import Table, extract_table, header_unit, parse_number
 from piclas_db.extract.vector import ExtractError, extract, figure_frames, require_pdfplumber, review_image, tesseract_version, values
+from piclas_db import config
 from piclas_db.common.common_vars import Common
 from piclas_db.literature import LiteratureError, papers, template
 from piclas_db.sources.identify import slug
@@ -229,6 +230,12 @@ def run(args: argparse.Namespace) -> int:
     if not args.paper or not args.page:
         print('ERROR: give PAPER and --page (or --redo PAPER/DATASET)')
         return 1
+    if not args.list and not args.by:
+        try:
+            args.by = config.require_identity()  # who extracts: the configured user
+        except config.ConfigError as e:
+            print(f'ERROR: {e}')
+            return 1
     store = Store(args.store)
     try:
         known = papers(store)

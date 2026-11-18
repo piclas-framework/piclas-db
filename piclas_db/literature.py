@@ -92,6 +92,14 @@ def environment() -> dict[str, str]:
     return {'python': platform.python_version(), 'numpy': np.__version__, 'platform': platform.platform(terse=True)}
 
 
+def default_by() -> Optional[str]:
+    """'Name <email>' from the configuration, if set"""
+    from piclas_db import config  # noqa: PLC0415
+
+    found = config.identity()
+    return f'{found[0]} <{found[1]}>' if found else None
+
+
 def template(paper: StoreEntry, name: str, page: Optional[str], table: Optional[str], figure: Optional[str], method: str, equation: Optional[str] = None, formula: bool = False) -> dict:
     """Extraction record with everything known in advance; the person entering the data completes it"""
     meta = paper.meta
@@ -105,7 +113,7 @@ def template(paper: StoreEntry, name: str, page: Optional[str], table: Optional[
             'date': datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat(),
             'tool': f'piclas-db {common.version}',
             'commit': common.commit or 'unknown',
-            'by': None,
+            'by': default_by(),
         },
         'source': {
             'paper': meta.get('dataset'),
@@ -324,11 +332,13 @@ def resolve_parameters(store: Store, formula: dict) -> dict:
     return {**formula, 'parameters': parameters, 'parameters_from': {**source, 'column': header[index], 'sha256': entry.meta.get('sha256')}}
 
 
-def add_extraction(store: Store, record_path: pathlib.Path) -> StoreEntry:
+def add_extraction(store: Store, record_path: pathlib.Path, by: Optional[str] = None) -> StoreEntry:
     """Validate an extraction (record + raw CSV next to it) and store it; the paper must be in the store"""
     from piclas_db.sources.identify import Identified  # noqa: PLC0415
 
     record = load_record(record_path)
+    if by and not (record.get('created') or {}).get('by'):
+        record.setdefault('created', {})['by'] = by  # who extracted the data, if the record does not say
     data_path = record_path.parent / str(record.get('data', ''))
     if not data_path.is_file():
         raise LiteratureError(f'data file not found: {data_path}')
@@ -361,7 +371,7 @@ def add_extraction(store: Store, record_path: pathlib.Path) -> StoreEntry:
         record.setdefault('notes', []).append(f'{zeroed} value(s) below zero but zero within the uncertainty: used as zero')
     identified = Identified(provider='literature', kind='extraction', dataset=f'{paper_name}/{record["name"]}', details={'extraction': record})
     created = datetime.date.fromisoformat(str(record['created']['date'])[:10]) if record.get('created', {}).get('date') else None
-    return store.add(data_path, identified, retrieved=created)
+    return store.add(data_path, identified, retrieved=created, by=by)
 
 
 def find_extraction(store: Store, name: str) -> StoreEntry:

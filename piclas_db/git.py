@@ -35,6 +35,13 @@ def environment() -> dict[str, str]:
     env = dict(os.environ)
     env['GIT_TERMINAL_PROMPT'] = '0'  # never ask for a user name or password
     env.setdefault('GIT_SSH_COMMAND', 'ssh -o BatchMode=yes')  # never ask for a passphrase or host confirmation
+    from piclas_db import config  # noqa: PLC0415
+
+    user = config.identity()
+    if user is not None:  # commits in the store carry the person who added the data (piclas-db config user.*)
+        for role in ('AUTHOR', 'COMMITTER'):
+            env.setdefault(f'GIT_{role}_NAME', user[0])
+            env.setdefault(f'GIT_{role}_EMAIL', user[1])
     return env
 
 

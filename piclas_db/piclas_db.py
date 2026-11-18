@@ -14,6 +14,7 @@
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import argparse
+import os
 import sys
 from typing import Optional
 
@@ -59,7 +60,14 @@ def subparsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentPa
 
 def entry_point() -> None:
     """Console script entry point (pyproject.toml), passes the exit code to the shell"""
-    sys.exit(main())
+    try:
+        code = main()
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # output piped into a program that stopped reading (e.g. 'piclas-db check file.h5 | head'): not an error
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        code = 0
+    sys.exit(code)
 
 
 if __name__ == '__main__':

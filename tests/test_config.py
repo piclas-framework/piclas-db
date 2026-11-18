@@ -99,3 +99,51 @@ def test_warnings_errors_and_command(tmp_path: pathlib.Path, monkeypatch: pytest
     assert main(['config']) == 0
     out = capsys.readouterr().out
     assert '[configuration]' in out and 'by: Name' in out
+
+
+def test_identity(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.delenv('PICLAS_DB_USER_NAME')
+    monkeypatch.delenv('PICLAS_DB_USER_EMAIL')
+    monkeypatch.setenv('PICLAS_DB_CONFIG', str(tmp_path / 'config.yaml'))
+    (tmp_path / 'paper.pdf').write_bytes(PDF)
+    store = str(tmp_path / 'store')
+    arguments = ['import', str(tmp_path / 'paper.pdf'), '--literature', 'test-2008', '--doi', '10.0000/test', '--store', store]
+    assert main(arguments) == 1  # who imports? like git: name and email first
+    assert 'piclas-db config --set user.name' in capsys.readouterr().out
+    assert main([*arguments, '--dry-run']) == 0  # a dry run adds nothing
+
+    assert main(['config', '--set', 'user.email', 'not-an-address']) == 1
+    assert main(['config', '--set', 'user.phone', '123']) == 1
+    assert main(['config', '--set', 'a.b.c', 'x']) == 1
+    assert main(['config', '--set', 'user.name', 'Ada Lovelace']) == 0
+    assert main(['config', '--set', 'user.email', 'ada@example.org']) == 0
+    assert config.require_identity() == 'Ada Lovelace <ada@example.org>'
+    capsys.readouterr()
+    assert main(['config']) == 0
+    assert 'Ada Lovelace <ada@example.org>' in capsys.readouterr().out
+
+    assert main(arguments) == 0
+    paper = Store(store).entries()[0]
+    assert paper.meta['imported_by'] == 'Ada Lovelace <ada@example.org>'
+    work = tmp_path / 'work'
+    assert main(['literature', 'template', 'test-2008', 'data', '--page', '1', '--table', '1', '-o', str(work), '--store', store]) == 0
+    assert yaml.safe_load((work / 'data.extraction.yaml').read_text())['created']['by'] == 'Ada Lovelace <ada@example.org>'
+    (work / 'data.csv').write_text((work / 'data.csv').read_text() + '1,2\n2,3\n')
+    assert main(['literature', 'add', str(work / 'data.extraction.yaml'), '--store', store]) == 0
+    assert main(['literature', 'review', 'test-2008/data', '--approve', '--store', store]) == 0  # reviewer: the configured user
+    entry = next(e for e in Store(store).entries() if e.meta['kind'] == 'extraction')
+    assert entry.meta['extraction']['review']['reviewer'] == 'Ada Lovelace <ada@example.org>'
+    assert entry.meta['imported_by'] == 'Ada Lovelace <ada@example.org>'
+
+    assert main(['config', '--unset', 'user.email']) == 0
+    assert config.identity() is None
+    assert main(['literature', 'review', 'test-2008/data', '--approve', '--store', store]) == 1
+    assert main(['config', '--unset', 'user.name']) == 0
+    assert 'user' not in config.load()
+    assert main(['config', '--set', 'store', str(tmp_path / 'other')]) == 0 and config.value('store') == str(tmp_path / 'other')
+
+
+def test_store_command_with_store_setting(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    write_config(tmp_path, monkeypatch, {'store': str(tmp_path / 'store')})
+    assert main(['store']) == 0  # 'store' is a global setting, not the options of the store command
+    assert 'must be a mapping' not in capsys.readouterr().err

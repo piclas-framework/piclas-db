@@ -28,7 +28,7 @@ from piclas_db.recipe import RecipeError, load_recipe
 from piclas_db.resolve import Origin, resolve
 from piclas_db.rules import Severity, run_checks
 from piclas_db.store import Store
-from piclas_db.writer import write_database
+from piclas_db.writer import write_database, write_xsec_database
 # ==================================================================================================================================
 
 
@@ -60,7 +60,14 @@ def run(args: argparse.Namespace) -> int:
         return 1
     sources = [(str(resolution.requirement), resolution.entry.relative, str(resolution.entry.meta.get('sha256')), resolution.entry.meta.get('retrieved')) for resolution in resolutions if resolution.entry is not None]
     recipe_text = pathlib.Path(args.recipe).read_text(encoding='utf-8')
-    write_database(database, output, provenance.create(f'build {args.recipe}', recipe_text=recipe_text, sources=sources))
+    record = provenance.create(f'build {args.recipe}' + (' --layout xsec' if args.layout == 'xsec' else ''), recipe_text=recipe_text, sources=sources)
+    if args.layout == 'xsec':
+        # cross-sections only, collision pairs at the root: for Particles-CollXSec-Database (species from parameter.ini)
+        skipped = write_xsec_database(database, output, record)
+        if skipped:
+            print(f'  note   not written in the xsec layout: {", ".join(skipped)}')
+    else:
+        write_database(database, output, record)
 
     for line in report.added:
         print(f'  added  {line}')

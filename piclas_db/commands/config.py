@@ -27,6 +27,18 @@ from piclas_db.store import default_store
 def run(args: argparse.Namespace) -> int:
     """Show the configuration file and the settings in effect, or create a commented template (--init)"""
     path = config.config_path()
+    try:
+        if args.set:
+            config.set_value(args.set[0], args.set[1])
+            print(f'{args.set[0]} = {args.set[1]}  ({path})')
+            return 0
+        if args.unset:
+            config.set_value(args.unset, None)
+            print(f'{args.unset} removed  ({path})')
+            return 0
+    except config.ConfigError as e:
+        print(f'ERROR: {e}')
+        return 1
     if args.init:
         if path.exists():
             print(f'ERROR: {path} exists already')
@@ -41,6 +53,8 @@ def run(args: argparse.Namespace) -> int:
         print(f'ERROR: {e}')
         return 1
     print(f'Configuration file: {path}' + ('' if path.is_file() else ' (not present; piclas-db config --init writes a template)'))
+    user = config.identity()
+    print(f'  user:   {user[0]} <{user[1]}>' if user else '  user:   not set (needed to add data: piclas-db config --set user.name "Your Name", --set user.email ...)')
     store_source = 'environment ($PICLAS_DB_STORE)' if os.environ.get('PICLAS_DB_STORE') else ('configuration' if config.value('store') else 'default')
     print(f'  store:  {default_store()}  [{store_source}]')
     mirror = os.environ.get('PICLAS_DB_MIRROR') or config.value('mirror')

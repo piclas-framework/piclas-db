@@ -18,6 +18,7 @@ import pathlib
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Third-party libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import h5py
 import numpy as np
 import pytest
 
@@ -205,3 +206,15 @@ def test_selection_errors(store: Store, tmp_path: pathlib.Path) -> None:
     selected = load_recipe(write_recipe(tmp_path, 'cross_sections:\n  - source: lxcat/test-m/n2\n    species: e / N2\n    processes: [Effective]\n    pair: N2-electron\n'))
     database, _ = build(selected, resolve(store, selected.requirements))
     assert len(database.collision_pairs['N2-electron'].cross_sections) == 1
+
+
+def test_build_xsec_layout(store: Store, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+    recipe = write_recipe(tmp_path, RECIPE)
+    output = tmp_path / 'xsec.h5'
+    assert main(['build', str(recipe), '-o', str(output), '--store', str(store.root), '--offline', '--layout', 'xsec']) == 0
+    assert 'not written in the xsec layout' in capsys.readouterr().out  # species and reactions of the recipe
+    database = read_database(output)
+    assert database.schema.name == 'LEGACY_XSEC' and database.summary()['cross-sections'] == 9
+    with h5py.File(output, 'r') as h5:
+        assert 'Ar-electron' in h5 and 'Cross-Sections' not in h5 and 'Species' not in h5  # pairs at the root (Particles-CollXSec-Database)
+        assert h5.attrs['* piclas-db command'].endswith('--layout xsec')

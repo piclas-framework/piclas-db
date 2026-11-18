@@ -22,6 +22,7 @@ from typing import Optional
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.sources.identify import IdentifyError, identify
+from piclas_db import config
 from piclas_db.git import GitError
 from piclas_db.resolve import store_status
 from piclas_db.store import Store, sha256
@@ -49,7 +50,8 @@ def run(args: argparse.Namespace) -> int:
     try:
         files = candidate_files(args)
         retrieved = parse_date(args.retrieved)
-    except (FileNotFoundError, ValueError) as e:
+        by = None if args.dry_run else config.require_identity()
+    except (FileNotFoundError, ValueError, config.ConfigError) as e:
         print(f'ERROR: {e}')
         return 1
     if not files:
@@ -86,7 +88,7 @@ def run(args: argparse.Namespace) -> int:
             print(f'  would import {path} ({label})')
         else:
             try:
-                entry = store.add(path, identified, retrieved=retrieved)
+                entry = store.add(path, identified, retrieved=retrieved, by=by)
             except GitError as e:
                 print(f'  ERROR    {path}: copied into the store but not committed: {e}')
                 failed += 1

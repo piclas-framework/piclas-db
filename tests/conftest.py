@@ -29,3 +29,5 @@ def no_user_configuration(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv('PICLAS_DB_CONFIG', str(tmp_path / 'no-config.yaml'))
     monkeypatch.delenv('PICLAS_DB_STORE', raising=False)
     monkeypatch.delenv('PICLAS_DB_MIRROR', raising=False)
+    monkeypatch.setenv('PICLAS_DB_USER_NAME', 'piclas-db test')
+    monkeypatch.setenv('PICLAS_DB_USER_EMAIL', 'test@example.com')

@@ -3,6 +3,19 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.25.0
+
+* User identity like git: `user.name` and `user.email` (configuration or `$PICLAS_DB_USER_NAME`/`$PICLAS_DB_USER_EMAIL`) are required
+  for `import`, `extract` and `literature add/review`; recorded as `imported_by`, `created.by` and reviewer, and as author of the
+  commits in the private repository; `piclas-db config --set KEY VALUE` / `--unset KEY`
+* `build --layout xsec`: cross-sections only, collision pairs at the root, for `Particles-CollXSec-Database` (species from
+  `parameter.ini`, as in the GEC tutorial)
+* Tutorials (`docs/tutorials`): T1 Getting started, T3 Adding data, T4 The private source repository
+* Design proposal `docs/design/lxcat-downloads.md`: LXCat TXT and XML (ZIP) giving identical datasets, several databases in one
+  file, growing downloads with a process index
+* Output piped into programs that stop reading (`| head`) no longer ends with an error; the `store` setting no longer clashes with
+  the `store` command
+
 ## 0.24.0
 
 * Combined datasets (`docs/literature.md`): recipe entries with `parts` (several extractions, each in an energy range) and `zero_at`
