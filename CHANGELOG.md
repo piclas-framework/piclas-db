@@ -3,6 +3,18 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.19.0
+
+* Fit formulas from papers (`piclas_db/formula.py`, documented in `docs/literature.md`): `literature template --formula --equation`
+  writes a formula file (expression as printed, parameters, threshold, validity range, grid); the expression is parsed with a whitelist
+  (arithmetic, exp, log, log10, sqrt, abs) and never executed; `literature add` checks it on its range; formulas are evaluated on a
+  logarithmic grid when used
+* Energy frame of extracted data: `columns.energy.frame` `collision` (default for energies) or `lab` (default for velocities, needs
+  `mass_amu` and `target_mass_amu`); laboratory energies are converted to the collision energy PICLas uses; `extract` options
+  `--energy-frame` and `--target-mass-amu`
+* Finding: the Janev et al. (2003) H2+ + H2 cross-sections in `SpeciesDatabase.h5` (Eqs. 207, 209) are tabulated over the laboratory
+  energy, while PICLas uses the collision energy (half of it for H2+ + H2)
+
 ## 0.18.0
 
 * `piclas-db extract` reads scanned figures with filled symbols (`piclas_db/extract/raster.py`, documented in `docs/extract.md`):

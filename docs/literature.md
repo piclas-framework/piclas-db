@@ -47,6 +47,52 @@ keeps the comparison with the paper simple and makes unit errors visible in the 
 page or table/figure, and a paper that is not in the store or whose sha256 differs. A review changes only the record, never the
 values; in a private-repository store it is committed like every import.
 
+## Energy frame
+
+PICLas looks cross-sections up at the **collision (center-of-mass) energy** E = μg²/2: this is what the reservoir regression checks
+of PICLas confirm (`piclas-db reservoir --regressioncheck`, H₂⁺ + H₂ agree within 1 % only with the collision energy; with the
+laboratory energy they would differ by about 40 %). Many papers on heavy-particle collisions give the laboratory (ion impact)
+energy, so the record says which one is meant:
+
+```yaml
+columns:
+  energy: {unit: eV, frame: lab, mass_amu: 2.0159, target_mass_amu: 2.0159}    # E_cm = E_lab m_target / (m_projectile + m_target)
+```
+
+`frame: collision` (default for energies) uses the values as they are; `frame: lab` (default for velocities) needs both masses and
+converts. Electron collisions are unaffected (m_e ≪ m_target).
+
+## Fit formulas
+
+Review papers often give fit formulas instead of tables (e.g. Janev et al. 2003). A formula extraction stores the expression as
+printed, evaluated on a logarithmic grid when it is used:
+
+```bash
+piclas-db literature template janev-2003 h2plus-h2-cid --page 85 --equation 209 --formula -o work/
+```
+
+```yaml
+# work/h2plus-h2-cid.formula.yaml (E in the unit of the record, sigma in its cross-section unit)
+expression: 4.05 / E**0.653 * exp(-3.15 / (E - 2.0)**1.65) + 0.139 * E**0.318 * exp(-680 / E**2.10) / (1 + 2.75e-12 * E**2.65 + 9.04e-23 * E**4.65)
+parameters: {}        # named parameters, e.g. from a coefficient table
+threshold: 2.0        # zero at and below
+range: [2.0, 1.0e5]   # validity range from the paper
+points: 200
+```
+
+Only arithmetic (`+ - * / **`, also `^`), `exp`, `log`, `log10`, `sqrt`, `abs`, numbers, `E` and the parameters are allowed; the
+expression is parsed, never executed as code. `literature add` evaluates it and refuses values that are not finite or negative in
+the range (threshold or range missing).
+
+### Example: H₂⁺ + H₂ in SpeciesDatabase.h5
+
+`SpeciesDatabase.h5` has `H2-H2Ion1/REACTION/H2Ion1-H2` and `H-H2-HIon1` from Janev et al. 2003, Eqs. (207) and (209). Evaluated
+directly, both formulas reproduce the datasets exactly (ratio 1.000), but at the **laboratory** energy: the formulas use the ion
+impact energy, while PICLas uses the collision energy, which is half of it for H₂⁺ + H₂. With `frame: lab`, the rebuilt datasets
+differ from the database by +18 % (charge transfer) and −10 % (dissociation) in the median and up to a factor of two near the
+thresholds: the database (and the regression checks built on the same data) evaluate these cross-sections at twice the intended
+energy.
+
 ## Use in recipes
 
 ```yaml

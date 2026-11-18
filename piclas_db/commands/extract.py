@@ -136,7 +136,13 @@ def run(args: argparse.Namespace) -> int:
         name = slug(f'{args.name or prefix}-{series.name}')
         record = template(paper, name, str(figure.page), None, args.figure or f'page {args.page}, frame {args.frame}', 'raster' if scanned else 'vector')
         record['created']['by'] = args.by
-        record['columns']['energy'] = {'unit': args.x_unit, 'quantity': args.x_quantity, **({'mass_amu': args.mass_amu} if args.mass_amu else {})}
+        record['columns']['energy'] = {
+            'unit': args.x_unit,
+            'quantity': args.x_quantity,
+            **({'frame': args.energy_frame} if args.energy_frame else {}),
+            **({'mass_amu': args.mass_amu} if args.mass_amu else {}),
+            **({'target_mass_amu': args.target_mass_amu} if args.target_mass_amu else {}),
+        }
         record['columns']['cross_section']['unit'] = args.y_unit
         record['calibration'] = {
             axis_name: {'scale': axis.scale, 'labels_from': axis.source, 'labels': [[round(p, 4), v] for p, v in axis.labels], 'residual': axis.residual} for axis_name, axis in (('x', figure.x), ('y', figure.y))

@@ -267,7 +267,7 @@ def add_literature(database: Database, selection: LiteratureSelection, entry: St
         report.notes.append(f'{selection.pair}: {group + "/" if group else ""}{key} exists already, {selection.source} skipped')
         return
     source = record.get('source') or {}
-    where = ', '.join(f'{label} {source[label]}' for label in ('table', 'figure', 'page') if source.get(label))
+    where = ', '.join(f'{label} {source[label]}' for label in ('table', 'figure', 'equation', 'page') if source.get(label))
     created = record.get('created') or {}
     provenance = Provenance(
         reference=f'{source.get("reference") or source.get("doi")}' + (f' (doi:{source["doi"]})' if source.get('doi') and source.get('reference') else '') + f', {where}',

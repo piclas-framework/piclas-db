@@ -124,7 +124,7 @@ def test_command(figures: dict[str, pathlib.Path], tmp_path: pathlib.Path, monke
     assert main(['extract', 'test-2025', '--page', '1', '--list']) == 0
     assert 'frame 0' in capsys.readouterr().out
     output = tmp_path / 'work'
-    arguments = ['extract', 'test-2025', '--page', '1', '--figure', '3', '--name', 'fig3', '--x-unit', 'a.u.', '--mass-amu', '16', '--y-unit', 'A^2', '-o', str(output)]
+    arguments = ['extract', 'test-2025', '--page', '1', '--figure', '3', '--name', 'fig3', '--x-unit', 'a.u.', '--mass-amu', '16', '--target-mass-amu', '32', '--y-unit', 'A^2', '-o', str(output)]
     assert main(arguments) == 0
     assert (output / 'p1-f0-review.png').stat().st_size > 1000
     record_file = output / 'fig3-square-open-black.extraction.yaml'
@@ -136,7 +136,8 @@ def test_command(figures: dict[str, pathlib.Path], tmp_path: pathlib.Path, monke
     entry = find_extraction(Store(tmp_path / 'store'), 'test-2025/fig3-square-open-black')
     data = read_extraction(entry)
     au = 2.18769126364e6
-    assert np.allclose(data[:, 0], 0.5 * 16 * 1.66053906892e-27 * (X * au) ** 2 / 1.602176634e-19, rtol=1.0e-4)  # velocity -> energy
+    lab = 0.5 * 16 * 1.66053906892e-27 * (X * au) ** 2 / 1.602176634e-19  # velocity -> laboratory energy
+    assert np.allclose(data[:, 0], lab * 32 / (16 + 32), rtol=1.0e-4)  # -> collision energy
     assert np.allclose(data[:, 1], Y * 1.0e-20, atol=1.0e-23)
     assert main(['extract', 'unknown', '--page', '1']) == 1
     assert main(['extract', 'test-2025', '--page', '5', '-o', str(output)]) == 1

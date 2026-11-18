@@ -91,7 +91,7 @@ def environment() -> dict[str, str]:
     return {'python': platform.python_version(), 'numpy': np.__version__, 'platform': platform.platform(terse=True)}
 
 
-def template(paper: StoreEntry, name: str, page: Optional[str], table: Optional[str], figure: Optional[str], method: str) -> dict:
+def template(paper: StoreEntry, name: str, page: Optional[str], table: Optional[str], figure: Optional[str], method: str, equation: Optional[str] = None, formula: bool = False) -> dict:
     """Extraction record with everything known in advance; the person entering the data completes it"""
     meta = paper.meta
     common = Common()
@@ -99,7 +99,7 @@ def template(paper: StoreEntry, name: str, page: Optional[str], table: Optional[
         'format': RECORD_FORMAT,
         'format_version': RECORD_VERSION,
         'name': slug(name),
-        'data': f'{slug(name)}.csv',
+        'data': f'{slug(name)}.formula.yaml' if formula else f'{slug(name)}.csv',
         'created': {
             'date': datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat(),
             'tool': f'piclas-db {common.version}',
@@ -114,14 +114,20 @@ def template(paper: StoreEntry, name: str, page: Optional[str], table: Optional[
             'page': page,
             'table': table,
             'figure': figure,
+            'equation': equation,
         },
         'method': method,
-        'columns': {'energy': {'unit': 'eV'}, 'cross_section': {'unit': '1e-16 cm^2'}, 'uncertainty': {'unit': 'relative', 'optional': True}},
+        'columns': {
+            'energy': {'unit': 'eV', 'frame': 'collision'},  # 'lab' needs mass_amu (projectile) and target_mass_amu
+            'cross_section': {'unit': '1e-16 cm^2'},
+            'uncertainty': {'unit': 'relative', 'optional': True},
+        },
         'quantity': {'description': None, 'assignment': {'pair': None, 'kind': None, 'key': None}},
         'accuracy': {'extraction': 'exact (values typed as printed)' if method == 'manual' else None, 'stated_in_source': None},
         'environment': environment(),
         'review': {'status': 'pending', 'reviewer': None, 'date': None, 'notes': None},
         'notes': [],
+        **({'formula': True} if formula else {}),
     }
 
 
@@ -164,16 +170,29 @@ def read_raw(text: str) -> Table:
     return Table(array[:, 0], array[:, 1], array[:, 2] if array.shape[1] == 3 else None)
 
 
+def energy_frame(energy: dict) -> str:
+    """'collision' (center-of-mass, what PICLas uses) or 'lab' (projectile energy); velocities are laboratory velocities"""
+    unit = str(energy.get('unit', ''))
+    default = 'lab' if any(unit.lower().endswith(velocity) for velocity in VELOCITY_UNITS) else 'collision'
+    return str(energy.get('frame', default))
+
+
 def validate(record: dict, table: Table) -> list[str]:
     """Problems that prevent storing the extraction (empty list: fine)"""
     problems = []
+    energy_column = (record.get('columns') or {}).get('energy') or {}
+    frame = energy_frame(energy_column)
+    if frame not in ('collision', 'lab'):
+        problems.append('columns.energy.frame must be "collision" or "lab"')
+    elif frame == 'lab' and not all(isinstance(energy_column.get(key), (int, float)) for key in ('mass_amu', 'target_mass_amu')):
+        problems.append('columns.energy: laboratory energies or velocities need mass_amu (projectile) and target_mass_amu to give the collision energy PICLas uses')
     if record.get('method') not in METHODS:
         problems.append(f'method must be one of {", ".join(METHODS)}')
     source = record.get('source') or {}
     if not source.get('file_sha256') and not source.get('doi'):
         problems.append('source: file_sha256 (paper in the store) or doi required')
-    if not (source.get('table') or source.get('figure')):
-        problems.append('source: table or figure required')
+    if not (source.get('table') or source.get('figure') or source.get('equation')):
+        problems.append('source: table, figure or equation required')
     if not source.get('page'):
         problems.append('source: page required')
     if (record.get('review') or {}).get('status', 'pending') not in REVIEW_STATES:
@@ -213,14 +232,29 @@ def to_si(record: dict, table: Table) -> np.ndarray:
     except LiteratureError:
         velocity = table.energy * unit_factor(unit, VELOCITY_UNITS)
         energy = 0.5 * float(columns['energy']['mass_amu']) * AMU * velocity**2 / ELEMENTARY_CHARGE  # kinetic energy in the laboratory frame
+    if energy_frame(columns['energy']) == 'lab':
+        # PICLas looks cross-sections up at the collision (center-of-mass) energy: E_cm = E_lab m_target / (m_projectile + m_target)
+        projectile, target = float(columns['energy']['mass_amu']), float(columns['energy']['target_mass_amu'])
+        energy = energy * target / (projectile + target)
     sigma = np.maximum(table.cross_section, 0.0) * unit_factor(str(columns['cross_section']['unit']), AREA_UNITS)
     return np.column_stack([energy, sigma])
 
 
+def formula_table(record: dict) -> Table:
+    from piclas_db.formula import FormulaError, tabulate  # noqa: PLC0415
+
+    try:
+        energy, sigma = tabulate(record['formula'])
+    except FormulaError as e:
+        raise LiteratureError(f'formula: {e}') from e
+    return Table(energy, sigma, None)
+
+
 def read_extraction(entry: StoreEntry) -> np.ndarray:
-    """Data of a stored extraction in eV and m^2"""
+    """Data of a stored extraction in eV (collision energy) and m^2; formulas are evaluated on their grid"""
     record = entry.meta.get('extraction') or {}
-    return to_si(record, read_raw(entry.path.read_text(encoding='utf-8')))
+    table = formula_table(record) if record.get('formula') else read_raw(entry.path.read_text(encoding='utf-8'))
+    return to_si(record, table)
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -242,7 +276,12 @@ def add_extraction(store: Store, record_path: pathlib.Path) -> StoreEntry:
     data_path = record_path.parent / str(record.get('data', ''))
     if not data_path.is_file():
         raise LiteratureError(f'data file not found: {data_path}')
-    table = read_raw(data_path.read_text(encoding='utf-8'))
+    if record.get('formula'):
+        record['formula'] = yaml.safe_load(data_path.read_text(encoding='utf-8')) or {}  # the stored file is the formula itself
+        record['method'] = record.get('method') or 'manual'
+        table = formula_table(record)
+    else:
+        table = read_raw(data_path.read_text(encoding='utf-8'))
     problems = validate(record, table)
     paper_name = (record.get('source') or {}).get('paper')
     known = papers(store)

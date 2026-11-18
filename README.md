@@ -56,7 +56,7 @@ piclas-db -v
 | `piclas-db store [--verify]` | List the local store, verify the files against their sha256 | **available** |
 | `piclas-db fetch [--mirror <private repo>] [--need ...]` | Clone or update the store from the private repository, locate required files ([details](docs/store.md#private-repository)) | **available** |
 | `piclas-db push` | Back up the local store to the private repository | **available** |
-| `piclas-db literature template\|add\|review\|list` | Data from papers with extraction record and review ([details](docs/literature.md)) | **available** |
+| `piclas-db literature template\|add\|review\|list` | Data from papers (tables, figures, fit formulas) with extraction record and review ([details](docs/literature.md)) | **available** |
 | `piclas-db extract paper --page 4 [--table 12] -o work/` | Read the data series of a vector figure, or a table, into extraction records ([details](docs/extract.md)) | **available** |
 | `piclas-db build recipe.yaml -o database.h5` | Build a database from the original files according to a recipe ([details](docs/build.md)) | **available** |
 | `piclas-db export database.h5 -o tables/` | Write a database of any layout as ASCII tables ([details](docs/migrate.md)) | **available** |

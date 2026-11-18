@@ -36,6 +36,16 @@ energy,cross_section
 """
 
 
+FORMULA_TEMPLATE = """# Fit formula exactly as printed in the paper; E is the energy in the unit of the record (columns.energy.unit)
+# Allowed: + - * / ** (or ^), exp, log, log10, sqrt, abs, numbers, E and the parameters below
+expression: a / E**b
+parameters: {a: 1.0, b: 0.5}
+threshold: null   # energy below which the cross-section is zero (e.g. where the formula is not defined)
+range: [1.0, 1000.0]   # validity range given in the paper
+points: 200   # logarithmic grid over the range
+"""
+
+
 def run(args: argparse.Namespace) -> int:
     """Data from papers: create entry templates, store extractions with their record, review them, list them"""
     store = Store(args.store)
@@ -52,9 +62,15 @@ def run(args: argparse.Namespace) -> int:
             record_file, data_file = directory / f'{name}.extraction.yaml', directory / f'{name}.csv'
             if record_file.exists() or data_file.exists():
                 raise LiteratureError(f'{record_file} or {data_file} exists already')
-            record = template(known[paper_name], name, args.page, args.table, args.figure, args.method)
+            record = template(known[paper_name], name, args.page, args.table, args.figure, args.method, args.equation, args.formula)
+            if args.formula:
+                data_file = directory / f'{name}.formula.yaml'
+                if data_file.exists():
+                    raise LiteratureError(f'{data_file} exists already')
+                data_file.write_text(FORMULA_TEMPLATE)
+            else:
+                data_file.write_text(CSV_TEMPLATE)
             record_file.write_text(yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=1000))
-            data_file.write_text(CSV_TEMPLATE)
             print(f'Enter the values in {data_file}, complete {record_file} (units, created.by, quantity, accuracy), then:')
             print(f'  piclas-db literature add {record_file}')
         elif args.action == 'add':
