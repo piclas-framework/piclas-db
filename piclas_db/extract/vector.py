@@ -83,6 +83,7 @@ class Point:
     y: float  # pt
     low: Optional[float] = None  # error bar end (pt, larger y = lower value on screen)
     high: Optional[float] = None
+    flag: Optional[str] = None  # scans: 'split' (from touching symbols), 'shape' (recognized shape differs from the series)
 
 
 @dataclass
@@ -200,16 +201,19 @@ def ocr_labels(page: Any, region: Box) -> list[tuple[float, float, float]]:
     scale = 600 / 72
     region = (max(region[0], 0.0), max(region[1], 0.0), min(region[2], float(page.width)), min(region[3], float(page.height)))
     image = page.crop(region).to_image(resolution=600).original
+    labels: list[tuple[float, float, float]] = []
     with tempfile.NamedTemporaryFile(suffix='.png') as file:
         image.save(file.name)
-        tsv = subprocess.run(['tesseract', file.name, '-', '--psm', '11', 'tsv'], capture_output=True, text=True, check=False).stdout
-    labels = []
-    for line in tsv.splitlines()[1:]:
-        fields = line.split('\t')
-        if len(fields) == 12 and re.fullmatch(r'-?\d+(\.\d+)?', fields[11].strip()):
-            x = region[0] + (int(fields[6]) + int(fields[8]) / 2) / scale
-            y = region[1] + (int(fields[7]) + int(fields[9]) / 2) / scale
-            labels.append((x, y, float(fields[11])))
+        # sparse text and single block, restricted to the characters of numbers; both results are combined
+        for mode in ('11', '6'):
+            tsv = subprocess.run(['tesseract', file.name, '-', '--psm', mode, '-c', 'tessedit_char_whitelist=0123456789.-', 'tsv'], capture_output=True, text=True, check=False).stdout
+            for line in tsv.splitlines()[1:]:
+                fields = line.split('\t')
+                if len(fields) == 12 and re.fullmatch(r'-?\d+(\.\d+)?', fields[11].strip()):
+                    x = region[0] + (int(fields[6]) + int(fields[8]) / 2) / scale
+                    y = region[1] + (int(fields[7]) + int(fields[9]) / 2) / scale
+                    if not any(abs(x - other[0]) < 3 and abs(y - other[1]) < 3 for other in labels):
+                        labels.append((x, y, float(fields[11])))
     return labels
 
 
@@ -238,7 +242,9 @@ def calibrate(major: list[float], labels: list[tuple[float, float]], source: str
             scale = 'log' if log_error < 0.2 * linear_error else 'linear'
     target = np.log10(values) if scale == 'log' else values
     best: Optional[np.ndarray] = None
-    tolerance = 0.02 * max(float(np.ptp(target)), 1e-30)
+    # tolerance from the typical step between labels (not from the range, which a misread label such as 20 for 2.0 inflates)
+    steps = np.diff(np.unique(np.round(target, 12)))
+    tolerance = 0.2 * float(np.median(steps)) if len(steps) else 1e-30
     for i in range(len(labels)):
         for j in range(i + 1, len(labels)):
             if abs(positions[j] - positions[i]) < 1e-6:
@@ -260,7 +266,8 @@ def axis_labels(page: Any, frame: Box, axis: str, major: list[float], minor: lis
     if given:
         if len(given) != len(major):
             raise ExtractError(f'{len(given)} {axis} labels given for {len(major)} major ticks')
-        return list(zip(major, given, strict=True)), 'given'
+        order = major if axis == 'x' else major[::-1]  # labels are given from the origin: left to right, bottom to top
+        return list(zip(order, given, strict=True)), 'given'
     region = (frame[0] - 20, frame[3] + 0.5, frame[2] + 20, frame[3] + 30) if axis == 'x' else (frame[0] - 60, frame[1] - 8, frame[0] - 0.5, frame[3] + 8)
     for source, labels in (('text', text_labels(page, region)), ('ocr', None)):
         if labels is None:
@@ -398,7 +405,8 @@ def values(figure: Figure, series: Series) -> np.ndarray:
 
 
 def review_image(path: str, figure: Figure, output: str) -> None:
-    """Rendering of the figure with the extracted points (circles), error bars (blue) and calibration ticks (magenta)"""
+    """Rendering of the figure with the extracted points (circles), flagged points (orange squares), error bars (blue) and
+    calibration ticks (magenta)"""
     pdfplumber = require_pdfplumber()
     from PIL import ImageDraw  # noqa: PLC0415
 
@@ -420,6 +428,8 @@ def review_image(path: str, figure: Figure, output: str) -> None:
         for point in series.points:
             px, py = pixel(point.x, point.y)
             draw.ellipse([px - 7, py - 7, px + 7, py + 7], outline=tone, width=2)
+            if point.flag:
+                draw.rectangle([px - 11, py - 11, px + 11, py + 11], outline=(255, 140, 0), width=2)
             if point.low is not None and point.high is not None:
                 for end in (point.low, point.high):
                     _, ey = pixel(point.x, end)

@@ -2,7 +2,7 @@
 
 `piclas-db extract` reads the data series of a figure in a PDF of a paper that is in the store (`import --literature`). In a vector
 figure, markers, error bars, lines and ticks are drawing operations with exact coordinates, so the values are read rather than
-estimated from pixels. Scanned figures follow in a later version.
+estimated from pixels. Scanned figures are read from the image (see below).
 
 ```bash
 pip install "piclas-db[extract]"           # pdfplumber; OCR of axis labels drawn as outlines needs the tesseract binary
@@ -36,6 +36,33 @@ the laboratory frame with `--mass-amu`. Values below zero that are zero within t
 Both series (BAT, open squares; SGR, filled squares) are read with 15 points each and 27 error bars; the x labels by OCR with a
 residual of 1e-16, the y labels with 6e-4 Å². Converted with the O⁻ mass, the velocities give the beam energies of the
 experiment (0.50, 0.99, 1.24, 1.49, 1.98 keV, …), which confirms the calibration independently.
+
+## Scanned figures
+
+Pages without vector graphics (scans) are recognized automatically (or with `--raster`):
+
+```bash
+piclas-db extract tsuji-1989 --page 3 --list                     # frames found on the page
+piclas-db extract tsuji-1989 --page 3 --frame 1 --figure 5 --name fig5 \
+    --x-unit "1e5 m/s" --mass-amu 28.0855 --y-unit "1e-15 cm^2" -o work/
+```
+
+| Step | How |
+| --- | --- |
+| image | page rendered at 300 dpi, black and white |
+| frame | pairs of long horizontal lines closed by vertical lines over most of the height (pieces of skewed or broken scan lines are joined), otherwise a left and a bottom axis; edges from the vertical lines |
+| ticks | short lines on the bottom and left edge, inside or outside, also at the corners |
+| labels | OCR beyond the tick marks, one line of labels per axis, one label per tick; the calibration tolerance follows the step between labels, so misread labels (`2.0` for `2.4`, `20.0` for `2.0`) are rejected; or `--x-labels` / `--y-labels` from the origin (left to right, bottom to top) |
+| symbols | filled symbols remain after an opening with radius `--symbol-radius` (default 2 pixels); remnants of letters and lines are removed by size and fill; touching symbols are split along their direction |
+| series | linked from left to right by continuity, named by the majority of the recognized shapes (square, circle, triangle) |
+| flags | `split` (from touching symbols) and `shape` (shape differs from the series) are listed in the record notes and marked orange in the review image |
+
+The record has `method: raster`, the resolution and symbol radius, the digitization accuracy (one pixel in axis units) and the
+scikit-image and Tesseract versions. Open symbols (○ △ ×) and curves without symbols are not read from scans yet.
+
+Tsuji et al. 1989, Fig. 5 (Si⁻, C⁻, O⁻ in N₂): all 36 points in the right series, fully automatic (x labels 1–8, y labels with
+two misread labels rejected); they agree with the earlier prototype within 0.003 × 10⁻¹⁵ cm²; two points split from touching symbols
+and two shape mismatches are flagged.
 
 ## Tables
 

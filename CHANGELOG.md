@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.18.0
+
+* `piclas-db extract` reads scanned figures with filled symbols (`piclas_db/extract/raster.py`, documented in `docs/extract.md`):
+  frames from joined line pieces, ticks also at the corners, OCR of the labels beyond the tick marks, symbols by morphological
+  opening, touching symbols split, series by continuity and majority of the shapes, flags for split symbols and shape mismatches in
+  the record and the review image; scans are recognized automatically (`--raster`, `--symbol-radius`)
+* Axis calibration: tolerance from the step between labels, so misread labels are rejected; OCR combines two Tesseract modes with
+  a character whitelist; labels given on the command line count from the origin (y bottom to top)
+* Optional dependency group `extract`: scikit-image
+
 ## 0.17.0
 
 * `piclas-db extract PAPER --page 14-15 --table 12` reads tables (`piclas_db/extract/table.py`, documented in `docs/extract.md`):

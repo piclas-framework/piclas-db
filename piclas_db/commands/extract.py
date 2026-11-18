@@ -14,6 +14,7 @@
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import argparse
+import importlib.metadata
 import itertools
 import pathlib
 from typing import Optional
@@ -27,6 +28,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db.extract.raster import RESOLUTION, SCALE, extract_raster, is_scanned, raster_figure_frames
 from piclas_db.extract.table import Table, extract_table, header_unit, parse_number
 from piclas_db.extract.vector import ExtractError, extract, figure_frames, require_pdfplumber, review_image, tesseract_version, values
 from piclas_db.literature import LiteratureError, papers, template
@@ -105,11 +107,16 @@ def run(args: argparse.Namespace) -> int:
             output.mkdir(parents=True, exist_ok=True)
             write_table(args, paper, table, output)
             return 0
+        page = page_list(args.page)[0]
+        scanned = args.raster or is_scanned(path, page)
         if args.list:
-            for index, frame in enumerate(figure_frames(path, page_list(args.page)[0])):
+            for index, frame in enumerate(raster_figure_frames(path, page) if scanned else figure_frames(path, page)):
                 print(f'frame {index}: x {frame[0]:.1f}-{frame[2]:.1f} pt, y {frame[1]:.1f}-{frame[3]:.1f} pt (from the top of page {args.page})')
             return 0
-        figure = extract(path, page_list(args.page)[0], args.frame, numbers(args.x_labels), numbers(args.y_labels), args.x_scale, args.y_scale)
+        if scanned:
+            figure = extract_raster(path, page, args.frame, numbers(args.x_labels), numbers(args.y_labels), args.x_scale, args.y_scale, args.symbol_radius)
+        else:
+            figure = extract(path, page, args.frame, numbers(args.x_labels), numbers(args.y_labels), args.x_scale, args.y_scale)
     except (ExtractError, LiteratureError, ValueError) as e:
         print(f'ERROR: {e}')
         return 1
@@ -127,7 +134,7 @@ def run(args: argparse.Namespace) -> int:
     for series in figure.series:
         data = values(figure, series)
         name = slug(f'{args.name or prefix}-{series.name}')
-        record = template(paper, name, str(figure.page), None, args.figure or f'page {args.page}, frame {args.frame}', 'vector')
+        record = template(paper, name, str(figure.page), None, args.figure or f'page {args.page}, frame {args.frame}', 'raster' if scanned else 'vector')
         record['created']['by'] = args.by
         record['columns']['energy'] = {'unit': args.x_unit, 'quantity': args.x_quantity, **({'mass_amu': args.mass_amu} if args.mass_amu else {})}
         record['columns']['cross_section']['unit'] = args.y_unit
@@ -135,7 +142,20 @@ def run(args: argparse.Namespace) -> int:
             axis_name: {'scale': axis.scale, 'labels_from': axis.source, 'labels': [[round(p, 4), v] for p, v in axis.labels], 'residual': axis.residual} for axis_name, axis in (('x', figure.x), ('y', figure.y))
         }
         record['parameters'] = {'page': figure.page, 'frame': args.frame, 'frame_pt': [round(v, 2) for v in figure.frame], 'series': series.name, 'kind': series.kind}
-        record['accuracy']['extraction'] = 'coordinates as drawn in the PDF (vector graphics); limited by the calibration residual'
+        if scanned:
+            pixel = 1.0 / SCALE  # pt
+            record['parameters'].update({'resolution_dpi': RESOLUTION, 'symbol_radius_px': args.symbol_radius})
+            record['accuracy']['extraction'] = (
+                f'symbol centre to about one pixel at {RESOLUTION} dpi: {abs(figure.x.b) * pixel:.2g} in x and {abs(figure.y.b) * pixel:.2g} in y '
+                + ('(decades)' if figure.y.scale == 'log' else '(axis units)')
+                + '; series assigned by continuity and majority of the symbol shapes'
+            )
+            flagged = [(index + 1, point.flag) for index, point in enumerate(series.points) if point.flag]
+            if flagged:
+                record['notes'] = [f'row {row}: ' + ('split from touching symbols' if flag == 'split' else 'recognized shape differs from the series') for row, flag in flagged]
+            tools['scikit-image'] = importlib.metadata.version('scikit-image')
+        else:
+            record['accuracy']['extraction'] = 'coordinates as drawn in the PDF (vector graphics); limited by the calibration residual'
         record['environment'].update(tools)
         has_bars = bool(np.any(np.isfinite(data[:, 2])))
         record['result'] = {'points': len(data), 'error_bars': int(np.sum(np.isfinite(data[:, 2])))}
@@ -147,7 +167,8 @@ def run(args: argparse.Namespace) -> int:
             lines.append(row)
         (output / f'{name}.csv').write_text('\n'.join(lines) + '\n')
         (output / f'{name}.extraction.yaml').write_text(yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=1000))
-        print(f'  {series.name:28s} {len(data):3d} points' + (f', {record["result"]["error_bars"]} error bars' if has_bars else '') + f' -> {output / name}.csv')
+        flags = sum(1 for point in series.points if point.flag)
+        print(f'  {series.name:28s} {len(data):3d} points' + (f', {record["result"]["error_bars"]} error bars' if has_bars else '') + (f', {flags} flagged' if flags else '') + f' -> {output / name}.csv')
     review_image(path, figure, str(output / f'{prefix}-review.png'))
     print(f'Review image: {output / prefix}-review.png')
     print('Check the units and quantity in the records (energy axis may be a velocity: --x-unit "a.u." --mass-amu ...), then:')
