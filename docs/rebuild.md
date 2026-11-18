@@ -45,3 +45,45 @@ The derived recipe can be edited (e.g. to add the provenance an old file is miss
 | `XSec_Database_Xe_Plasma-Biagi7-1.h5` | needs the Biagi-v7.1 Xe download | guide for `lxcat/biagi-v7.1/xe` |
 | `Electronic-State-Database.h5` | needs NIST ASD levels of Ar, Ar II, Ar III | guide for the three spectra |
 | `XSec_Database_O2*.h5` | nothing: the references only name `xsec_collision.txt` | not reproducible; add the LXCat databases to the derived recipe |
+
+## Where the data come from: `rebuild --explain`
+
+```bash
+piclas-db rebuild SpeciesDatabase.h5 --explain --report sources.md --recipe-out draft.yaml
+```
+
+Every cross-section of the file is compared **point by point** with everything in the store: the processes of all LXCat downloads,
+all extractions from papers (tables, figures) and all fit formulas (evaluated at the energies of the dataset). A point is explained by
+a source if energy and cross-section are the same to float32 precision; σ = 0 is not used as evidence (thresholds are in many
+sources), and a source must explain at least three points (or all of its own). Sources of other species are not considered (LXCat
+species, assignment of an extraction). Extractions over the laboratory energy are also tried over the laboratory energy.
+
+| Status | Meaning |
+| --- | --- |
+| complete | all points from one source (apart from σ = 0 at the threshold) |
+| combined | all points from several sources, each in an energy range |
+| partial | some points from sources, others not (e.g. an extension to higher energies) |
+| unknown | no point from the store (the download is missing) |
+
+`--report` writes a Markdown table, `--recipe-out` a draft recipe for the complete and combined datasets (LXCat processes grouped by
+pair, database and species with `source: lxcat`; papers with their parts and `zero_at`), with a comment for every dataset that is not
+covered. Datasets that match their source only **over the laboratory energy** are marked: a rebuild over the collision energy will
+differ, as PICLas expects the collision energy.
+
+Example, `SpeciesDatabase.h5` against a store with the GEC LXCat downloads, Yoon et al. 2008 and Janev et al. 2003:
+
+```
+82 cross-sections: 4 complete, 1 combined, 3 partial, 74 without source in the store; 2 over the laboratory energy
+/Cross-Sections/Ar-electron/EFFECTIVE: partial (76 points)
+    0-10000 eV    66 points  lxcat Phelps e / Ar: E + Ar -> E + Ar, Effective
+    not explained: 10 point(s), 20000 eV, 30000 eV, 40000 eV, 45000 eV ...
+/Cross-Sections/H2-H2Ion1/REACTION/H2Ion1-H2: complete (55 points)
+    0.001-1000 eV    55 points  literature/janev-2003/h2plus-h2-cx-207  ** over the laboratory energy **
+/Cross-Sections/H2-electron/REACTION/H2Ion1-electron-electron: combined (59 points)
+    16-25 eV    19 points  literature/yoon-2008/table12-c1
+    30-1000 eV    39 points  literature/yoon-2008/table13-c1
+    sigma = 0 at 15.4 eV
+```
+
+The 74 unknown datasets are the downloads still missing (LXCat Phelps for H₂, N₂, CO₂, He; Hayashi for Xe; NIFS; Phelps 1990):
+with every download, the report shows what it covers.

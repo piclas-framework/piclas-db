@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.28.0
+
+* `piclas-db rebuild FILE --explain [--report report.md] [--recipe-out draft.yaml]` (`piclas_db/explain.py`, documented in
+  `docs/rebuild.md`): every cross-section compared point by point with all LXCat processes, extractions and formulas in the store;
+  status complete / combined / partial / unknown; detects data tabulated over the laboratory energy; Markdown report and a draft
+  recipe for the explained datasets
+* `SpeciesDatabase.h5` against the test store: 4 complete, 1 combined, 3 partial (Ar effective and ionization extended beyond the
+  Phelps data, H dissociation beyond Yoon Table 11), 74 without source yet; Janev H2+ + H2 found over the laboratory energy
+
 ## 0.27.0
 
 * Combined datasets made visible: `build --plot-parts DIR`, `plot --parts` (parts, ranges, full source data from the store, seams,

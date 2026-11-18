@@ -72,8 +72,38 @@ def copy_not_rebuilt(old: Database, new: Database) -> list[str]:
     return copied
 
 
+def explain(args: argparse.Namespace) -> int:
+    """Where the cross-sections of an existing database come from (numbers compared with everything in the store)"""
+    from piclas_db import explain as explaining  # noqa: PLC0415
+
+    store = Store(args.store)
+    try:
+        old = read_database(args.source)
+    except DatabaseReadError as e:
+        print(f'ERROR: {e}')
+        return 1
+    pool = explaining.candidates(store)
+    print(f'{args.source}: {sum(len(p.cross_sections) for p in old.collision_pairs.values())} cross-sections compared with {len(pool)} candidates in {store.root}')
+    results = explaining.explain_database(old, pool)
+    for result in results:
+        print('\n'.join(explaining.describe(result)))
+    print(explaining.summary(results))
+    if args.report:
+        pathlib.Path(args.report).write_text(explaining.report(args.source, results), encoding='utf-8')
+        print(f'Report: {args.report}')
+    if args.recipe_out:
+        pathlib.Path(args.recipe_out).write_text(explaining.recipe_draft(args.source, results), encoding='utf-8')
+        print(f'Recipe draft: {args.recipe_out}')
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     """Rebuild an existing database from the original files and compare the result with the original"""
+    if args.explain:
+        return explain(args)
+    if not args.output:
+        print('ERROR: give the rebuilt file with -o (or use --explain)')
+        return 1
     output = pathlib.Path(args.output)
     recipe_file = pathlib.Path(args.recipe_out) if args.recipe_out else output.with_suffix('.recipe.yaml')
     if output.exists() and not args.force:
