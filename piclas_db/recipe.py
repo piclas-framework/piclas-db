@@ -41,6 +41,7 @@ inline. Example:
         key: H2Ion1-electron-electron
     species:                                 # own data, written as attributes
       Ar: {MassIC: 6.63E-26, InteractionID: 1}
+      CO: {atct: 630-08-0*0, InteractionID: 2} # HeatOfFormation_K and MassIC from ATcT (downloaded automatically)
 """
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -68,6 +69,13 @@ KINDS = [kind.value for kind in XSecKind if kind is not XSecKind.UNKNOWN]
 
 class RecipeError(Exception):
     """Invalid recipe"""
+
+
+def atct_requirement(atct_id: str) -> Requirement:
+    """ATcT species record in the store (downloaded automatically if missing): 'atct: 630-08-0*0' in a species entry"""
+    from piclas_db.sources.identify import atct_dataset  # noqa: PLC0415
+
+    return Requirement('atct', atct_dataset(atct_id))
 
 
 ALL_DOWNLOADS = '*'  # 'source: lxcat': the processes of all LXCat downloads in the store
@@ -121,6 +129,10 @@ class Recipe:
         for literature in self.literature:
             for part, _ in literature.parts:
                 unique.setdefault(str(part), part)
+        for attributes in self.species.values():
+            if attributes.get('atct'):
+                requirement = atct_requirement(str(attributes['atct']))
+                unique.setdefault(str(requirement), requirement)
         return list(unique.values())
 
 

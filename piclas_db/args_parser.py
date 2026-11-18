@@ -134,6 +134,11 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
         elif name == 'push':
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
+        elif name == 'atct':
+            sub.add_argument('action', choices=['search', 'get'], help='search: find species by name or formula; get: download records by ATcT ID')
+            sub.add_argument('arguments', nargs='+', help='search: name or formula (e.g. carbon monoxide); get: ATcT IDs (e.g. 630-08-0*0)')
+            sub.add_argument('--all', action='store_true', help='search: also species that are not in the gas phase')
+            sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE, configuration, ~/.local/share/piclas-db/store)')
         elif name == 'config':
             sub.add_argument('--init', action='store_true', help='write a commented template of the configuration file')
             sub.add_argument('--set', nargs=2, metavar=('KEY', 'VALUE'), help='set a value, e.g. user.name "Your Name", user.email, store, mirror, extract.by')

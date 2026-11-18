@@ -66,7 +66,7 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     for resolution in resolutions:
-        location = resolution.entry.relative if resolution.entry else 'missing: download by hand, then piclas-db import'
+        location = resolution.entry.relative if resolution.entry else f'missing: piclas-db guide {resolution.requirement}, then piclas-db import'
         print(f'  {resolution.origin.value:20s} {resolution.requirement}: {location}')
     if any(resolution.origin is Origin.MANUAL for resolution in resolutions):
         print('ERROR: original files are missing in the store')

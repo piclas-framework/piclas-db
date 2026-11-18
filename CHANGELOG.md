@@ -3,6 +3,22 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.29.0
+
+* ATcT provider (`piclas_db/sources/atct.py`, documented in `docs/atct.md`), the first with automatic download: `piclas-db atct
+  search` (ATcT ID by name or formula, gas phase), `piclas-db atct get ID...`; `build` and `fetch` download missing records through
+  the ATcT API (pause, time limit, retries); every response stored unchanged with retrieval date, TN version and user
+* Recipes: `species: {CO: {atct: 630-08-0*0}}` sets `HeatOfFormation_K` (ΔfH 298.15 K / R, ion convention) and `MassIC` from ATcT,
+  values in the recipe take precedence; charge and phase are checked
+* Checked with API responses for CO (TN 1.228): the 298.15 K values and the ion convention are those of `SpeciesDatabase.h5`; the
+  CO mass of `SpeciesDatabase.h5` differs from ATcT by 1.2e-5 (cause of the mass non-conservation of CO/CO2 reactions, finding A7)
+
+## 0.28.2
+
+* Tutorial T5 Writing recipes and building a database (LXCat selections and types, species with own data, NIST levels, provenance
+  and rebuild, pinning, `source: lxcat`, papers, layouts, error messages, checklist), with real outputs from an LXCat ZIP
+* `build`: a missing original names the `guide` command for it
+
 ## 0.28.1
 
 * Tutorial T2 Checking and comparing existing databases (check, repair, diff, plot, export, sources), with the real outputs

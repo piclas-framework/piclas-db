@@ -53,6 +53,7 @@ piclas-db -v
 | --- | --- | --- |
 | `piclas-db guide lxcat/biagi-v7.1/ar` | Step-by-step guide for a manual download ([details](docs/rebuild.md)) | **available** |
 | `piclas-db import --source-dir ~/Downloads` | Identify by content, validate, copy into the local store ([details](docs/store.md)) | **available** |
+| `piclas-db atct search\|get` | ATcT: find species, download their records (heat of formation, mass) automatically ([details](docs/atct.md)) | **available** |
 | `piclas-db config [--init]` | Configuration file: store, private repository, defaults for options ([details](docs/configuration.md)) | **available** |
 | `piclas-db store [--verify]` | List the local store, verify the files against their sha256 | **available** |
 | `piclas-db fetch [--mirror <private repo>] [--need ...]` | Clone or update the store from the private repository, locate required files ([details](docs/store.md#private-repository)) | **available** |
@@ -70,7 +71,7 @@ piclas-db -v
 | `piclas-db rebuild old.h5 -o new.h5` | Rebuild an existing database from the original files and compare ([details](docs/rebuild.md)) | **available** |
 
 ## Tutorials
-[Getting started](docs/tutorials/T1-getting-started.md), [checking and comparing databases](docs/tutorials/T2-checking-and-comparing.md), [adding data](docs/tutorials/T3-adding-data.md), [the private source repository](docs/tutorials/T4-private-repository.md); overview in [docs/tutorials](docs/tutorials/README.md).
+[Getting started](docs/tutorials/T1-getting-started.md), [checking and comparing databases](docs/tutorials/T2-checking-and-comparing.md), [adding data](docs/tutorials/T3-adding-data.md), [the private source repository](docs/tutorials/T4-private-repository.md), [recipes and building](docs/tutorials/T5-recipes-and-build.md); overview in [docs/tutorials](docs/tutorials/README.md).
 
 # Where the data comes from
 For every dataset a database needs (`build`, `rebuild`), piclas-db looks in the following places, in this order, and only

@@ -26,6 +26,7 @@ from typing import Optional
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db.sources.atct import ATcTError, is_atct, parse_atct
 from piclas_db.sources.lxcat import LXCatFile, compare, is_lxcat, is_lxcat_xml, parse_lxcat, parse_lxcat_xml, validate, zip_texts
 from piclas_db.sources.nist import is_nist_levels, parse_nist_levels
 # ==================================================================================================================================
@@ -59,6 +60,17 @@ def read_text(path: pathlib.Path) -> Optional[str]:
     if b'\x00' in raw[:4096]:
         return None  # binary file
     return raw.decode('utf-8', errors='replace')
+
+
+def atct_dataset(atct_id: str) -> str:
+    """Store name of an ATcT ID: '630-08-0*0' -> '630-08-0-0' ('*' is not a good character in paths)"""
+    return atct_id.strip().replace('*', '-')
+
+
+def atct_id_of(dataset: str) -> str:
+    """Inverse of atct_dataset: the last '-' separates the state number"""
+    head, _, state = dataset.rpartition('-')
+    return f'{head}*{state}'
 
 
 def lxcat_identified(parsed: LXCatFile, details: dict[str, object]) -> Identified:
@@ -125,6 +137,22 @@ def identify(
     text = read_text(path)
     if text is None:
         raise IdentifyError('binary file, not an LXCat or NIST ASD download (use --custom NAME to store other data)')
+
+    if is_atct(text):
+        try:
+            records = parse_atct(text)
+        except ATcTError as e:
+            raise IdentifyError(f'ATcT response cannot be read: {e}') from e
+        if len(records) != 1:
+            raise IdentifyError(f'ATcT response with {len(records)} species: store one species per file (piclas-db atct get <ATcT ID>)')
+        record = records[0]
+        return Identified(
+            provider='atct',
+            kind='species',
+            dataset=atct_dataset(record.atct_id),
+            species=[record.formula],
+            details={'atct_id': record.atct_id, 'version': record.version, 'name': record.name, 'formula': record.formula},
+        )
 
     if is_lxcat_xml(text):
         try:

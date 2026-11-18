@@ -247,6 +247,29 @@ def classify(process: LXCatProcess, selection: CrossSectionSelection, report: Bu
     return kind, kind.value, ''
 
 
+def add_atct(species: Species, entry: StoreEntry, own: dict, report: BuildReport) -> None:
+    """HeatOfFormation_K (298.15 K / R, ion convention as ATcT) and MassIC from an ATcT record; values in the recipe take precedence"""
+    from piclas_db.sources.atct import parse_atct  # noqa: PLC0415
+
+    record = parse_atct(entry.path.read_text(encoding='utf-8'))[0]
+    taken = []
+    if 'HeatOfFormation_K' not in own and record.heat_of_formation_k is not None:
+        species.attributes['HeatOfFormation_K'] = record.heat_of_formation_k
+        taken.append('HeatOfFormation_K')
+    if 'MassIC' not in own and record.mass_kg is not None:
+        species.attributes['MassIC'] = record.mass_kg
+        taken.append('MassIC')
+    ion = re.search(r'Ion(\d+)$', species.name)
+    expected = int(ion.group(1)) if ion else (-1 if species.name == 'electron' else 0)
+    if record.charge != expected:
+        report.notes.append(f'{species.name}: ATcT {record.atct_id} ({record.formula}) has charge {record.charge}, the name suggests {expected}')
+    if not record.gas:
+        report.notes.append(f'{species.name}: ATcT {record.atct_id} is not a gas-phase species ({record.formula})')
+    reference = f'ATcT {record.version} ({record.atct_id}, {record.formula}): ' + ', '.join(taken)
+    species.provenance.reference = '; '.join(filter(None, [species.provenance.reference, reference]))
+    species.provenance.extra = {**species.provenance.extra, **source_provenance(entry)}
+
+
 def lxcat_database(file: LXCatFile, path: str) -> Database:
     """All processes of an LXCat download (TXT, XML or ZIP) as a database (for plot and diff of original files)"""
     database = Database(path=path, schema=Schema.SPECIES_DATABASE)
@@ -413,8 +436,15 @@ def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool 
         add_levels(database, level_selection, entry, report)
     for name, attributes in recipe.species.items():
         species = database.species.setdefault(name, Species(name=name))
-        species.attributes.update(attributes)
-        report.added.append(f'/Species/{name} ({len(attributes)} attribute(s) from the recipe)')
+        own = {key: value for key, value in attributes.items() if key != 'atct'}
+        if attributes.get('atct'):
+            from piclas_db.recipe import atct_requirement  # noqa: PLC0415
+
+            entry = entries[str(atct_requirement(str(attributes['atct'])))]
+            assert entry is not None
+            add_atct(species, entry, own, report)
+        species.attributes.update(own)
+        report.added.append(f'/Species/{name} ({len(own)} attribute(s) from the recipe' + (f', ATcT {attributes["atct"]})' if attributes.get('atct') else ')'))
     for name, attributes in recipe.reactions.items():
         database.reactions[name] = Reaction(name=name, attributes=dict(attributes), provenance=Provenance(reference=f'recipe {recipe.path}'))
         report.added.append(f'/Reactions/{name} (from the recipe)')

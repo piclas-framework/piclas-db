@@ -17,6 +17,7 @@
 # ----------------------------------------------------------------------------------------------------------------------------------
 import datetime
 import os
+import pathlib
 import shutil
 from dataclasses import dataclass
 from enum import Enum, unique
@@ -96,10 +97,33 @@ def resolve(store: Store, requirements: list[Requirement], update: bool = True) 
         for resolution in missing:
             resolution.entry, resolution.origin = find(store, resolution.requirement), Origin.PRIVATE
     for resolution in resolutions:
+        if resolution.entry is None and update and resolution.requirement.provider == 'atct':
+            resolution.entry = download_atct(store, resolution.requirement)
+            if resolution.entry is not None:
+                resolution.origin = Origin.AUTOMATIC
         if resolution.entry is None:
-            # No provider supports automatic downloads yet (candidate: IAEA CollisionDB API); everything is downloaded by hand
-            resolution.origin = Origin.MANUAL
+            resolution.origin = Origin.MANUAL  # downloaded by hand (piclas-db guide)
     return resolutions
+
+
+def download_atct(store: Store, requirement: Requirement) -> Optional[StoreEntry]:
+    """ATcT has a public API: the species record is downloaded and stored like a file downloaded by hand (None if not possible)"""
+    import tempfile  # noqa: PLC0415
+
+    from piclas_db import config  # noqa: PLC0415
+    from piclas_db.sources import atct  # noqa: PLC0415
+    from piclas_db.sources.identify import IdentifyError, atct_id_of, identify  # noqa: PLC0415
+
+    try:
+        by = config.require_identity()
+        text = atct.get(atct_id_of(requirement.dataset))
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / f'{requirement.dataset}.json'
+            path.write_text(text, encoding='utf-8')
+            return store.add(path, identify(path), retrieved=datetime.date.today(), by=by)  # retrieved now, by the API
+    except (atct.ATcTError, IdentifyError, config.ConfigError) as e:
+        print(f'  automatic download of {requirement} failed: {str(e).splitlines()[0]}')
+        return None
 
 
 def synchronize(store: Store, url: Optional[str]) -> str:
