@@ -70,7 +70,7 @@ piclas-db -v
 | `piclas-db rebuild old.h5 -o new.h5` | Rebuild an existing database from the original files and compare ([details](docs/rebuild.md)) | **available** |
 
 ## Tutorials
-[Getting started](docs/tutorials/T1-getting-started.md), [adding data](docs/tutorials/T3-adding-data.md), [the private source repository](docs/tutorials/T4-private-repository.md); overview in [docs/tutorials](docs/tutorials/README.md).
+[Getting started](docs/tutorials/T1-getting-started.md), [checking and comparing databases](docs/tutorials/T2-checking-and-comparing.md), [adding data](docs/tutorials/T3-adding-data.md), [the private source repository](docs/tutorials/T4-private-repository.md); overview in [docs/tutorials](docs/tutorials/README.md).
 
 # Where the data comes from
 For every dataset a database needs (`build`, `rebuild`), piclas-db looks in the following places, in this order, and only

@@ -3,6 +3,10 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.28.1
+
+* Tutorial T2 Checking and comparing existing databases (check, repair, diff, plot, export, sources), with the real outputs
+
 ## 0.28.0
 
 * `piclas-db rebuild FILE --explain [--report report.md] [--recipe-out draft.yaml]` (`piclas_db/explain.py`, documented in
