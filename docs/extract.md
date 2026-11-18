@@ -1,4 +1,4 @@
-# Data from vector figures
+# Data from figures and tables
 
 `piclas-db extract` reads the data series of a figure in a PDF of a paper that is in the store (`import --literature`). In a vector
 figure, markers, error bars, lines and ticks are drawing operations with exact coordinates, so the values are read rather than
@@ -36,3 +36,31 @@ the laboratory frame with `--mass-amu`. Values below zero that are zero within t
 Both series (BAT, open squares; SGR, filled squares) are read with 15 points each and 27 error bars; the x labels by OCR with a
 residual of 1e-16, the y labels with 6e-4 Å². Converted with the O⁻ mass, the velocities give the beam energies of the
 experiment (0.50, 0.99, 1.24, 1.49, 1.98 keV, …), which confirms the calibration independently.
+
+## Tables
+
+```bash
+piclas-db extract yoon-2008 --page 14-15 --table 12 --by "Name" -o work/     # pages: a table may continue on the next page
+piclas-db literature add work/table12-c1.extraction.yaml
+```
+
+| Step | How |
+| --- | --- |
+| words | text layer of the PDF; pages without one (scans) by OCR with Tesseract, or always with `--ocr` |
+| caption | `TABLE 12.`, `TABLE12.`, `Table 2:`; references in the running text ("listed in Table 7.") are tried as well and discarded when no table follows; upper-case captions first |
+| layout | on two-column pages (no word near the caption crosses the middle) only the column of the caption |
+| table | data rows (mostly numbers) below or above the caption, header lines on the caption side; continuation pages (`—Continued`) are joined |
+| columns | separated where no word of a data row lies; a label split into two columns is joined again |
+| numbers | `9.70E−07`, `9.5185(-4)` (= 9.5185e-4), `0.003 51` (digit groups), Unicode minus, footnote marks |
+| units | from the header: `(eV)`, `(keV)`, `(10−17 cm2)` → `1e-17 cm^2`, `Å2` → `A^2`; otherwise `--x-unit` / `--y-unit` |
+
+Every table is written as raw CSV (`table<n>-table.csv`, header and all cells). If the first column is an increasing energy, every
+further column becomes a series (`table<n>-c<column>`) with an extraction record (`method: text` or `ocr`, table, pages, column
+header, units). Tables without an energy column, such as fit parameters (Janev et al. 2003), are kept as raw tables; using fit
+formulas follows in a later version.
+
+All twelve data tables of Yoon et al. 2008 (Tables 1–5, 7–9, 11–14, including those continued on the next page, two-column layout,
+several columns with different units) are read with the correct number of rows; Table 13 is identical to the values entered by
+hand. The three `SpeciesDatabase.h5` datasets that cite Yoon et al. (`H-electron-H`, `H2Ion1-electron-electron`,
+`H-electron-electron-HIon1`) are the same cross-sections as Tables 11 and 13, on a different energy grid (with additional points,
+e.g. at the threshold).

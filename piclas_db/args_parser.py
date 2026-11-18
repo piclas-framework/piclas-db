@@ -88,7 +88,9 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
         elif name == 'extract':
             sub.add_argument('paper', help='paper in the store (key given to import --literature)')
-            sub.add_argument('--page', type=int, required=True, help='page of the PDF (1-based)')
+            sub.add_argument('--page', required=True, help='page of the PDF (1-based); for tables also ranges such as 14-15 (continued tables)')
+            sub.add_argument('--table', help='extract table <number> (e.g. 12) instead of a figure')
+            sub.add_argument('--ocr', action='store_true', help='with --table: read the page by OCR even if it has a text layer')
             sub.add_argument('--frame', type=int, default=0, help='plot frame on the page, see --list (default 0: top left)')
             sub.add_argument('--list', action='store_true', help='list the plot frames with data on the page')
             sub.add_argument('--figure', help='figure number for the record, e.g. 3')

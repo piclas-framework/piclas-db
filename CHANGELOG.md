@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.17.0
+
+* `piclas-db extract PAPER --page 14-15 --table 12` reads tables (`piclas_db/extract/table.py`, documented in `docs/extract.md`):
+  text layer or OCR (Tesseract) for scans, caption above or below, two-column pages, continuation pages joined, columns from the
+  gaps between words, numbers in paper notations (`9.70E−07`, `9.5185(-4)`, digit groups), units from the column headers; raw
+  table CSV, and for tables with an energy column one series with extraction record per column
+* Checked with all twelve data tables of Yoon et al. 2008 and parameter tables of Janev et al. 2003; the `SpeciesDatabase.h5`
+  datasets citing Yoon et al. are Tables 11 and 13
+* `extract --page` accepts page ranges
+
 ## 0.16.0
 
 * `piclas-db extract PAPER --page N` reads the data series of vector figures (`piclas_db/extract/vector.py`, documented in
