@@ -134,6 +134,15 @@ class Store:
             git.commit(self.root, [target, meta_file], message)
         return StoreEntry(path=target, meta=meta)
 
+    def update_meta(self, entry: StoreEntry, message: str) -> None:
+        """Rewrite the meta file of an entry (e.g. a review); the original file itself never changes"""
+        meta_file = entry.path.with_name(entry.path.name + META_SUFFIX)
+        with meta_file.open('w', encoding='utf-8') as file:
+            yaml.safe_dump(entry.meta, file, sort_keys=False, allow_unicode=True, width=1000)
+        self.write_index()
+        if self.is_repository:
+            git.commit(self.root, [meta_file], message)
+
     def write_index(self) -> None:
         index = [{key: entry.meta.get(key) for key in ('file', 'provider', 'kind', 'dataset', 'species', 'retrieved', 'sha256')} for entry in self.entries()]
         self.root.mkdir(parents=True, exist_ok=True)

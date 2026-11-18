@@ -60,8 +60,21 @@ def read_text(path: pathlib.Path) -> Optional[str]:
     return raw.decode('utf-8', errors='replace')
 
 
-def identify(path: pathlib.Path, species: Optional[str] = None, custom: Optional[str] = None) -> Identified:
+def identify(
+    path: pathlib.Path,
+    species: Optional[str] = None,
+    custom: Optional[str] = None,
+    literature: Optional[str] = None,
+    doi: Optional[str] = None,
+    reference: Optional[str] = None,
+) -> Identified:
     """Determine provider, kind and dataset of a downloaded file; raises IdentifyError for unknown or invalid files"""
+    if literature:
+        if not path.read_bytes()[:5] == b'%PDF-':
+            raise IdentifyError('--literature expects the paper as PDF')
+        if not (doi or reference):
+            raise IdentifyError('--literature needs --doi or --reference (how to cite the paper)')
+        return Identified(provider='literature', kind='paper', dataset=slug(literature), details={'doi': doi, 'reference': reference})
     if custom:
         return Identified(provider='custom', kind='custom', dataset=slug(custom), species=[species] if species else [])
 

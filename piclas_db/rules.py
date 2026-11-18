@@ -439,7 +439,17 @@ def check_file_provenance(database: Database) -> Iterator[Finding]:
         yield Finding(Severity.WARNING, 'provenance-recipe', '/', 'embedded recipe does not match its sha256 (modified after the build)')
 
 
-RULES: tuple[Rule, ...] = (check_file_provenance, check_species_attributes, check_electronic_levels, check_reactions, check_cross_sections, check_provenance)
+def check_literature_review(database: Database) -> Iterator[Finding]:
+    """Cross-sections from papers whose extraction has not been reviewed"""
+    for pair in database.collision_pairs.values():
+        for xsec in pair.cross_sections:
+            status = str(xsec.provenance.extra.get('* Review', ''))
+            if status and not status.startswith('approved'):
+                path = f'/Cross-Sections/{pair.name}/' + (f'{xsec.group}/' if xsec.group else '') + xsec.key
+                yield Finding(Severity.WARNING, 'literature-unreviewed', path, f'data from a paper, extraction {status.split(" ", maxsplit=1)[0]}')
+
+
+RULES: tuple[Rule, ...] = (check_file_provenance, check_literature_review, check_species_attributes, check_electronic_levels, check_reactions, check_cross_sections, check_provenance)
 
 
 def run_checks(database: Database) -> list[Finding]:

@@ -27,6 +27,11 @@ inline. Example:
     levels:
       - source: nist-asd/levels/ar
         species: Ar
+    literature:                              # data from papers (extraction records in the store)
+      - source: literature/yoon-2008/total-ionization
+        pair: H2-electron
+        kind: REACTION
+        key: H2Ion1-electron-electron
     species:                                 # own data, written as attributes
       Ar: {MassIC: 6.63E-26, InteractionID: 1}
 """
@@ -68,6 +73,17 @@ class CrossSectionSelection:
 
 
 @dataclass
+class LiteratureSelection:
+    """Extraction from a paper (literature provider) used as one cross-section"""
+
+    source: Requirement  # literature/<paper>/<dataset>[@sha256]
+    pair: str  # collision pair in PICLas names, e.g. H2-electron
+    kind: str  # PICLas group: ELASTIC, EFFECTIVE, REACTION, ELECTRONIC, ...
+    key: Optional[str] = None  # products for REACTION, e.g. H2Ion1-electron-electron; threshold for ELECTRONIC/VIBRATION/ROTATION
+    threshold: Optional[float] = None  # eV
+
+
+@dataclass
 class LevelSelection:
     source: Requirement
     species: str  # PICLas name
@@ -78,13 +94,14 @@ class Recipe:
     path: str
     cross_sections: list[CrossSectionSelection] = field(default_factory=list)
     levels: list[LevelSelection] = field(default_factory=list)
+    literature: list[LiteratureSelection] = field(default_factory=list)
     species: dict[str, dict[str, object]] = field(default_factory=dict)  # own data: species attributes
     reactions: dict[str, dict[str, object]] = field(default_factory=dict)  # own data: reaction attributes
 
     @property
     def requirements(self) -> list[Requirement]:
         unique: dict[str, Requirement] = {}
-        for selection in [*self.cross_sections, *self.levels]:
+        for selection in [*self.cross_sections, *self.levels, *self.literature]:
             unique.setdefault(str(selection.source), selection.source)
         return list(unique.values())
 
@@ -113,7 +130,7 @@ def parse_recipe(text: str, path: str) -> Recipe:
         raise RecipeError(f'cannot read recipe {path}: {e}') from e
     if not isinstance(data, dict):
         raise RecipeError(f'{path}: a recipe is a mapping with cross_sections, levels, species and reactions')
-    unknown = set(data) - {'cross_sections', 'levels', 'species', 'reactions', 'description', 'notes'}
+    unknown = set(data) - {'cross_sections', 'levels', 'literature', 'species', 'reactions', 'description', 'notes'}
     if unknown:
         raise RecipeError(f'{path}: unknown sections {", ".join(sorted(unknown))}')
 
@@ -141,6 +158,24 @@ def parse_recipe(text: str, path: str) -> Recipe:
         if not isinstance(entry, dict) or 'species' not in entry:
             raise RecipeError(f'{context}: "species" (PICLas name, e.g. ArIon1) required')
         recipe.levels.append(LevelSelection(source=requirement(entry, context), species=str(entry['species'])))
+    for number, entry in enumerate(data.get('literature') or [], start=1):
+        context = f'literature #{number}'
+        if not isinstance(entry, dict) or not entry.get('pair') or entry.get('kind') not in KINDS:
+            raise RecipeError(f'{context}: "pair" and "kind" ({", ".join(KINDS)}) required')
+        selection = LiteratureSelection(
+            source=requirement(entry, context),
+            pair=str(entry['pair']),
+            kind=str(entry['kind']),
+            key=str(entry['key']) if entry.get('key') is not None else None,
+            threshold=float(entry['threshold']) if entry.get('threshold') is not None else None,
+        )
+        if selection.source.provider != 'literature':
+            raise RecipeError(f'{context}: source must be literature/<paper>/<dataset>')
+        if selection.kind == 'REACTION' and not selection.key:
+            raise RecipeError(f'{context}: "key" (products, e.g. H2Ion1-electron-electron) required for REACTION')
+        if selection.kind in ('ELECTRONIC', 'VIBRATION', 'ROTATION') and selection.threshold is None:
+            raise RecipeError(f'{context}: "threshold" (eV) required for {selection.kind}')
+        recipe.literature.append(selection)
     for section in ('species', 'reactions'):
         values = data.get(section) or {}
         if not isinstance(values, dict) or not all(isinstance(value, dict) for value in values.values()):

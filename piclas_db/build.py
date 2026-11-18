@@ -40,7 +40,7 @@ import numpy as np
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.model import CollisionPair, CrossSection, Database, Provenance, Reaction, Species, XSecKind
-from piclas_db.recipe import CrossSectionSelection, LevelSelection, Recipe
+from piclas_db.recipe import CrossSectionSelection, LevelSelection, LiteratureSelection, Recipe
 from piclas_db.reference import CM_TO_K, EV_TO_K
 from piclas_db.resolve import Origin, Requirement, Resolution
 from piclas_db.schema import Schema
@@ -250,9 +250,42 @@ def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry,
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------
+# Literature
+# ----------------------------------------------------------------------------------------------------------------------------------
+def add_literature(database: Database, selection: LiteratureSelection, entry: StoreEntry, report: BuildReport, allow_unreviewed: bool) -> None:
+    from piclas_db.literature import read_extraction  # noqa: PLC0415
+
+    record = entry.meta.get('extraction') or {}
+    status = (record.get('review') or {}).get('status', 'pending')
+    if status == 'rejected' or (status != 'approved' and not allow_unreviewed):
+        raise BuildError(f'{selection.source}: extraction is {status} (review it with piclas-db literature review, or build with --allow-unreviewed)')
+    kind = XSecKind(selection.kind)
+    group = None if kind in (XSecKind.ELASTIC, XSecKind.EFFECTIVE, XSecKind.BACKSCATTER) else kind.value
+    key = kind.value if group is None else (str(selection.key) if kind is XSecKind.REACTION else str(selection.threshold))
+    pair = database.collision_pairs.setdefault(selection.pair, CollisionPair(name=selection.pair))
+    if any(existing.group == group and existing.key == key for existing in pair.cross_sections):
+        report.notes.append(f'{selection.pair}: {group + "/" if group else ""}{key} exists already, {selection.source} skipped')
+        return
+    source = record.get('source') or {}
+    where = ', '.join(f'{label} {source[label]}' for label in ('table', 'figure', 'page') if source.get(label))
+    created = record.get('created') or {}
+    provenance = Provenance(
+        reference=f'{source.get("reference") or source.get("doi")}' + (f' (doi:{source["doi"]})' if source.get('doi') and source.get('reference') else '') + f', {where}',
+        info=(record.get('quantity') or {}).get('description'),
+        extra={
+            **source_provenance(entry),
+            '* Extraction': f'{record.get("method")} by {created.get("by") or "unknown"} with {created.get("tool")}, {created.get("date")}',
+            '* Review': f'{status}' + (f' by {record["review"].get("reviewer")}, {record["review"].get("date")}' if status != 'pending' else ''),
+        },
+    )
+    pair.cross_sections.append(CrossSection(kind=kind, key=key, data=read_extraction(entry), group=group, threshold=selection.threshold, provenance=provenance))
+    report.added.append(f'/Cross-Sections/{selection.pair}/' + (f'{group}/' if group else '') + f'{key} (from {selection.source}, review {status})')
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
 # Build
 # ----------------------------------------------------------------------------------------------------------------------------------
-def build(recipe: Recipe, resolutions: list[Resolution]) -> tuple[Database, BuildReport]:
+def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool = False) -> tuple[Database, BuildReport]:
     """Assemble the database; all requirements must have been resolved to files in the store"""
     missing = [str(resolution.requirement) for resolution in resolutions if resolution.origin is Origin.MANUAL or resolution.entry is None]
     if missing:
@@ -265,6 +298,10 @@ def build(recipe: Recipe, resolutions: list[Resolution]) -> tuple[Database, Buil
         entry = entries[str(selection.source)]
         assert entry is not None
         add_cross_sections(database, selection, entry, report)
+    for literature_selection in recipe.literature:
+        entry = entries[str(literature_selection.source)]
+        assert entry is not None
+        add_literature(database, literature_selection, entry, report, allow_unreviewed)
     for level_selection in recipe.levels:
         entry = entries[str(level_selection.source)]
         assert entry is not None

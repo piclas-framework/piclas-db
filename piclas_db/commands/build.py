@@ -54,7 +54,7 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        database, report = build(recipe, resolutions)
+        database, report = build(recipe, resolutions, allow_unreviewed=args.allow_unreviewed)
     except BuildError as e:
         print(f'ERROR: {e}')
         return 1

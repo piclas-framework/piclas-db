@@ -56,6 +56,7 @@ piclas-db -v
 | `piclas-db store [--verify]` | List the local store, verify the files against their sha256 | **available** |
 | `piclas-db fetch [--mirror <private repo>] [--need ...]` | Clone or update the store from the private repository, locate required files ([details](docs/store.md#private-repository)) | **available** |
 | `piclas-db push` | Back up the local store to the private repository | **available** |
+| `piclas-db literature template\|add\|review\|list` | Data from papers with extraction record and review ([details](docs/literature.md)) | **available** |
 | `piclas-db build recipe.yaml -o database.h5` | Build a database from the original files according to a recipe ([details](docs/build.md)) | **available** |
 | `piclas-db export database.h5 -o tables/` | Write a database of any layout as ASCII tables ([details](docs/migrate.md)) | **available** |
 | `piclas-db plot db.h5 lxcat.txt --pair Ar-electron --compare` | Plot σ(E), k(T) or electronic levels from any sources ([details](docs/plot.md)) | **available** |
@@ -76,7 +77,8 @@ moves on to the next one if the dataset was not found:
 3. **Automatic download**: only from sources whose terms allow it (no provider supported yet; a candidate is the IAEA
    CollisionDB API).
 4. **Guided manual download**: step-by-step instructions for the source website with `piclas-db guide` (LXCat, NIST ASD),
-   followed by `piclas-db import`.
+   followed by `piclas-db import`. Data that only exist in papers are entered from the paper with an extraction record and a
+   review ([data from papers](docs/literature.md)).
 
 Files obtained in steps 3 and 4 are added to the private repository step by step: each imported file is committed with its
 provenance (source, dataset, retrieval date, sha256) and pushed with `piclas-db push`, if you have write access. Users without

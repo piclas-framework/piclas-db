@@ -64,7 +64,7 @@ def run(args: argparse.Namespace) -> int:
             failed += 1
             continue
         try:
-            identified = identify(path, species=args.species, custom=args.custom)
+            identified = identify(path, species=args.species, custom=args.custom, literature=args.literature, doi=args.doi, reference=args.reference)
         except IdentifyError as e:
             if explicit:
                 print(f'  ERROR    {path}: {e}')

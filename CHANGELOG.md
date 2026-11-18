@@ -3,7 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
-## Unreleased
+## 0.15.0
+
+* `literature` provider (`piclas_db/literature.py`, documented in `docs/literature.md`): papers (PDF) into the store with
+  `import --literature KEY --doi … --reference …`; `piclas-db literature template | add | review | list` to enter tables as printed
+  with an extraction record (source with paper sha256, page, table/figure; method; units; accuracy; piclas-db version and
+  environment; review status); checks against typing errors, unknown units and a wrong paper
+* Recipes: section `literature` (pair, kind, key or threshold); `build` uses approved extractions only (`--allow-unreviewed`),
+  datasets carry citation with DOI, table and page, extraction and review; new check rule `literature-unreviewed`
+* Store: meta files can be updated (reviews), committed in a private-repository store
 
 * Documentation: outdated "planned" statements removed (`guide` exists since 0.9.0, no automatic download yet), `reservoir
   --regressioncheck` in the command table of `README.md`; `fetch --need` names the `guide` command for missing files

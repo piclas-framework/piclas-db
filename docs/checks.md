@@ -43,6 +43,7 @@ have one of three severities, and the exit code is 1 if at least one error is fo
 | `data-float32` | WARNING | data stored as float32 | several files |
 | `provenance-missing` | WARNING | species or cross-sections without reference or info | several files |
 | `provenance-converter`, `provenance-2d-strings` | INFO | attributes of a generic CSV converter, string attributes stored as 2D arrays | GEC files |
+| `literature-unreviewed` | WARNING | cross-section from a paper whose extraction has not been reviewed (`build --allow-unreviewed`) | |
 | `provenance-file` | INFO | file not written by piclas-db (no provenance attributes) | all existing files |
 | `provenance-format` | WARNING | file written with a newer layout version than this piclas-db knows | |
 | `provenance-recipe` | WARNING | embedded recipe modified after the build (sha256 mismatch) | |
