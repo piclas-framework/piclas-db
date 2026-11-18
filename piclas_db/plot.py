@@ -15,6 +15,7 @@
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import itertools
 from dataclasses import dataclass
 from typing import Optional
 
@@ -220,3 +221,102 @@ def contents(sources: list[Source]) -> list[str]:
         if levels:
             lines.append(f'  --species {" ".join(levels)}')
     return lines
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Combined datasets (several extractions, each in an energy range)
+# ----------------------------------------------------------------------------------------------------------------------------------
+@dataclass
+class Part:
+    source: str  # e.g. literature/yoon-2008/table12-c1
+    low: float  # eV
+    high: float  # eV
+    full: Optional[np.ndarray] = None  # all data of the source (eV, m^2), if the store is available
+
+
+def parts_of(xsec: CrossSection) -> list[Part]:
+    """Parts of a combined dataset from its provenance ('* Parts': 'source: low-high eV; ...')"""
+    text = str(xsec.provenance.extra.get('* Parts', ''))
+    parts = []
+    for item in filter(None, (piece.strip() for piece in text.split(';'))):
+        source, _, limits = item.rpartition(': ')
+        low, _, high = limits.removesuffix(' eV').partition('-')
+        try:
+            parts.append(Part(source, float(low), float(high)))
+        except ValueError:
+            continue
+    return parts
+
+
+def seam_mismatch(left: np.ndarray, right: np.ndarray, left_high: float, right_low: float) -> tuple[float, float, str]:
+    """How well two sources agree at a seam: (energy, relative difference right/left - 1, how): compared at the same energy where one
+    source extends into the range of the other, otherwise against a logarithmic extrapolation of the left source"""
+
+    def at(data: np.ndarray, energy: float) -> float:
+        return float(np.interp(energy, data[:, 0], data[:, 1]))
+
+    first_right = float(right[right[:, 0] >= right_low, 0][0]) if np.any(right[:, 0] >= right_low) else right_low
+    last_left = float(left[left[:, 0] <= left_high, 0][-1]) if np.any(left[:, 0] <= left_high) else left_high
+    if left[-1, 0] >= first_right:  # the left source continues into the right range
+        energy = first_right
+        how = f'both sources at {energy:g} eV'
+        base = at(left, energy)
+        value = at(right, energy)
+    elif right[0, 0] <= last_left:  # the right source starts within the left range
+        energy = last_left
+        how = f'both sources at {energy:g} eV'
+        base = at(left, energy)
+        value = at(right, energy)
+    else:  # no overlap: extrapolate the left source (log-log, last two points)
+        used = left[(left[:, 0] <= left_high) & (left[:, 1] > 0.0)]
+        energy = first_right
+        how = f'left source extrapolated to {energy:g} eV'
+        if len(used) < 2:
+            return energy, float('nan'), how
+        (e1, s1), (e2, s2) = used[-2], used[-1]
+        slope = np.log(s2 / s1) / np.log(e2 / e1)
+        base = float(s2 * (energy / e2) ** slope)
+        value = at(right, energy)
+    return energy, (value / base - 1.0) if base > 0.0 else float('nan'), how
+
+
+def plot_parts_with(xsec: CrossSection, parts: list[Part], title: str) -> Figure:
+    """A combined dataset: every part in its colour and range, the full source data (thin) where known, seams and the zero point"""
+    colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    figure, axis = plt.subplots(figsize=(8, 5))
+    data = xsec.data
+    for index, part in enumerate(parts):
+        color = colors[index % len(colors)]
+        axis.axvspan(part.low, part.high, color=color, alpha=0.08)
+        if part.full is not None:
+            full = part.full[(part.full[:, 0] > 0.0) & (part.full[:, 1] > 0.0)]
+            axis.plot(full[:, 0], full[:, 1], '-', color=color, linewidth=0.8, alpha=0.6, label=f'{part.source} (all data)')
+        used = data[(data[:, 0] >= part.low) & (data[:, 0] <= part.high) & (data[:, 1] > 0.0)]
+        axis.plot(used[:, 0], used[:, 1], 'o', color=color, markersize=4, label=f'{part.source}: {part.low:g}-{part.high:g} eV')
+    for left, right in itertools.pairwise(parts):
+        axis.axvline(0.5 * (left.high + right.low), color='black', linewidth=0.6, linestyle=':')
+        if left.full is not None and right.full is not None:
+            energy, relative, how = seam_mismatch(left.full, right.full, left.high, right.low)
+            axis.annotate(
+                f'seam: {relative:+.1%}\n({how})',
+                xy=(energy, float(np.interp(energy, data[:, 0], data[:, 1]))),
+                xytext=(10, -30),
+                textcoords='offset points',
+                fontsize='small',
+                arrowprops={'arrowstyle': '->', 'linewidth': 0.6},
+            )
+    zero = str(xsec.provenance.extra.get('* Zero at', ''))
+    if zero:
+        energy = float(zero.split(' ', maxsplit=1)[0])
+        axis.axvline(energy, color='red', linewidth=0.8, linestyle='--', label=f'σ = 0 at {zero}')
+    covered = data[data[:, 1] > 0.0]
+    axis.plot(covered[:, 0], covered[:, 1], '-', color='black', linewidth=0.6, alpha=0.5, label='dataset')
+    axis.set_xscale('log')
+    axis.set_yscale('log')
+    axis.set_xlabel('collision energy E [eV]')
+    axis.set_ylabel('cross-section σ [m²]')
+    axis.set_title(title, fontsize='medium')
+    axis.grid(True, which='both', alpha=0.3)
+    axis.legend(fontsize='x-small')
+    figure.tight_layout()
+    return figure

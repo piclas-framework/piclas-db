@@ -70,6 +70,9 @@ class RecipeError(Exception):
     """Invalid recipe"""
 
 
+ALL_DOWNLOADS = '*'  # 'source: lxcat': the processes of all LXCat downloads in the store
+
+
 @dataclass
 class CrossSectionSelection:
     source: Requirement
@@ -110,9 +113,11 @@ class Recipe:
 
     @property
     def requirements(self) -> list[Requirement]:
+        """Original files of the recipe ('source: lxcat' selections are found per process, not as one file)"""
         unique: dict[str, Requirement] = {}
         for selection in [*self.cross_sections, *self.levels, *self.literature]:
-            unique.setdefault(str(selection.source), selection.source)
+            if selection.source.dataset != ALL_DOWNLOADS:
+                unique.setdefault(str(selection.source), selection.source)
         for literature in self.literature:
             for part, _ in literature.parts:
                 unique.setdefault(str(part), part)
@@ -156,9 +161,12 @@ def parse_recipe(text: str, path: str) -> Recipe:
         wrong = [value for value in types.values() if value not in KINDS]
         if wrong:
             raise RecipeError(f'{context}: unknown kind(s) {", ".join(wrong)} (allowed: {", ".join(KINDS)})')
+        all_downloads = str(entry.get('source', '')).strip('/') == 'lxcat'
+        if all_downloads and not entry.get('database'):
+            raise RecipeError(f'{context}: "source: lxcat" (all LXCat downloads in the store) needs "database"')
         recipe.cross_sections.append(
             CrossSectionSelection(
-                source=requirement(entry, context),
+                source=Requirement('lxcat', ALL_DOWNLOADS) if all_downloads else requirement(entry, context),
                 species=str(entry['species']),
                 database=entry.get('database'),
                 pair=entry.get('pair'),

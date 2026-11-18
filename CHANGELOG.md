@@ -3,6 +3,26 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.27.0
+
+* Combined datasets made visible: `build --plot-parts DIR`, `plot --parts` (parts, ranges, full source data from the store, seams,
+  zero point) and `plot --explain SOURCE ...` (which source every point of an existing dataset comes from, with the recipe entry that
+  rebuilds it; `SpeciesDatabase.h5` H2Ion1-electron-electron: Yoon Table 12 16–25 eV, Table 13 30–1000 eV, σ = 0 at 15.4 eV)
+* Seams compared between the sources (same energy, or extrapolation), not as the rise between neighbouring points (Yoon: −1.4 % at
+  30 eV instead of +22.5 %)
+* `docs/literature.md`: why total and partial ionization are combined
+
+## 0.26.0
+
+* LXCat XML and ZIP downloads (`docs/design/lxcat-downloads.md`): XML parser into the same model as the TXT, canonical forms for
+  process and parameters; a ZIP with TXT and XML is checked process by process on import (any difference stops the import) and
+  stored as one original file; XML-only and ZIP files can be built from, plotted and compared; builds from TXT, XML and ZIP are
+  identical (checked with a ZIP from LXCat, Biagi-v7.1 + Phelps, Ar)
+* Growing downloads: `source: lxcat` with `database` and `species` uses the processes of all LXCat downloads in the store (union;
+  duplicates once; newest update time wins; conflicting data stop the build); `processes:` must all be found; `import` reports what
+  a download adds
+* `LXCat` provenance: process and parameters in canonical form (`Ar+` for `Ar^+`, numbers with %g)
+
 ## 0.25.0
 
 * User identity like git: `user.name` and `user.email` (configuration or `$PICLAS_DB_USER_NAME`/`$PICLAS_DB_USER_EMAIL`) are required

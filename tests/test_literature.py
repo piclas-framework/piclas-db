@@ -165,7 +165,7 @@ def add_rows(tmp_path: pathlib.Path, name: str, rows: str) -> pathlib.Path:
     return record_file
 
 
-def test_combined_parts(store: Store, tmp_path: pathlib.Path) -> None:
+def test_combined_parts(store: Store, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main(['literature', 'add', str(entered(tmp_path))]) == 0  # total-ionization: 16, 20, 50, 100 eV
     assert main(['literature', 'add', str(add_rows(tmp_path, 'partial', '30,0.60\n50,0.80\n100,0.85\n1000,0.20\n'))]) == 0
     recipe = tmp_path / 'recipe.yaml'
@@ -190,6 +190,22 @@ def test_combined_parts(store: Store, tmp_path: pathlib.Path) -> None:
     assert np.allclose(xsec.data[1:, 1], np.array([0.03, 0.28, 0.60, 0.80, 0.85, 0.20]) * 1e-20)
     assert 'total-ionization: 15-25 eV' in str(xsec.provenance.extra['* Parts']) and '15.4 eV' in str(xsec.provenance.extra['* Zero at'])
     assert 'literature-unreviewed' in [finding.rule for finding in run_checks(read_database(output))]
+
+    # visualization: while building, of a built file (with and without the store), and the parts of a dataset found from its numbers
+    assert main(['build', str(recipe), '-o', str(output), '--offline', '--allow-unreviewed', '--force', '--plot-parts', str(tmp_path / 'parts')]) == 0
+    assert (tmp_path / 'parts' / 'H2-electron_REACTION_H2Ion1-electron-electron.png').stat().st_size > 1000
+    capsys.readouterr()
+    assert main(['plot', str(output), '--parts', '-o', str(tmp_path / 'parts.png')]) == 0
+    assert '2 parts' in capsys.readouterr().out and (tmp_path / 'parts.png').is_file()
+    assert main(['plot', str(output), '--parts', '--store', str(tmp_path / 'empty-store'), '-o', str(tmp_path / 'ranges.png')]) == 0
+    assert 'ranges only' in capsys.readouterr().out
+    arguments = ['plot', str(output), '--pair', 'H2-electron', '--key', 'H2Ion1', '-o', str(tmp_path / 'explained.png')]
+    assert main([*arguments, '--explain', 'literature/test-2008/total-ionization', 'literature/test-2008/partial']) == 0
+    out = capsys.readouterr().out
+    assert 'range: [16, 20]' in out and 'range: [30, 1000]' in out and 'zero_at: 15.4' in out  # the recipe entry, found from the numbers
+    assert main([*arguments, '--explain', 'literature/test-2008/missing']) == 1
+    assert main(['plot', str(tmp_path / 'combined.h5'), '--explain', 'literature/test-2008/partial', '-o', str(tmp_path / 'x.png')]) == 0  # one dataset only
+    assert main(['plot', str(output), '--parts', '--pair', 'Ar-electron']) == 1  # no combined dataset for this pair
 
     for text, message in (
         ('  - parts:\n      - {source: literature/a/b, range: [1, 5]}\n      - {source: literature/a/c, range: [4, 9]}\n', 'overlap'),

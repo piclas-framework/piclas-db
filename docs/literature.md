@@ -145,13 +145,35 @@ literature:
     key: H2Ion1-electron-electron
 ```
 
-The ranges must not overlap; every part must have data in its range. `build` reports the jump of the cross-section at every seam, so
-that a mismatch between two sources does not go unnoticed. The dataset carries the citations of all parts, `* Parts` with the ranges,
+The ranges must not overlap; every part must have data in its range. `build` reports how well the two sources agree at every seam
+(at the same energy where one source extends into the range of the other, otherwise against an extrapolation), so that a mismatch
+between two sources does not go unnoticed. The dataset carries the citations of all parts, `* Parts` with the ranges,
 `* Zero at` and the review of every part; `check` warns if one part is not reviewed.
+
+**Why combine?** The reaction e + H₂ → H₂⁺ + 2e needs the *partial* cross-section for H₂⁺ (Yoon Table 13, column H₂⁺), not the
+*total* ionization (Table 12 = H₂⁺ + H⁺, the H⁺ part is a reaction of its own). Table 13 starts at 30 eV; below 25 eV the paper
+recommends the total cross-section and states that dissociative ionization contributes less than 1 % there, so total ≈ H₂⁺
+(Sec. 9). Table 12 is used only where Table 13 has no values; at the seam both sources are compared at the same energy (30 eV:
+−1.4 %, the H⁺ part).
+
+### Seeing the parts
+
+```bash
+piclas-db build recipe.yaml -o database.h5 --plot-parts plots/     # while building: one plot per combined dataset
+piclas-db plot database.h5 --parts                                    # a built file: parts from its provenance (* Parts)
+piclas-db plot SpeciesDatabase.h5 --pair H2-electron --key H2Ion1-electron-electron \
+    --explain literature/yoon-2008/table12-c1 literature/yoon-2008/table13-c1   # a file without provenance: parts from the numbers
+```
+
+The plots show every part in its colour and energy range, the complete data of each source (thin line, from the store), the seams
+with the agreement of the sources there, and the zero point. `--explain` finds for every point of an existing dataset the source
+with the same energy and value (float32 precision), prints the ranges and the recipe entry that rebuilds the dataset, and lists the
+points that come from none of the sources. For `SpeciesDatabase.h5`: 16–25 eV from Table 12 (19 points), 30–1000 eV from Table 13
+(39 points), and σ = 0 at 15.4 eV.
 
 This reproduces `H2-electron/REACTION/H2Ion1-electron-electron` of `SpeciesDatabase.h5`: Yoon Table 12 (16–25 eV) and Table 13,
 column H₂⁺ (30–1000 eV) give the same 58 values (to the float32 precision of the database); the database starts with σ = 0 at
-**15.4 eV**, while the paper gives 15.426 eV as ionization potential (seam 25 → 30 eV: +22.5 %, total vs. partial values).
+**15.4 eV**, while the paper gives 15.426 eV as ionization potential.
 
 ## Use in recipes
 

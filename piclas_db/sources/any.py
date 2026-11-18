@@ -16,6 +16,7 @@
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import pathlib
+import zipfile
 from typing import Optional, Union
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -25,7 +26,7 @@ from piclas_db.build import BuildError, lxcat_database, nist_database
 from piclas_db.model import Database
 from piclas_db.readers import DatabaseReadError, read_database
 from piclas_db.sources.identify import read_text
-from piclas_db.sources.lxcat import is_lxcat
+from piclas_db.sources.lxcat import is_lxcat, is_lxcat_xml, load_lxcat
 from piclas_db.sources.nist import is_nist_levels
 # ==================================================================================================================================
 
@@ -37,10 +38,12 @@ def read_any(path: Union[str, pathlib.Path], species: Optional[str] = None) -> D
         return read_database(path)
     if not path.is_file():
         raise DatabaseReadError(f'file not found: {path}')
-    text = read_text(path)
     try:
-        if text is not None and is_lxcat(text):
-            return lxcat_database(text, str(path))
+        if zipfile.is_zipfile(path):
+            return lxcat_database(load_lxcat(path), str(path))
+        text = read_text(path)
+        if text is not None and (is_lxcat(text) or is_lxcat_xml(text)):
+            return lxcat_database(load_lxcat(path), str(path))
         if text is not None and is_nist_levels(text):
             return nist_database(text, str(path), species)
     except (ValueError, BuildError) as e:

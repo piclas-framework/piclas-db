@@ -39,7 +39,7 @@ from piclas_db.model import CrossSection, Database
 from piclas_db.recipe import CrossSectionSelection, LevelSelection, Recipe
 from piclas_db.resolve import Requirement
 from piclas_db.sources.identify import database_slug, slug
-from piclas_db.sources.lxcat import parse_lxcat
+from piclas_db.sources.lxcat import canonical_process, load_lxcat
 from piclas_db.store import Store, StoreEntry
 # ==================================================================================================================================
 
@@ -101,7 +101,8 @@ def lxcat_header(xsec: CrossSection) -> dict[str, str]:
 
 
 def fingerprint(species: str, process: str, updated: str) -> tuple[str, str, str]:
-    return species.replace(' ', ''), process.replace(' ', ''), updated.strip()
+    """Species, process (canonical: TXT and XML spelling alike) and update time of an LXCat process"""
+    return species.replace(' ', ''), canonical_process(process).replace(' ', ''), updated.strip()
 
 
 def lxcat_index(store: Store) -> dict[tuple[str, str, str], tuple[str, StoreEntry]]:
@@ -111,7 +112,7 @@ def lxcat_index(store: Store) -> dict[tuple[str, str, str], tuple[str, StoreEntr
         if entry.meta.get('provider') != 'lxcat' or entry.meta.get('kind') != 'cross-sections':
             continue
         try:
-            parsed = parse_lxcat(entry.path.read_text(encoding='utf-8', errors='replace'))
+            parsed = load_lxcat(entry.path)
         except (OSError, ValueError):
             continue
         for process in parsed.processes:

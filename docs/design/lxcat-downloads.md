@@ -1,6 +1,9 @@
 # Design: LXCat downloads in TXT and XML, combined databases and growing downloads
 
-Status: proposal (piclas-db 0.25.0), to be implemented once sample downloads (ZIP with TXT and XML) are available.
+Status: implemented in piclas-db 0.26.0 (sections 1–3). Checked with a ZIP from LXCat (Biagi-v7.1 + Phelps, Ar, 18 Nov 2026):
+TXT and XML contain the same 10 processes with identical tables, and the databases built from the TXT, the XML and the ZIP are
+identical (data and every attribute apart from the stored source file). LXCat marks its XML as *under development*; a ZIP is
+therefore read from its TXT, and the XML is the independent check.
 
 ## Requirements
 

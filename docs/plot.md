@@ -34,3 +34,8 @@ Examples with existing files:
   eV (energies in cm⁻¹ instead of K)
 
 `piclas-db diff` also accepts original downloads, e.g. `piclas-db diff lxcat_download.txt database.h5`.
+
+## Combined datasets
+
+`plot --parts` shows datasets built from several extractions (recipe `parts`), `plot --explain SOURCE ...` finds the parts of an
+existing dataset from its numbers; `build --plot-parts DIR` writes the plots while building. See [literature.md](literature.md#seeing-the-parts).

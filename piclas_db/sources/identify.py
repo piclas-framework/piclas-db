@@ -18,6 +18,7 @@
 import datetime
 import pathlib
 import re
+import zipfile
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
@@ -25,7 +26,7 @@ from typing import Optional
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.sources.lxcat import is_lxcat, parse_lxcat, validate
+from piclas_db.sources.lxcat import LXCatFile, compare, is_lxcat, is_lxcat_xml, parse_lxcat, parse_lxcat_xml, validate, zip_texts
 from piclas_db.sources.nist import is_nist_levels, parse_nist_levels
 # ==================================================================================================================================
 
@@ -60,6 +61,46 @@ def read_text(path: pathlib.Path) -> Optional[str]:
     return raw.decode('utf-8', errors='replace')
 
 
+def lxcat_identified(parsed: LXCatFile, details: dict[str, object]) -> Identified:
+    """Store location and meta data of an LXCat cross-section download (TXT, XML or both in a ZIP)"""
+    problems = validate(parsed)
+    if problems:
+        raise IdentifyError('invalid LXCat data: ' + '; '.join(problems))
+    databases = sorted({database_slug(process.database) for process in parsed.processes})
+    targets = sorted({process.target for process in parsed.processes})
+    return Identified(
+        provider='lxcat',
+        kind='cross-sections',
+        dataset='+'.join(databases) + '/' + '+'.join(slug(target) for target in targets),
+        species=targets,
+        retrieved=parsed.generated,
+        details={
+            **details,
+            'databases': [{'name': d.name, 'permlink': d.permlink} for d in parsed.databases],
+            'references': parsed.references,
+            'processes': dict(Counter(f'{process.species}: {process.type}' for process in parsed.processes)),
+        },
+    )
+
+
+def identify_lxcat_zip(path: pathlib.Path) -> Identified:
+    """ZIP downloaded from LXCat with TXT and/or XML: both are read and must contain exactly the same data"""
+    try:
+        texts = zip_texts(path)
+        parsed = {kind: (parse_lxcat(text) if kind == 'txt' else parse_lxcat_xml(text)) for kind, text in texts.items()}
+    except (ValueError, zipfile.BadZipFile) as e:
+        raise IdentifyError(f'LXCat ZIP cannot be read: {e}') from e
+    if not parsed:
+        raise IdentifyError('ZIP without LXCat TXT or XML file (use --custom NAME to store other data)')
+    details: dict[str, object] = {'format': 'zip', 'contents': sorted(parsed)}
+    if len(parsed) == 2:
+        differences = compare(parsed['txt'], parsed['xml'])
+        if differences:
+            raise IdentifyError('TXT and XML in the ZIP differ: ' + '; '.join(differences[:5]) + (f' (and {len(differences) - 5} more)' if len(differences) > 5 else ''))
+        details['txt_xml'] = f'identical ({len(parsed["txt"].processes)} processes)'
+    return lxcat_identified(parsed.get('txt') or parsed['xml'], details)
+
+
 def identify(
     path: pathlib.Path,
     species: Optional[str] = None,
@@ -78,9 +119,19 @@ def identify(
     if custom:
         return Identified(provider='custom', kind='custom', dataset=slug(custom), species=[species] if species else [])
 
+    if zipfile.is_zipfile(path):
+        return identify_lxcat_zip(path)
+
     text = read_text(path)
     if text is None:
         raise IdentifyError('binary file, not an LXCat or NIST ASD download (use --custom NAME to store other data)')
+
+    if is_lxcat_xml(text):
+        try:
+            parsed = parse_lxcat_xml(text)
+        except ValueError as e:
+            raise IdentifyError(f'LXCat XML cannot be read: {e}') from e
+        return lxcat_identified(parsed, {'format': 'xml'})
 
     if is_lxcat(text):
         try:
@@ -96,23 +147,7 @@ def identify(
                 retrieved=parsed.generated,
                 details={'databases': [{'name': d.name, 'permlink': d.permlink} for d in parsed.databases], 'references': parsed.references},
             )
-        problems = validate(parsed)
-        if problems:
-            raise IdentifyError('invalid LXCat data: ' + '; '.join(problems))
-        databases = sorted({database_slug(process.database) for process in parsed.processes})
-        targets = sorted({process.target for process in parsed.processes})
-        return Identified(
-            provider='lxcat',
-            kind='cross-sections',
-            dataset='+'.join(databases) + '/' + '+'.join(slug(target) for target in targets),
-            species=targets,
-            retrieved=parsed.generated,
-            details={
-                'databases': [{'name': d.name, 'permlink': d.permlink} for d in parsed.databases],
-                'references': parsed.references,
-                'processes': dict(Counter(f'{process.species}: {process.type}' for process in parsed.processes)),
-            },
-        )
+        return lxcat_identified(parsed, {'format': 'txt'})
 
     if is_nist_levels(text):
         try:

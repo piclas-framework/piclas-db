@@ -73,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--offline', action='store_true', help='do not update the store from the private repository')
             sub.add_argument('--force', action='store_true', help='overwrite an existing output file')
             sub.add_argument('--allow-unreviewed', action='store_true', help='also use extractions from papers that have not been reviewed yet')
+            sub.add_argument('--plot-parts', metavar='DIR', help='write a plot of every dataset combined from several extractions into DIR')
             sub.add_argument(
                 '--layout',
                 choices=['species-database', 'xsec'],
@@ -158,6 +159,9 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--temperatures', default='1e3:1e5', help='temperature range for --rate: start:stop[:count] in K (default 1e3:1e5)')
             sub.add_argument('--label', nargs='+', help='legend labels, one per source (default: file names)')
             sub.add_argument('--list', action='store_true', help='list the collision pairs and species of the sources')
+            sub.add_argument('--parts', action='store_true', help='datasets combined from several extractions: parts, ranges, full source data, seams')
+            sub.add_argument('--explain', nargs='+', metavar='SOURCE', help='which of these sources (extractions in the store or files) each point of one dataset (--pair, --key) comes from')
+            sub.add_argument('--store', help='local store for the source data of --parts (default: $PICLAS_DB_STORE, configuration, ~/.local/share/piclas-db/store)')
             sub.add_argument('-o', '--output', default='piclas-db-plot.png', help='image file (.png, .pdf, .svg; default piclas-db-plot.png)')
         elif name == 'reservoir':
             sub.add_argument('database', nargs='?', help='database file (complete species database with MassIC)')

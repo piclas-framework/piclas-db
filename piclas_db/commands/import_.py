@@ -25,7 +25,9 @@ from piclas_db.sources.identify import IdentifyError, identify
 from piclas_db import config
 from piclas_db.git import GitError
 from piclas_db.resolve import store_status
-from piclas_db.store import Store, sha256
+from piclas_db.build import lxcat_index
+from piclas_db.sources.lxcat import fingerprint, load_lxcat
+from piclas_db.store import Store, StoreEntry, sha256
 # ==================================================================================================================================
 
 
@@ -42,6 +44,25 @@ def candidate_files(args: argparse.Namespace) -> list[tuple[pathlib.Path, bool]]
 
 def parse_date(text: Optional[str]) -> Optional[datetime.date]:
     return datetime.date.fromisoformat(text) if text else None
+
+
+def lxcat_news(store: Store, entry: StoreEntry) -> str:
+    """What a new LXCat download adds to the processes already in the store (downloads grow: Elastic first, Ionization later)"""
+    known: dict[tuple[str, str, str], set[str]] = {}
+    for process, _, other in lxcat_index(store):
+        if other.relative != entry.relative:
+            database, species, name, updated = fingerprint(process)
+            known.setdefault((database, species, name), set()).add(updated)
+    new = updated_count = present = 0
+    for process in load_lxcat(entry.path).processes:
+        database, species, name, updated = fingerprint(process)
+        if (database, species, name) not in known:
+            new += 1
+        elif updated not in known[(database, species, name)]:
+            updated_count += 1
+        else:
+            present += 1
+    return f'{new} new process(es), {updated_count} with a newer or other update time, {present} already in the store'
 
 
 def run(args: argparse.Namespace) -> int:
@@ -94,6 +115,8 @@ def run(args: argparse.Namespace) -> int:
                 failed += 1
                 continue
             print(f'  imported {path} -> {entry.relative} ({label})')
+            if identified.provider == 'lxcat' and identified.kind == 'cross-sections':
+                print(f'           {lxcat_news(store, entry)}')
         imported += 1
 
     print(f'{imported} imported, {existing} already in the store, {skipped} skipped, {failed} failed')

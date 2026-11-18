@@ -41,13 +41,14 @@ import numpy as np
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.model import CollisionPair, CrossSection, Database, Provenance, Reaction, Species, XSecKind
-from piclas_db.recipe import CrossSectionSelection, LevelSelection, LiteratureSelection, Recipe
+from piclas_db.recipe import ALL_DOWNLOADS, CrossSectionSelection, LevelSelection, LiteratureSelection, Recipe
 from piclas_db.reference import CM_TO_K, EV_TO_K
 from piclas_db.resolve import Origin, Requirement, Resolution
 from piclas_db.schema import Schema
-from piclas_db.sources.lxcat import LXCatFile, LXCatProcess, parse_lxcat
+from piclas_db.sources.identify import database_slug
+from piclas_db.sources.lxcat import LXCatFile, LXCatProcess, canonical_parameters, canonical_process, fingerprint, load_lxcat
 from piclas_db.sources.nist import parse_nist_levels
-from piclas_db.store import StoreEntry
+from piclas_db.store import Store, StoreEntry
 # ==================================================================================================================================
 
 RYDBERG_EV = 13.605693122990  # Rydberg energy in eV (CODATA 2022)
@@ -62,6 +63,8 @@ class BuildError(Exception):
 class BuildReport:
     added: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    files: list[StoreEntry] = field(default_factory=list)  # LXCat downloads used (also those found per process with 'source: lxcat')
+    combined: dict[str, list[tuple[str, np.ndarray]]] = field(default_factory=dict)  # dataset -> (part, all data of its source)
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -106,8 +109,9 @@ def excitation_kind(process: LXCatProcess) -> XSecKind:
 
 
 def info(process: LXCatProcess) -> str:
-    """LXCat header of the process, in the same form as written by the former create_xsec_db_lxcat.py"""
-    fields = {'SPECIES': process.species, 'PROCESS': process.process, 'PARAM.': process.parameters}
+    """LXCat header of the process, in the form of the former create_xsec_db_lxcat.py, with process and parameters in canonical
+    form, so that a TXT and an XML download of the same data give the same text"""
+    fields = {'SPECIES': process.species, 'PROCESS': canonical_process(process.process), 'PARAM.': canonical_parameters(process.parameters)}
     if process.comments:
         fields['COMMENT'] = ' '.join(process.comments)
     if process.updated:
@@ -128,29 +132,79 @@ def source_provenance(entry: StoreEntry) -> dict[str, object]:
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Cross-sections
 # ----------------------------------------------------------------------------------------------------------------------------------
-def select_processes(file: LXCatFile, selection: CrossSectionSelection) -> list[LXCatProcess]:
-    candidates = [process for process in file.processes if process.species.replace(' ', '') == selection.species.replace(' ', '')]
-    databases = sorted({process.database for process in candidates})
+Found = tuple[LXCatProcess, LXCatFile, StoreEntry]  # a process with its download and its file in the store
+
+
+def select_processes(found: list[Found], selection: CrossSectionSelection) -> list[Found]:
+    """Processes of one species and database; expected processes ('processes:') must all be there"""
+    candidates = [item for item in found if item[0].species.replace(' ', '') == selection.species.replace(' ', '')]
+    databases = sorted({item[0].database for item in candidates})
     if selection.database:
         databases = [name for name in databases if name.lower().startswith(selection.database.lower())]
     if not databases:
         raise BuildError(f'{selection.source}: no data for {selection.species!r}' + (f' in database {selection.database!r}' if selection.database else ''))
     if len(databases) > 1:
         raise BuildError(f'{selection.source}: {selection.species!r} is in several databases ({", ".join(databases)}); select one with "database"')
-    chosen = [process for process in candidates if process.database == databases[0]]
+    chosen = [item for item in candidates if item[0].database == databases[0]]
     if selection.processes:
-        chosen = [process for process in chosen if any(part in process.process for part in selection.processes)]
+        missing = [part for part in selection.processes if not any(part in item[0].process for item in chosen)]
+        if missing:
+            raise BuildError(
+                f'{selection.source}: no process {", ".join(repr(part) for part in missing)} for {selection.species!r} in {databases[0]}: download it from LXCat '
+                f'(piclas-db guide lxcat/{database_slug(databases[0])}/<species>) and import it'
+            )
+        chosen = [item for item in chosen if any(part in item[0].process for part in selection.processes)]
     return chosen
 
 
-def add_cross_sections(database: Database, selection: CrossSectionSelection, entry: StoreEntry, report: BuildReport) -> None:
-    file = parse_lxcat(entry.path.read_text(encoding='utf-8', errors='replace'))
-    processes = select_processes(file, selection)
-    first = processes[0]
+def lxcat_index(store: Store) -> list[Found]:
+    """Every process of every LXCat cross-section download in the store"""
+    found = []
+    for entry in store.entries():
+        if entry.meta.get('provider') == 'lxcat' and entry.meta.get('kind') == 'cross-sections':
+            file = load_lxcat(entry.path)
+            found.extend((process, file, entry) for process in file.processes)
+    return found
+
+
+def merge_downloads(found: list[Found], report: BuildReport, label: str) -> list[Found]:
+    """Processes of several downloads of the same database and species: union; the same process (fingerprint) once, from the newest
+    download; a newer update of a process replaces the older; the same fingerprint with different data is a conflict"""
+    by_process: dict[tuple[str, str, str], list[Found]] = {}
+    for item in found:
+        database, species, process, _ = fingerprint(item[0])
+        by_process.setdefault((database, species, process), []).append(item)
+    merged = []
+    for key, items in by_process.items():
+        newest_update = max(str(item[0].updated or '') for item in items)
+        current = [item for item in items if str(item[0].updated or '') == newest_update]
+        if len({str(item[0].updated or '') for item in items}) > 1:
+            older = sorted({str(item[0].updated or '') for item in items} - {newest_update})
+            report.notes.append(f'{label}: {key[2]}: updated {", ".join(older)} -> {newest_update}, the newest is used')
+        reference = current[0][0].data
+        conflicting = [item for item in current if item[0].data.shape != reference.shape or not np.array_equal(item[0].data, reference)]
+        if conflicting:
+            files = ', '.join(sorted({item[2].relative for item in current}))
+            raise BuildError(f'{label}: {key[2]} ({newest_update}) differs between downloads with the same update time ({files}); pin one with @sha256')
+        newest = max(current, key=lambda item: (str(item[2].meta.get('retrieved', '')), item[2].relative))
+        if len(current) > 1:
+            report.notes.append(f'{label}: {key[2]} in {len(current)} downloads (identical), taken from {newest[2].relative}')
+        merged.append(newest)
+    position = {id(item): index for index, item in enumerate(found)}
+    return sorted(merged, key=lambda item: position[id(item)])  # order of the downloads
+
+
+def add_cross_sections(database: Database, selection: CrossSectionSelection, found: list[Found], report: BuildReport) -> list[StoreEntry]:
+    """Cross-sections of one selection; returns the files used"""
+    chosen = select_processes(found, selection)
+    if selection.source.dataset == ALL_DOWNLOADS:
+        chosen = merge_downloads(chosen, report, f'{selection.database} {selection.species}')
+    first = chosen[0][0]
     pair_name = selection.pair or f'{piclas_name(first.target)}-{piclas_name(first.projectile)}'
     pair = database.collision_pairs.setdefault(pair_name, CollisionPair(name=pair_name))
 
-    for process in processes:
+    used: list[StoreEntry] = []
+    for process, file, entry in chosen:
         kind, group, key = classify(process, selection, report)
         if kind is None:
             continue
@@ -165,7 +219,10 @@ def add_cross_sections(database: Database, selection: CrossSectionSelection, ent
             continue
         provenance = Provenance(reference=reference(file, process.database), info=info(process), extra=source_provenance(entry))
         pair.cross_sections.append(CrossSection(kind=kind, key=key, data=process.data.copy(), group=group, threshold=value, provenance=provenance))
-        report.added.append(f'/Cross-Sections/{pair_name}/' + (f'{group}/' if group else '') + key)
+        report.added.append(f'/Cross-Sections/{pair_name}/' + (f'{group}/' if group else '') + key + ('' if selection.source.dataset != ALL_DOWNLOADS else f' (from {entry.relative})'))
+        if entry not in used:
+            used.append(entry)
+    return used
 
 
 def classify(process: LXCatProcess, selection: CrossSectionSelection, report: BuildReport) -> tuple[Optional[XSecKind], Optional[str], str]:
@@ -190,9 +247,8 @@ def classify(process: LXCatProcess, selection: CrossSectionSelection, report: Bu
     return kind, kind.value, ''
 
 
-def lxcat_database(text: str, path: str) -> Database:
-    """All processes of an LXCat download as a database (for plot and diff of original files)"""
-    file = parse_lxcat(text)
+def lxcat_database(file: LXCatFile, path: str) -> Database:
+    """All processes of an LXCat download (TXT, XML or ZIP) as a database (for plot and diff of original files)"""
     database = Database(path=path, schema=Schema.SPECIES_DATABASE)
     report = BuildReport()
     groups: dict[tuple[str, str], list[LXCatProcess]] = {}
@@ -280,11 +336,12 @@ def add_literature(database: Database, selection: LiteratureSelection, entries: 
         report.notes.append(f'{selection.pair}: {group + "/" if group else ""}{key} exists already, {selection.source} skipped')
         return
     parts = selection.parts or [(selection.source, None)]
-    pieces, records, statuses = [], [], []
+    pieces, records, statuses, full_data = [], [], [], []
     for requirement, limits in parts:
         entry = entries[str(requirement)]
         assert entry is not None
         data, record, status = literature_part(entry, str(requirement), allow_unreviewed)
+        full_data.append(data)
         if limits is not None:
             data = data[(data[:, 0] >= limits[0]) & (data[:, 0] <= limits[1])]
             if len(data) == 0:
@@ -293,10 +350,13 @@ def add_literature(database: Database, selection: LiteratureSelection, entries: 
         records.append((entry, record))
         statuses.append(status)
     data = np.vstack([piece for _, piece in pieces])
-    # seams between parts: the jump is reported, so that a mismatch between two sources does not go unnoticed
-    for (first, left), (second, right) in itertools.pairwise(pieces):
-        jump = (right[0, 1] - left[-1, 1]) / left[-1, 1] if left[-1, 1] > 0.0 else 0.0
-        report.notes.append(f'{name}: seam {left[-1, 0]:g} -> {right[0, 0]:g} eV between {first} and {second}, sigma {jump:+.1%}')
+    # seams between parts: how well the two sources agree there (not the rise of sigma between neighbouring points)
+    from piclas_db.plot import seam_mismatch  # noqa: PLC0415
+
+    for index, ((first, left), (second, right)) in enumerate(itertools.pairwise(pieces)):
+        _, relative, how = seam_mismatch(full_data[index], full_data[index + 1], float(left[-1, 0]), float(right[0, 0]))
+        report.notes.append(f'{name}: seam {left[-1, 0]:g} -> {right[0, 0]:g} eV between {first} and {second}: sources differ by {relative:+.1%} ({how})')
+    report.combined[name] = [(str(requirement), full) for (requirement, _), full in zip(parts, full_data, strict=True)]
     if selection.zero_at is not None and data[0, 0] > selection.zero_at:
         data = np.vstack([[selection.zero_at, 0.0], data])
     review = 'approved' if all(status == 'approved' for status in statuses) else ('pending' if 'pending' in statuses else statuses[0])
@@ -321,7 +381,7 @@ def add_literature(database: Database, selection: LiteratureSelection, entries: 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Build
 # ----------------------------------------------------------------------------------------------------------------------------------
-def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool = False) -> tuple[Database, BuildReport]:
+def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool = False, store: Optional[Store] = None) -> tuple[Database, BuildReport]:
     """Assemble the database; all requirements must have been resolved to files in the store"""
     missing = [str(resolution.requirement) for resolution in resolutions if resolution.origin is Origin.MANUAL or resolution.entry is None]
     if missing:
@@ -330,10 +390,21 @@ def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool 
 
     database = Database(path=recipe.path, schema=Schema.SPECIES_DATABASE)
     report = BuildReport()
+    index: Optional[list[Found]] = None
     for selection in recipe.cross_sections:
-        entry = entries[str(selection.source)]
-        assert entry is not None
-        add_cross_sections(database, selection, entry, report)
+        if selection.source.dataset == ALL_DOWNLOADS:
+            if store is None:
+                raise BuildError('"source: lxcat" needs the store')
+            index = index if index is not None else lxcat_index(store)
+            found = index
+        else:
+            entry = entries[str(selection.source)]
+            assert entry is not None
+            file = load_lxcat(entry.path)
+            found = [(process, file, entry) for process in file.processes]
+        for used in add_cross_sections(database, selection, found, report):
+            if used not in report.files:
+                report.files.append(used)
     for literature_selection in recipe.literature:
         add_literature(database, literature_selection, entries, report, allow_unreviewed)
     for level_selection in recipe.levels:
