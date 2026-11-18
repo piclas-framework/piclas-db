@@ -123,6 +123,8 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
         elif name == 'push':
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
+        elif name == 'config':
+            sub.add_argument('--init', action='store_true', help='write a commented template of the configuration file')
         elif name == 'store':
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
             sub.add_argument('--verify', action='store_true', help='check that every file still matches its sha256')

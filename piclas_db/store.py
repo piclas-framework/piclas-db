@@ -52,8 +52,13 @@ META_SUFFIX = '.meta.yaml'
 
 
 def default_store() -> pathlib.Path:
+    """$PICLAS_DB_STORE, then 'store' in the configuration file, then $XDG_DATA_HOME/piclas-db/store"""
+    from piclas_db import config  # noqa: PLC0415
+
     if os.environ.get('PICLAS_DB_STORE'):
         return pathlib.Path(os.environ['PICLAS_DB_STORE']).expanduser()
+    if config.value('store'):
+        return pathlib.Path(str(config.value('store'))).expanduser()
     data_home = os.environ.get('XDG_DATA_HOME') or str(pathlib.Path.home() / '.local' / 'share')
     return pathlib.Path(data_home) / 'piclas-db' / 'store'
 

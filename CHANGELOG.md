@@ -3,6 +3,14 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.22.0
+
+* Configuration file (`piclas_db/config.py`, documented in `docs/configuration.md`): `~/.config/piclas-db/config.yaml` or
+  `$PICLAS_DB_CONFIG` with `store`, `mirror` and defaults for the options of every command; command line and environment variables
+  take precedence; unknown entries are reported
+* `piclas-db config` shows the file and the settings in effect, `--init` writes a commented template
+* Tests run independently of the configuration of the person running them
+
 ## 0.21.0
 
 * `piclas-db extract --redo PAPER/DATASET[@SHA]` runs a stored extraction again with the current version and compares it point by

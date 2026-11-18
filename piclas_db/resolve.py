@@ -73,8 +73,11 @@ class Resolution:
 
 
 def mirror_url(argument: Optional[str], store: Store) -> Optional[str]:
-    """Private repository: command line, then $PICLAS_DB_MIRROR, then the remote of an existing clone"""
-    return argument or os.environ.get('PICLAS_DB_MIRROR') or (git.remote_url(store.root) if store.is_repository else None)
+    """Private repository: command line, then $PICLAS_DB_MIRROR, then 'mirror' in the configuration file, then the remote of an
+    existing clone"""
+    from piclas_db import config  # noqa: PLC0415
+
+    return argument or os.environ.get('PICLAS_DB_MIRROR') or config.value('mirror') or (git.remote_url(store.root) if store.is_repository else None)
 
 
 def find(store: Store, requirement: Requirement) -> Optional[StoreEntry]:

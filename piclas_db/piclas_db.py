@@ -13,6 +13,7 @@
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import argparse
 import sys
 from typing import Optional
 
@@ -20,6 +21,7 @@ from typing import Optional
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.args_parser import build_parser
+from piclas_db import config
 from piclas_db.commands import COMMANDS
 # ==================================================================================================================================
 
@@ -34,7 +36,25 @@ def main(argv: Optional[list[str]] = None) -> int:
         parser.print_help()
         return 0
 
+    # Defaults from the configuration file for options not given on the command line
+    try:
+        for warning in config.apply(args, subparsers(parser)[args.command]):
+            print(f'WARNING: {warning}', file=sys.stderr)
+    except config.ConfigError as e:
+        print(f'ERROR: {e}')
+        return 1
     return COMMANDS[args.command].run(args)
+
+
+def subparsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    """Sub-parser of every command (to tell options given on the command line from defaults)"""
+    for action in parser._actions:  # noqa: SLF001
+        if isinstance(action, argparse._SubParsersAction):  # noqa: SLF001
+            choices = dict(action.choices)
+            for sub in choices.values():
+                sub._piclas_db_commands = tuple(choices)  # type: ignore[attr-defined]  # noqa: SLF001
+            return choices
+    return {}
 
 
 def entry_point() -> None:
