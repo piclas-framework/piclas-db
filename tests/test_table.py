@@ -154,3 +154,14 @@ def test_command(paper: pathlib.Path, tmp_path: pathlib.Path, monkeypatch: pytes
     assert main(['extract', 'test-2008', '--page', '3', '--table', '2', '-o', str(output)]) == 0
     assert 'kept as raw table' in capsys.readouterr().out
     assert main(['extract', 'test-2008', '--page', '3', '--table', '9', '-o', str(output)]) == 1
+
+
+def test_redo_table(paper: pathlib.Path, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    assert main(['import', str(paper), '--literature', 'test-2008', '--doi', '10.0000/test']) == 0
+    output = tmp_path / 'work'
+    assert main(['extract', 'test-2008', '--page', '1-2', '--table', '3', '-o', str(output)]) == 0
+    assert main(['literature', 'add', str(output / 'table3-c1.extraction.yaml')]) == 0
+    capsys.readouterr()
+    assert main(['extract', '--redo', 'test-2008/table3-c1', '-o', str(tmp_path / 'redo')]) == 0
+    assert '6 points, identical' in capsys.readouterr().out

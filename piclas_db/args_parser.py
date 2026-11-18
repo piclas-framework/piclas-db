@@ -89,8 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--notes', help='review: notes')
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
         elif name == 'extract':
-            sub.add_argument('paper', help='paper in the store (key given to import --literature)')
-            sub.add_argument('--page', required=True, help='page of the PDF (1-based); for tables also ranges such as 14-15 (continued tables)')
+            sub.add_argument('paper', nargs='?', help='paper in the store (key given to import --literature)')
+            sub.add_argument('--page', help='page of the PDF (1-based); for tables also ranges such as 14-15 (continued tables)')
+            sub.add_argument('--redo', metavar='PAPER/DATASET[@SHA]', help='run a stored extraction again with this version and compare it with the stored one')
             sub.add_argument('--table', help='extract table <number> (e.g. 12) instead of a figure')
             sub.add_argument('--ocr', action='store_true', help='with --table: read the page by OCR even if it has a text layer')
             sub.add_argument('--raster', action='store_true', help='treat the page as a scan (default: automatic for pages without vector graphics)')

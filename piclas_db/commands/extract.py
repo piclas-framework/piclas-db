@@ -16,8 +16,9 @@
 import argparse
 import importlib.metadata
 import itertools
+import operator
 import pathlib
-from typing import Optional
+from typing import Any, Optional
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Third-party libraries
@@ -31,6 +32,7 @@ import yaml
 from piclas_db.extract.raster import RESOLUTION, SCALE, extract_raster, grid_image, is_scanned, raster_figure_frames
 from piclas_db.extract.table import Table, extract_table, header_unit, parse_number
 from piclas_db.extract.vector import ExtractError, extract, figure_frames, require_pdfplumber, review_image, tesseract_version, values
+from piclas_db.common.common_vars import Common
 from piclas_db.literature import LiteratureError, papers, template
 from piclas_db.sources.identify import slug
 from piclas_db.store import Store, StoreEntry
@@ -57,9 +59,22 @@ def pairs(text: Optional[str], separator: str) -> Optional[list[tuple[float, flo
         return None
     result = []
     for item in text.split(',' if separator == '=' else ';'):
-        first, second = item.split(separator)
-        result.append((float(first), float(second)))
+        parts = item.split(separator)
+        if len(parts) != 2:
+            raise ValueError(f'"{item.strip()}" is not of the form pt=value (calibration points: "142.1=4,157.1=8,...", every point written out)')
+        result.append((float(parts[0]), float(parts[1])))
     return result
+
+
+COMMAND_OPTIONS = (
+    'page', 'frame', 'figure', 'name', 'table', 'ocr', 'raster', 'symbol_radius', 'frame_box', 'x_points', 'y_points', 'seeds',
+    'x_labels', 'y_labels', 'x_scale', 'y_scale', 'x_unit', 'x_quantity', 'mass_amu', 'target_mass_amu', 'energy_frame', 'y_unit', 'by',
+)  # fmt: skip
+
+
+def command_of(args: argparse.Namespace) -> dict[str, object]:
+    """Options of this extraction, stored in the record so that 'extract --redo' can run it again"""
+    return {option: getattr(args, option) for option in COMMAND_OPTIONS if getattr(args, option, None) not in (None, False)}
 
 
 def page_list(text: str) -> list[int]:
@@ -102,7 +117,7 @@ def write_table(args: argparse.Namespace, paper: StoreEntry, table: Table, outpu
         record['environment']['pdfplumber'] = pdfplumber.__version__
         if table.source == 'ocr':
             record['environment']['tesseract'] = tesseract_version() or 'unknown'
-        record['parameters'] = {'pages': table.pages, 'table': table.number, 'column': column, 'header': table.header[column]}
+        record['parameters'] = {'pages': table.pages, 'table': table.number, 'column': column, 'header': table.header[column], 'command': command_of(args)}
         record['result'] = {'rows': len(rows)}
         lines = [f'# table {table.number}, column {column}: {table.header[column]}', 'energy,cross_section'] + [f'{parse_number(e)!r},{parse_number(v)!r}' for e, v in rows]
         (output / f'{series}.csv').write_text('\n'.join(lines) + '\n')
@@ -112,8 +127,97 @@ def write_table(args: argparse.Namespace, paper: StoreEntry, table: Table, outpu
     print(f'Check the records against the paper, then: piclas-db literature add {output}/<series>.extraction.yaml')
 
 
+def legacy_command(record: dict) -> dict[str, object]:
+    """Options of an extraction stored before 0.21.0 (no 'command' in the record), as far as the record tells them"""
+    parameters, source, columns = record.get('parameters') or {}, record.get('source') or {}, record.get('columns') or {}
+    energy = columns.get('energy') or {}
+    command: dict[str, object] = {
+        'x_unit': energy.get('unit', 'eV'),
+        'y_unit': (columns.get('cross_section') or {}).get('unit', '1e-16 cm^2'),
+        **{key: energy[field] for key, field in (('mass_amu', 'mass_amu'), ('target_mass_amu', 'target_mass_amu'), ('energy_frame', 'frame')) if field in energy},
+    }
+    if 'table' in parameters:
+        command.update({'page': ','.join(str(p) for p in parameters.get('pages', [])), 'table': str(parameters['table']), 'ocr': record.get('method') == 'ocr'})
+        command['name'] = str(record['name']).rsplit('-c', 1)[0]
+        return command
+    command.update({'page': str(parameters.get('page')), 'frame': int(parameters.get('frame', 0)), 'figure': source.get('figure')})
+    command['name'] = str(record['name'])[: -len(slug(str(parameters.get('series', '')))) - 1] if parameters.get('series') else None
+    for key in ('frame_box', 'seeds', 'x_points', 'y_points'):
+        if parameters.get(f'{key}_pt' if key == 'frame_box' else key):
+            command[key] = parameters.get(f'{key}_pt' if key == 'frame_box' else key)
+    for axis in ('x', 'y'):
+        calibration = (record.get('calibration') or {}).get(axis) or {}
+        if calibration.get('labels_from') == 'given':
+            labels = sorted(calibration.get('labels', []), key=operator.itemgetter(0), reverse=axis == 'y')  # from the origin
+            command[f'{axis}_labels'] = ','.join(f'{value:g}' for _, value in labels)
+        command[f'{axis}_scale'] = calibration.get('scale')
+    return command
+
+
+def compare_tables(old: Any, new: Any) -> str:
+    """Point-by-point comparison of two extractions in axis units; relative changes only where the value is significant (values
+    near zero, e.g. a measured zero, would give meaningless percentages)"""
+    if len(old.energy) != len(new.energy):
+        return f'{len(old.energy)} -> {len(new.energy)} points'
+    if np.array_equal(new.energy, old.energy) and np.array_equal(new.cross_section, old.cross_section):
+        return f'{len(old.energy)} points, identical'
+    dx = float(np.max(np.abs(new.energy - old.energy)))
+    change = np.abs(new.cross_section - old.cross_section)
+    significant = np.abs(old.cross_section) > 0.01 * float(np.max(np.abs(old.cross_section)))
+    relative = float(np.max(change[significant] / np.abs(old.cross_section[significant]))) if np.any(significant) else 0.0
+    return f'{len(old.energy)} points, largest change {dx:.3g} in x and {float(np.max(change)):.3g} in y (axis units), {relative:.2%} relative'
+
+
+def redo(args: argparse.Namespace) -> int:
+    """Run a stored extraction again with this version of piclas-db and compare the result with the stored one"""
+    from piclas_db.literature import find_extraction, read_raw, validate  # noqa: PLC0415
+
+    store = Store(args.store)
+    try:
+        entry = find_extraction(store, args.redo)
+        record = entry.meta.get('extraction') or {}
+        if record.get('formula') or record.get('method') == 'manual':
+            raise LiteratureError(f'{args.redo} was entered by hand ({record.get("method")}): nothing to run again')
+        command = (record.get('parameters') or {}).get('command') or legacy_command(record)
+    except LiteratureError as e:
+        print(f'ERROR: {e}')
+        return 1
+    options = {option: getattr(args, option) for option in COMMAND_OPTIONS}
+    options.update({key: value for key, value in command.items() if key in COMMAND_OPTIONS})
+    rerun = argparse.Namespace(**{**vars(args), **options, 'paper': (record.get('source') or {}).get('paper'), 'redo': None, 'list': False})
+    print(f'Running {args.redo} again ({record.get("method")}, stored with {record.get("created", {}).get("tool")}) with piclas-db {Common().version}:')
+    if run(rerun) != 0:
+        return 1
+    output = pathlib.Path(args.output)
+    record_file = output / f'{record["name"]}.extraction.yaml'
+    if not record_file.is_file():
+        produced = sorted(path.name.removesuffix('.extraction.yaml') for path in output.glob('*.extraction.yaml'))
+        print(f'ERROR: the new run has no series {record["name"]} (found: {", ".join(produced) or "none"}); compare and add one of them by hand')
+        return 1
+    new_record = yaml.safe_load(record_file.read_text())
+    new_record['supersedes'] = {'dataset': entry.meta.get('dataset'), 'sha256': entry.meta.get('sha256'), 'created_with': record.get('created', {}).get('tool')}
+    for key in ('quantity', 'columns'):  # what the person entered stays (description, assignment, units, masses)
+        if record.get(key):
+            new_record[key] = record[key]
+    record_file.write_text(yaml.safe_dump(new_record, sort_keys=False, allow_unicode=True, width=1000))
+    new_table = read_raw((output / f'{record["name"]}.csv').read_text(encoding='utf-8'))
+    comparison = compare_tables(read_raw(entry.path.read_text(encoding='utf-8')), new_table)
+    print(f'Comparison with the stored extraction: {comparison}')
+    problems = validate(new_record, new_table)
+    if problems:
+        # e.g. records from before 0.19.0 without target mass: the rules of this version apply to the new record
+        print(f'Complete {record_file} first: ' + '; '.join(problems))
+    print(f'Store the new version (review pending, it supersedes the old one): piclas-db literature add {record_file}')
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     """Extract the data series of a vector figure, or a table, of a paper in the store into extraction records (pending review)"""
+    if getattr(args, 'redo', None):
+        return redo(args)
+    if not args.paper or not args.page:
+        print('ERROR: give PAPER and --page (or --redo PAPER/DATASET)')
+        return 1
     store = Store(args.store)
     try:
         known = papers(store)
@@ -187,7 +291,14 @@ def run(args: argparse.Namespace) -> int:
         record['calibration'] = {
             axis_name: {'scale': axis.scale, 'labels_from': axis.source, 'labels': [[round(p, 4), v] for p, v in axis.labels], 'residual': axis.residual} for axis_name, axis in (('x', figure.x), ('y', figure.y))
         }
-        record['parameters'] = {'page': figure.page, 'frame': args.frame, 'frame_pt': [round(v, 2) for v in figure.frame], 'series': series.name, 'kind': series.kind}
+        record['parameters'] = {
+            'page': figure.page,
+            'frame': args.frame,
+            'frame_pt': [round(v, 2) for v in figure.frame],
+            'series': series.name,
+            'kind': series.kind,
+            'command': command_of(args),
+        }
         if scanned:
             pixel = 1.0 / SCALE  # pt
             record['parameters'].update(
@@ -226,6 +337,6 @@ def run(args: argparse.Namespace) -> int:
         print(f'  {series.name:28s} {len(data):3d} points' + (f', {record["result"]["error_bars"]} error bars' if has_bars else '') + (f', {flags} flagged' if flags else '') + f' -> {output / name}.csv')
     review_image(path, figure, str(output / f'{prefix}-review.png'))
     print(f'Review image: {output / prefix}-review.png')
-    print('Check the units and quantity in the records (energy axis may be a velocity: --x-unit "a.u." --mass-amu ...), then:')
+    print('Check the units and quantity in the records (velocity axis: --x-unit "a.u." --mass-amu ... --target-mass-amu ...), then:')
     print(f'  piclas-db literature add {output}/<series>.extraction.yaml')
     return 0

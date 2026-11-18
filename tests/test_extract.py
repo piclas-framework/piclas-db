@@ -141,3 +141,43 @@ def test_command(figures: dict[str, pathlib.Path], tmp_path: pathlib.Path, monke
     assert np.allclose(data[:, 1], Y * 1.0e-20, atol=1.0e-23)
     assert main(['extract', 'unknown', '--page', '1']) == 1
     assert main(['extract', 'test-2025', '--page', '5', '-o', str(output)]) == 1
+
+
+def test_redo(figures: dict[str, pathlib.Path], tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    assert main(['import', str(figures['linear']), '--literature', 'test-2025', '--doi', '10.0000/test']) == 0
+    first = tmp_path / 'first'
+    assert main(['extract', 'test-2025', '--page', '1', '--name', 'fig', '--y-unit', 'A^2', '-o', str(first)]) == 0
+    record = yaml.safe_load((first / 'fig-square-open-black.extraction.yaml').read_text())
+    assert record['parameters']['command']['name'] == 'fig' and record['parameters']['command']['y_unit'] == 'A^2'
+    assert main(['literature', 'add', str(first / 'fig-square-open-black.extraction.yaml')]) == 0
+
+    # same version: identical; the new record supersedes the stored one and keeps what the person entered
+    capsys.readouterr()
+    again = tmp_path / 'again'
+    assert main(['extract', '--redo', 'test-2025/fig-square-open-black', '-o', str(again)]) == 0
+    assert 'identical' in capsys.readouterr().out
+    new_record = yaml.safe_load((again / 'fig-square-open-black.extraction.yaml').read_text())
+    assert new_record['supersedes']['dataset'] == 'test-2025/fig-square-open-black'
+
+    # record of an older version (no stored command): options taken from the record
+    store = Store(tmp_path / 'store')
+    entry = find_extraction(store, 'test-2025/fig-square-open-black')
+    del entry.meta['extraction']['parameters']['command']
+    store.update_meta(entry, 'drop command')
+    capsys.readouterr()
+    assert main(['extract', '--redo', 'test-2025/fig-square-open-black', '-o', str(tmp_path / 'legacy')]) == 0
+    assert 'identical' in capsys.readouterr().out
+
+    # errors: unknown dataset, entered by hand, series not found in the new run, missing paper and page
+    assert main(['extract', '--redo', 'test-2025/missing', '-o', str(tmp_path / 'x')]) == 1
+    entry.meta['extraction']['method'] = 'manual'
+    store.update_meta(entry, 'manual')
+    assert main(['extract', '--redo', 'test-2025/fig-square-open-black', '-o', str(tmp_path / 'x')]) == 1
+    assert 'entered by hand' in capsys.readouterr().out
+    entry.meta['extraction']['method'] = 'vector'
+    entry.meta['extraction']['name'] = 'fig-triangle'
+    store.update_meta(entry, 'other name')
+    assert main(['extract', '--redo', 'test-2025/fig-square-open-black', '-o', str(tmp_path / 'y')]) == 1
+    assert 'has no series' in capsys.readouterr().out
+    assert main(['extract']) == 1

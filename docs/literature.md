@@ -12,20 +12,30 @@ obtained, with which version of piclas-db, how accurate it is and whether it has
 piclas-db import Yoon2008.pdf --literature yoon-2008 --doi 10.1063/1.2838023 \
     --reference "J.-S. Yoon et al., J. Phys. Chem. Ref. Data 37, 913 (2008)"
 
-# 2. files for entering one table (or one column of a table)
-piclas-db literature template yoon-2008 ionization-h2plus --page "15 (927)" --table 13 -o work/
+# 2. read the data automatically: tables, vector figures, scanned figures (see extract.md)
+piclas-db extract yoon-2008 --page 15 --table 13 --by "Name" -o work/
+#    -> work/table13-c1.csv + work/table13-c1.extraction.yaml (one per data column), filled in
 
-# 3. enter the values exactly as printed in work/ionization-h2plus.csv, complete the record (units, who, what)
-# 4. store it: values and record are checked, the extraction is stored with review status "pending"
-piclas-db literature add work/ionization-h2plus.extraction.yaml
+# 3. store it: values and record are checked, the extraction is stored with review status "pending"
+piclas-db literature add work/table13-c1.extraction.yaml
 
-# 5. somebody compares the stored values with the paper and approves (or rejects) them
-piclas-db literature review yoon-2008/ionization-h2plus --approve --reviewer "Name" --notes "39 rows checked"
+# 4. somebody compares the stored values with the paper and approves (or rejects) them
+piclas-db literature review yoon-2008/table13-c1 --approve --reviewer "Name" --notes "39 rows checked"
 
 piclas-db literature list
 ```
 
-Data series of vector figures are read automatically with [`piclas-db extract`](extract.md), which writes the same files.
+`extract` fills the CSV and the record ([extract.md](extract.md)). Only a few things are entered by hand: who extracted the data
+(`--by`), what they are (`quantity.description` and the assignment in the record) and units that are not in the column header
+(`--x-unit`, `--y-unit`).
+
+**By hand** only where nothing can be read automatically: fit formulas (`literature template --formula`, see below) and data that
+`extract` does not find (e.g. very small open symbols in a poor scan):
+
+```bash
+piclas-db literature template yoon-2008 ionization-h2plus --page "15 (927)" --table 13 -o work/
+# enter the values exactly as printed in work/ionization-h2plus.csv, complete the record, then literature add as above
+```
 
 The values are stored as printed (e.g. in 10⁻¹⁷ cm²); the units in the record convert them to eV and m² when they are used. This
 keeps the comparison with the paper simple and makes unit errors visible in the record instead of hiding them in the numbers.

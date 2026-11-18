@@ -56,7 +56,7 @@ def require_pdfplumber() -> Any:
     try:
         import pdfplumber  # noqa: PLC0415
     except ImportError as e:
-        raise ExtractError('extracting figures needs pdfplumber: pip install "piclas-db[extract]"') from e
+        raise ExtractError('extracting figures needs pdfplumber: in your clone of piclas-db run python -m pip install -e ".[extract]"') from e
     return pdfplumber
 
 
@@ -228,7 +228,8 @@ def calibrate(major: list[float], labels: list[tuple[float, float]], source: str
     """Fit value = a + b * coordinate (or log10(value)) through labelled ticks; every pair of labels proposes a fit, the fit
     with most labels agreeing wins (OCR errors are rejected)"""
     if len(labels) < 2:
-        raise ExtractError(f'fewer than two tick labels found ({source}); give them with --x-labels / --y-labels')
+        hint = ' (Tesseract is not installed: the labels of this figure are outlines and need OCR, or give them)' if source == 'none' and shutil.which('tesseract') is None else ''
+        raise ExtractError(f'fewer than two tick labels found ({source}){hint}; give them with --x-labels / --y-labels (major ticks, x left to right, y bottom to top)')
     positions = np.array([position for position, _ in labels])
     values = np.array([value for _, value in labels])
     if scale is None:

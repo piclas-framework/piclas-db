@@ -3,6 +3,21 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.21.0
+
+* `piclas-db extract --redo PAPER/DATASET[@SHA]` runs a stored extraction again with the current version and compares it point by
+  point with the stored one; the new record keeps the entries made by hand, names the old version under `supersedes` and says what is
+  missing for the rules of the current version
+* Records of `extract` store their options (`parameters.command`); for older records the options are taken from the record
+* `docs/literature.md`: automatic extraction first, typing only for formulas and data `extract` does not find
+
+## 0.20.1
+
+* `extract`: without Tesseract, the error for figures with labels drawn as outlines says so and how to give the labels
+* Installation hints point to the clone (`python -m pip install -e ".[extract]"`): piclas-db is not on PyPI
+* `docs/extract.md`: Sant'Anna example with `--target-mass-amu` and with the labels given
+* `--x-points`/`--y-points`: clear error for entries that are not of the form `pt=value`
+
 ## 0.20.0
 
 * Scanned figures: open symbols (filled before the opening, named `<shape>-open`, linked apart from filled symbols, short open

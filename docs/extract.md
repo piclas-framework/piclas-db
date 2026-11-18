@@ -5,10 +5,11 @@ figure, markers, error bars, lines and ticks are drawing operations with exact c
 estimated from pixels. Scanned figures are read from the image (see below).
 
 ```bash
-pip install "piclas-db[extract]"           # pdfplumber; OCR of axis labels drawn as outlines needs the tesseract binary
+python -m pip install -e ".[extract]"     # in the clone: pdfplumber, scikit-image; OCR needs the tesseract binary (e.g. apt install tesseract-ocr)
 piclas-db extract santanna-2025 --page 4 --list
 piclas-db extract santanna-2025 --page 4 --figure 3 --name fig3 \
-    --x-unit a.u. --x-quantity "O- velocity" --mass-amu 15.9994 --y-unit A^2 --by "Name" -o work/
+    --x-unit a.u. --x-quantity "O- velocity" --mass-amu 15.9994 --target-mass-amu 31.998 --y-unit A^2 --by "Name" -o work/
+# without Tesseract: give the labels of the major ticks, e.g. --x-labels 0.04,0.06,0.08,0.1,0.12,0.14,0.16 --y-labels 0,5,10,15,20
 piclas-db literature add work/fig3-square-open-black.extraction.yaml     # per series, review pending
 ```
 
@@ -109,3 +110,20 @@ several columns with different units) are read with the correct number of rows; 
 hand. The three `SpeciesDatabase.h5` datasets that cite Yoon et al. (`H-electron-H`, `H2Ion1-electron-electron`,
 `H-electron-electron-HIon1`) are the same cross-sections as Tables 11 and 13, on a different energy grid (with additional points,
 e.g. at the threshold).
+
+## Running extractions again
+
+```bash
+piclas-db extract --redo yoon-2008/table13-c1 -o redo/          # or PAPER/DATASET@sha256 for one stored version
+```
+
+Every record of `extract` (from 0.21.0) contains the options it was made with (`parameters.command`); for older records they are
+taken from the record (page, frame, labels given, seeds, units). The extraction runs again with the current version of piclas-db and
+is compared point by point with the stored one (identical, or the largest change in axis units and, where the value is significant,
+relative). The new record keeps what was entered by hand (description, assignment, units, masses), names the stored version under
+`supersedes` and is stored like any extraction: `literature add` (review pending); `build` then uses the newest reviewed version.
+If the new record does not meet the rules of the current version (e.g. a velocity axis without target mass before 0.19.0), `--redo`
+says what to complete. Extractions entered by hand (`manual`, formulas) are not run again.
+
+Stored extractions of the test papers, run again with 0.21.0: Yoon Table 13 identical, Tsuji Fig. 5 within 0.02 %, Sant'Anna Fig. 3
+within 0.002 Å² (more axis labels read by the improved OCR).

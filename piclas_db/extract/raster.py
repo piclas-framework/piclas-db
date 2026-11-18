@@ -47,7 +47,7 @@ def require_skimage() -> Any:
     try:
         from skimage import measure, morphology  # noqa: PLC0415
     except ImportError as e:
-        raise ExtractError('extracting scanned figures needs scikit-image: pip install "piclas-db[extract]"') from e
+        raise ExtractError('extracting scanned figures needs scikit-image: in your clone of piclas-db run python -m pip install -e ".[extract]"') from e
     return measure, morphology
 
 
