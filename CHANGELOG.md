@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.39.1
+
+* `diff` of electronic levels: both sets sorted by energy first (PICLas sorts after reading; `SpeciesDatabase.h5` holds the
+  multiplet order of the former script), degeneracies compared per energy (the order of levels with equal energy is arbitrary),
+  energies of sets with different numbers of levels matched within 2e-5 (NIST ASD revises energies by up to about 1e-5 between
+  versions); before, H, O, OIon1, CIon2, CIon3 and HeIon1 showed up to 78 "degeneracies differ" that were only order
+* Finding: ArIon1 levels of `SpeciesDatabase.h5` converted with 100 × 1.986e-25 / 1.38065e-23 = 1.4384529 K per cm⁻¹ (the last
+  version of the former script; all energies 2.25e-4 too low), Ar with 1.43873021
+
 ## 0.39.0
 
 From the former `maintain_database.py` scripts (`edit_species.py`): NIST ASD is queried as a URL, and the levels end with the

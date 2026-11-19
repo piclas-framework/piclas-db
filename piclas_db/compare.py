@@ -177,8 +177,11 @@ def compare_levels(path: str, a: Species, b: Species, rtol: float) -> list[Diffe
         if state_a != state_b:
             return [Difference(Change.STRUCTURE, path, f'{state_a} in A, {state_b} in B', source, item='ElectronicLevel', value_a=state_a, value_b=state_b)]
         return []
-    levels_a, levels_b = a.electronic_levels, b.electronic_levels
-    if levels_a.shape == levels_b.shape and np.allclose(levels_a, levels_b, rtol=rtol, atol=0.0):
+    # PICLas sorts the levels after reading: compare them sorted by energy (SpeciesDatabase.h5 holds multiplet-ordered levels),
+    # and degeneracies per energy, since the order of levels with the same energy is arbitrary
+    levels_a = a.electronic_levels[np.argsort(a.electronic_levels[:, 1], kind='stable')]
+    levels_b = b.electronic_levels[np.argsort(b.electronic_levels[:, 1], kind='stable')]
+    if levels_a.shape == levels_b.shape and np.allclose(levels_a[:, 1], levels_b[:, 1], rtol=rtol, atol=0.0) and not degeneracy_differences(levels_a, levels_b, rtol):
         return []
 
     if levels_a.shape == levels_b.shape:
@@ -189,10 +192,10 @@ def compare_levels(path: str, a: Species, b: Species, rtol: float) -> list[Diffe
         elif not np.allclose(levels_a[:, 1], levels_b[:, 1], rtol=rtol, atol=0.0):
             deviation = np.abs(levels_b[:, 1] - levels_a[:, 1]) / np.maximum(np.abs(levels_a[:, 1]), 1.0)
             messages.append(f'{int(np.sum(deviation > rtol))} energies differ (max relative deviation {deviation.max():.2e})')
-        changed = np.flatnonzero(levels_a[:, 0] != levels_b[:, 0])
-        if changed.size:
-            first = int(changed[0])
-            messages.append(f'{changed.size} degeneracies differ (first: level {first}, {levels_a[first, 0]:g} -> {levels_b[first, 0]:g})')
+        changed = degeneracy_differences(levels_a, levels_b, max(rtol, 1.0e-5) if factor is None else 1.0e-3)
+        if changed:
+            energy, value_a, value_b = changed[0]
+            messages.append(f'{len(changed)} degeneracies differ (first: at {energy:.8g} K, {value_a:g} -> {value_b:g})')
         scaled = factor is not None and not np.isclose(factor, 1.0, rtol=rtol)
         change = Change.SCALED if scaled and len(messages) == 1 else Change.NUMERIC
         return [Difference(change, path, '; '.join(messages), source)]
@@ -219,9 +222,18 @@ def compare_levels(path: str, a: Species, b: Species, rtol: float) -> list[Diffe
     return [Difference(Change.NUMERIC, path, message, source)]
 
 
+def degeneracy_differences(a: np.ndarray, b: np.ndarray, rtol: float) -> list[tuple[float, float, float]]:
+    """(energy, sum of degeneracies in A, in B) of the levels of equal energy whose degeneracies differ; a and b sorted by energy,
+    same number of levels. Levels of equal energy (within rtol) form one group: their order does not matter"""
+    starts = np.flatnonzero(np.r_[True, ~np.isclose(a[1:, 1], a[:-1, 1], rtol=rtol, atol=1.0e-9)])
+    ends = np.r_[starts[1:], len(a)]
+    return [(float(a[start, 1]), float(a[start:end, 0].sum()), float(b[start:end, 0].sum())) for start, end in zip(starts, ends, strict=True) if a[start:end, 0].sum() != b[start:end, 0].sum()]
+
+
 def match_energies(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Which energies of a have a counterpart in b and vice versa (relative tolerance 1e-6)"""
-    close = np.isclose(a[:, None], b[None, :], rtol=1.0e-6, atol=1.0e-9)
+    """Which energies of a have a counterpart in b and vice versa (relative tolerance 2e-5: NIST ASD revises energies between
+    versions by up to about 1e-5)"""
+    close = np.isclose(a[:, None], b[None, :], rtol=2.0e-5, atol=1.0e-9)
     return close.any(axis=1), close.any(axis=0)
 
 

@@ -233,3 +233,14 @@ def test_table_lines_structured() -> None:
     assert 'only in A' in [cell.strip() for cell in next(line for line in lines if 'Old' in line).split('│')]
     narrow = table_lines(compare(a, b).differences, width=50)
     assert all(len(line) <= 50 for line in narrow[1:])
+
+
+def test_levels_order_and_degeneracies_per_energy() -> None:
+    """Multiplet-ordered levels (as in SpeciesDatabase.h5) equal the same levels sorted by energy; the order of levels with the same
+    energy does not matter, only the sum of their degeneracies"""
+    unsorted = [[2, 0.0], [2, 1000.0], [4, 1000.5], [2, 1000.1], [3, 2000.0], [5, 2000.0]]
+    ordered = [[2, 0.0], [2, 1000.0], [2, 1000.1], [4, 1000.5], [5, 2000.0], [3, 2000.0]]
+    assert compare(electronic_db(Tx=unsorted), electronic_db(Tx=ordered)).equal
+    changed = [[2, 0.0], [2, 1000.0], [2, 1000.1], [4, 1000.5], [5, 2000.0], [5, 2000.0]]
+    messages = [difference.message for difference in compare(electronic_db(Tx=unsorted), electronic_db(Tx=changed)).differences]
+    assert messages == ['1 degeneracies differ (first: at 2000 K, 8 -> 10)']
