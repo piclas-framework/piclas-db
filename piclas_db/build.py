@@ -259,6 +259,10 @@ def add_atct(species: Species, entry: StoreEntry, own: dict, report: BuildReport
     if 'MassIC' not in own and record.mass_kg is not None:
         species.attributes['MassIC'] = record.mass_kg
         taken.append('MassIC')
+    for key, value in (('HeatOfFormation_K', record.heat_of_formation_k), ('MassIC', record.mass_kg)):
+        if key in own and value is not None:
+            # own data or recipe take precedence: say so, the value usually belongs to ATcT (e.g. masses of one consistent source)
+            report.notes.append(f'{species.name}: {key} from the own data or recipe ({own[key]}), not from ATcT {record.atct_id} ({value:.10g})')
     ion = re.search(r'Ion(\d+)$', species.name)
     expected = int(ion.group(1)) if ion else (-1 if species.name == 'electron' else 0)
     if record.charge != expected:

@@ -3,6 +3,20 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.34.0
+
+Decision: heats of formation and masses from ATcT for every species with an ATcT record (`docs/atct.md`, "Masses: one source").
+
+* `atct map`: species without a heat of formation in the file (HeIon1, CIon2, ...) are mapped by formula and charge; only states of
+  one species give a match (the record `*0`), the line says that no file value was compared
+* `export --own-data --atct-from RECIPE`: heat of formation and mass also left out for the species with an ATcT ID in the recipe
+* `build` notes every heat of formation or mass of the own data or recipe that replaces the value of the ATcT record
+
+## 0.33.1
+
+* `docs/atct.md`: real output of `atct map SpeciesDatabase.h5` (TN 1.228): all 35 species match, heats of formation within
+  0.66 kJ/mol of the file (CIon6), most within 0.1 kJ/mol; run time about six minutes
+
 ## 0.33.0
 
 First run of `atct map` on `SpeciesDatabase.h5` (TN 1.228): 17 match, 10 check, 8 not found.

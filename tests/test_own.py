@@ -190,3 +190,32 @@ def test_unquoted_yaml_names(tmp_path: pathlib.Path) -> None:
     with pytest.raises(RecipeError, match='read by YAML as bool'):
         parse_recipe('levels:\n  - source: nist-asd/levels/no\n    species: NO\n', 'test')
     assert list(parse_recipe("species:\n  'NO': {}\n", 'test').species) == ['NO']
+
+
+def test_export_own_data_atct_from(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """--atct-from: species with an ATcT ID in the recipe lose heat of formation and mass too (masses of one source)"""
+    old = old_database(tmp_path / 'old.h5')
+    recipe = tmp_path / 'atct.yaml'
+    recipe.write_text("species:\n  XyIon2: {atct: 1-1-1*0}\n  Zz: {atct: 2-2-2*0}\n  'NO': {}\n")
+    own = tmp_path / 'own.yaml'
+    assert main(['export', str(old), '--own-data', str(own), '--atct-from', str(recipe)]) == 0
+    assert 'also for XyIon2, Zz: --atct-from' in capsys.readouterr().out
+    species = parse_own_data(own.read_text())['species']
+    assert 'MassIC' not in species['XyIon2'] and 'HeatOfFormation_K' not in species['Zz'] and 'MassIC' in species['NO']
+    assert 'Thermo Book' not in species['Zz']['Reference']  # the source of the value that was left out
+    assert main(['export', str(old), '--own-data', str(own), '--force', '--atct-from', str(recipe), '--keep-atct']) == 1
+
+
+def test_build_notes_own_value_over_atct(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+    import json  # noqa: PLC0415
+
+    store = tmp_path / 'store'
+    (tmp_path / 'own.yaml').write_text(OWN)
+    item = {'ATcT_TN_Version': '9.999', 'ATcT_ID': '111-11-1*0', 'Name': 'Testium', 'Formula': 'Ar  (g)', '∆fH_298K': '0', 'mass': 40.0, 'charge': 0}
+    (tmp_path / 'record.json').write_text(json.dumps(item, ensure_ascii=False))
+    assert main(['import', str(tmp_path / 'own.yaml'), str(tmp_path / 'record.json'), '--store', str(store), '--retrieved', '2026-01-01']) == 0
+    recipe = tmp_path / 'recipe.yaml'
+    recipe.write_text('own_data: own/piclas-parameters\nspecies:\n  Ar: {atct: 111-11-1*0}\n')
+    capsys.readouterr()
+    assert main(['build', str(recipe), '-o', str(tmp_path / 'db.h5'), '--store', str(store), '--offline']) == 0
+    assert 'Ar: MassIC from the own data or recipe (6.6e-26), not from ATcT 111-11-1*0' in capsys.readouterr().out

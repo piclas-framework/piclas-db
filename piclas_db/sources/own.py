@@ -160,22 +160,23 @@ def ordered(attributes: dict[str, Any]) -> dict[str, Any]:
     return {key: attributes[key] for key in keys}
 
 
-def own_data_from_database(database: Database, origin: str, name: str = 'piclas-parameters', keep_atct: bool = False) -> OwnDataExport:
-    """Own data with every species attribute of a database; values that the reference credits to ATcT are left out (a recipe takes
-    them from ATcT) unless keep_atct. Every species gets a Reference: origin, the sources named per value, the values without one"""
+def own_data_from_database(database: Database, origin: str, name: str = 'piclas-parameters', keep_atct: bool = False, atct: frozenset[str] = frozenset()) -> OwnDataExport:
+    """Own data with every species attribute of a database; heat of formation and mass are left out for species whose reference
+    credits ATcT and for the species in 'atct' (with an ATcT ID in a recipe): a recipe takes them from ATcT; keep_atct keeps the
+    credited ones. Every species gets a Reference: origin, the sources named per value, the values without one"""
     export = OwnDataExport(content={})
     species_data: dict[str, dict[str, Any]] = {}
     for species_name, species in sorted(database.species.items()):
         attributes = {key: plain(value) for key, value in species.attributes.items()}
         labelled, other = split_reference(species.provenance, attributes)
-        atct = credits_atct(labelled)
-        if atct:
+        credited = credits_atct(labelled)
+        if credited:
             export.atct_species.append(species_name)
-            if not keep_atct:
-                # a recipe takes heat of formation and mass from the ATcT record, which carries its own reference
-                export.left_out[species_name] = [key for key in ATCT_ATTRIBUTES if attributes.pop(key, None) is not None]
-                for key in ATCT_ATTRIBUTES:
-                    labelled.pop(key, None)
+        if species_name in atct or (credited and not keep_atct):
+            # a recipe takes heat of formation and mass from the ATcT record, which carries its own reference
+            export.left_out[species_name] = [key for key in ATCT_ATTRIBUTES if attributes.pop(key, None) is not None]
+            for key in ATCT_ATTRIBUTES:
+                labelled.pop(key, None)
         if not attributes:
             continue
         parts = [origin]

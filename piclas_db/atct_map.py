@@ -161,6 +161,8 @@ def decide(candidates: list[Candidate], tolerance: float) -> tuple[Status, list[
         return Status.NOT_FOUND, candidates
     if len(within) == 1:
         return Status.MATCH, candidates
+    if all(candidate.deviation is None for candidate in candidates):
+        within = candidates  # no heat of formation in the file: formula and charge only, so only states of one species can match
     default = [candidate for candidate in within if candidate.record.atct_id.endswith('*0')]
     if within and len({candidate.record.atct_id.split('*')[0] for candidate in within}) == 1 and default:
         return Status.MATCH, default + [candidate for candidate in candidates if candidate is not default[0]]
@@ -198,7 +200,7 @@ def map_species(database: Database, names: list[str], search: Callable[[str], li
 
 def describe(candidate: Candidate) -> str:
     record = candidate.record
-    deviation = '' if candidate.deviation is None else f', dfH {candidate.deviation:+.3f} kJ/mol vs. file'
+    deviation = ', no HeatOfFormation_K in the file (chosen by formula and charge)' if candidate.deviation is None else f', dfH {candidate.deviation:+.3f} kJ/mol vs. file'
     mass = '' if candidate.mass_deviation is None else f', mass of the file {candidate.mass_deviation:+.1e}'
     return f'{record.atct_id} {record.formula} TN {record.version}{deviation}{mass}'
 

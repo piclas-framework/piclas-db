@@ -23,6 +23,7 @@ import pathlib
 from piclas_db.common.common_vars import Common
 from piclas_db.model import Database
 from piclas_db.readers import DatabaseReadError, read_database
+from piclas_db.recipe import RecipeError, load_recipe
 from piclas_db.sources.own import OwnDataError, dump_own_data, own_data_from_database
 from piclas_db.store import sha256
 from piclas_db.tables import TablesError, export_tables
@@ -35,8 +36,19 @@ def export_own_data(database: Database, args: argparse.Namespace) -> int:
     if target.exists() and not args.force:
         print(f'ERROR: {target} exists (use --force to overwrite)')
         return 1
+    atct: frozenset[str] = frozenset()
+    if args.atct_from:
+        try:
+            recipe = load_recipe(args.atct_from)
+        except RecipeError as e:
+            print(f'ERROR: {e}')
+            return 1
+        atct = frozenset(name for name, attributes in recipe.species.items() if (attributes or {}).get('atct'))
+        if args.keep_atct:
+            print('ERROR: --keep-atct and --atct-from contradict each other')
+            return 1
     origin = args.origin or f'{source.name} ({datetime.date.fromtimestamp(source.stat().st_mtime).isoformat()})'
-    export = own_data_from_database(database, origin, name=args.name, keep_atct=args.keep_atct)
+    export = own_data_from_database(database, origin, name=args.name, keep_atct=args.keep_atct, atct=atct)
     if not export.content['species']:
         print(f'ERROR: {source}: no species attributes')
         return 1
@@ -46,7 +58,7 @@ def export_own_data(database: Database, args: argparse.Namespace) -> int:
         f'the file into the store (piclas-db import {target.name}) and use it in a recipe with "own_data: own/{args.name}".',
     ]
     if export.left_out:
-        header += ['', f'Left out (the file credits them to ATcT, a recipe takes them from ATcT with "atct: <ID>"): {", ".join(sorted(export.left_out))}']
+        header += ['', f'Heat of formation and mass left out (a recipe takes them from ATcT with "atct: <ID>"): {", ".join(sorted(export.left_out))}']
     header += ['Electronic and vibrational levels are not own data (recipe "levels", NIST ASD).']
     try:
         text = dump_own_data(export.content, header)
@@ -57,7 +69,11 @@ def export_own_data(database: Database, args: argparse.Namespace) -> int:
     unknown = sum(len(attributes) for attributes in export.unknown.values())
     print(f'{source} -> {target}: {len(export.content["species"])} species, origin "{origin}"')
     if export.left_out:
-        print(f'  ATcT ({len(export.left_out)} species): {", ".join(sorted({key for keys in export.left_out.values() for key in keys}))} left out (use --keep-atct to keep them)')
+        extra = sorted(set(export.left_out) - set(export.atct_species))
+        print(
+            f'  ATcT ({len(export.left_out)} species): {", ".join(sorted({key for keys in export.left_out.values() for key in keys}))} left out'
+            + (f' (also for {", ".join(extra)}: --atct-from)' if extra else ' (use --keep-atct to keep them)')
+        )
     elif export.atct_species:
         print(f'  ATcT ({len(export.atct_species)} species): values kept (--keep-atct)')
     print(f'  source unknown: {unknown} values in {len(export.unknown)} species (see the Reference of each species)')

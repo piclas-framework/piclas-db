@@ -72,17 +72,49 @@ For every species whose reference credits ATcT (35 in `SpeciesDatabase.h5`, `--s
    **check** if none or several species do (isomers); **not found** without candidates (the line shows how many records the
    searches returned).
 
-Example for CO (numbers from the CO check under [Versions](#versions); to be replaced by the output of a real run):
+Output for `SpeciesDatabase.h5` (TN 1.228, excerpt):
 
 ```
-CO         match                630-08-0*0 CO (g) TN 1.228, dfH -0.001 kJ/mol vs. file, mass of the file -1.2e-05
+  searching ATcT for 35 species done (348.7 s)
+Ar         match                7440-37-1*0 Ar (g) TN 1.228, dfH +0.000 kJ/mol vs. file, mass of the file +1.6e-05
+ArIon1     match                14791-69-6*0 Ar+ (g) TN 1.228, dfH -0.010 kJ/mol vs. file, mass of the file -1.1e-09
+C          match                7440-44-0*0 C (g) TN 1.228, dfH -0.031 kJ/mol vs. file, mass of the file -2.1e-04
+CIon6      match                16249-02-8*0 [C]+6 (g) TN 1.228, dfH -0.657 kJ/mol vs. file, mass of the file -1.1e-09
+CO         match                630-08-0*0 CO (g) TN 1.228, dfH -0.001 kJ/mol vs. file, mass of the file +1.2e-05
+H3Ion1     match                28132-48-1*0 [H3]+ (g) TN 1.228, dfH -0.007 kJ/mol vs. file, mass of the file +1.7e-04
+...
+35 match (348.7 s, tolerance 1.0 kJ/mol)
+Recipe entries: atct-species.yaml
 ```
+
+All 35 species match; the heats of formation differ from the file (TN 1.130) by at most 0.66 kJ/mol (CIon6), most by less than
+0.1 kJ/mol. The masses of the file are rounded to four digits in kg (C 1.994e-26, O 2.657e-26), hence deviations of up to 2.1e-4.
 
 The line shows the record, the difference of the heat of formation to the file and the relative deviation of the mass of the file
 (finding A7). `--recipe-out` writes the matched species as recipe entries (`CO: {atct: 630-08-0*0}`, with `own_data:
 own/piclas-parameters`, `--own-data ""` for none) and the others as comments with up to three candidates, to be decided with
 `atct search` and entered by hand. `--get` downloads the matched records into the store. The exit code is 0 if every species
-matched, 2 if some need a decision, 1 on errors. ATcT is asked at most once per second: all 35 species take about two minutes.
+matched, 2 if some need a decision, 1 on errors. ATcT is asked at most once per second: all 35 species take about six minutes (every page of every search term).
+
+## Masses: one source
+
+Decision (2026-11-19): heats of formation and masses come from ATcT for every species that has an ATcT record. The masses of
+`SpeciesDatabase.h5` are rounded to four digits in kg and not consistent among themselves (CO, CO2, ArIon1); ATcT masses are, and
+each one is documented by its record. The remaining species are mapped by formula and charge (no heat of formation in the file to
+compare with, the line says so):
+
+```bash
+piclas-db atct map SpeciesDatabase.h5 --species HeIon1 HeIon2 CIon2 CIon3 CIon4 CIon5 Fe FeIon1 --recipe-out atct-rest.yaml
+```
+
+The own data must then not contain these values, since own data takes precedence over ATcT; `build` notes every value of the own
+data or the recipe that replaces an ATcT value. With all ATcT species of the recipe:
+
+```bash
+piclas-db export SpeciesDatabase.h5 --own-data piclas-parameters.yaml --origin "SpeciesDatabase.h5 (2026-10-09)" --atct-from recipe.yaml
+```
+
+The electron is not in ATcT; its mass is own data (`SpeciesDatabase.h5`: 9.11e-31 kg, three digits).
 
 ## Versions
 

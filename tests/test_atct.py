@@ -280,3 +280,16 @@ def test_search_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     assert len(atct.search('Tx')) == 120 and offsets == ['0', '50', '100']
     offsets.clear()
     assert len(atct.search('Tx', pages=1)) == 50 and offsets == ['0']
+
+
+def test_atct_map_without_file_value() -> None:
+    """No heat of formation in the file: formula and charge decide; states of one species give '*0', two species stay to be checked"""
+    from piclas_db import atct_map  # noqa: PLC0415
+
+    def candidate(atct_id: str) -> atct_map.Candidate:
+        return atct_map.Candidate(atct.species_from(record(atct_id, 'Tx+  (g)', '1.0', 28.0, charge=1)), None, 1.0e-5)
+
+    status, ordered = atct_map.decide([candidate('7-7-7*1'), candidate('7-7-7*0')], 1.0)
+    assert status is atct_map.Status.MATCH and ordered[0].record.atct_id == '7-7-7*0'
+    assert 'no HeatOfFormation_K in the file' in atct_map.describe(ordered[0])
+    assert atct_map.decide([candidate('7-7-7*0'), candidate('6-6-6*0')], 1.0)[0] is atct_map.Status.CHECK

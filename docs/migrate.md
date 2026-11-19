@@ -73,7 +73,8 @@ SpeciesDatabase.h5 -> piclas-parameters.yaml: 44 species, origin "SpeciesDatabas
   a named source (`source unknown: ...`). A reference without labels (e.g. a paper for the electron) is kept with the note which values
   it may stand for.
 * Heats of formation and masses of species whose reference names ATcT are left out: a recipe takes them from ATcT (`atct: <ID>`),
-  which documents version and record. `--keep-atct` keeps them (exact copy of the old values).
+  which documents version and record. `--keep-atct` keeps them (exact copy of the old values). `--atct-from RECIPE` also leaves
+  them out for the species with an ATcT ID in the recipe (e.g. ions mapped by formula and charge, [masses from one source](atct.md)).
 * Electronic and vibrational levels are not own data; they come from NIST ASD (recipe `levels`).
 * Species names that YAML would read as something else are quoted (`'NO'`, YAML reads `NO` as false); recipes and own-data files with
   such unquoted names are rejected.

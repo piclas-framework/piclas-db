@@ -159,6 +159,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--origin', help='with --own-data: name of the file in every Reference (default: file name and modification date)')
             sub.add_argument('--name', default='piclas-parameters', help='with --own-data: dataset name in the store (default: piclas-parameters)')
             sub.add_argument('--keep-atct', action='store_true', help='with --own-data: keep heats of formation and masses that the file credits to ATcT')
+            sub.add_argument('--atct-from', metavar='RECIPE', help='with --own-data: also leave out heat of formation and mass of the species with an ATcT ID in this recipe')
             sub.add_argument('--force', action='store_true', help='with --own-data: overwrite an existing file')
         elif name == 'migrate':
             sub.add_argument('source', help='database file (.h5) of any layout, or a directory with ASCII tables')
