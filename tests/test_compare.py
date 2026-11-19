@@ -189,3 +189,14 @@ def test_diff_command(files: tuple[pathlib.Path, pathlib.Path], capsys: pytest.C
     report = json.loads(capsys.readouterr().out)
     assert {difference['change'] for difference in report['differences']} == {'only in A', 'only in B'}
     assert main(['diff', str(old), str(old.parent / 'missing.h5')]) == 2
+
+
+def test_vibrational_levels() -> None:
+    a = Database(path='a.h5', schema=Schema.SPECIES_DATABASE)
+    b = Database(path='b.h5', schema=Schema.SPECIES_DATABASE)
+    a.species['Tx'] = Species('Tx', vibrational_levels=np.array([[0.0], [3000.0], [6000.0]]))
+    b.species['Tx'] = Species('Tx')
+    a.species['Qq'] = Species('Qq', vibrational_levels=np.array([[0.0], [1000.0]]))
+    b.species['Qq'] = Species('Qq', vibrational_levels=np.array([[0.0], [1001.0]]))
+    messages = {difference.path: difference.message for difference in compare(a, b).differences}
+    assert messages == {'/Species/Tx/VibrationalLevel': '3 levels in A, no levels in B', '/Species/Qq/VibrationalLevel': '1 energies differ (max relative deviation 1.00e-03)'}

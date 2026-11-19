@@ -3,6 +3,11 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.36.1
+
+* `diff` compares vibrational levels (present in one file only, number, energies); before, they were not compared at all
+  (`SpeciesDatabase.h5` against a build without levels: `/Species/N2/VibrationalLevel: 67 levels in A, no levels in B`)
+
 ## 0.36.0
 
 * Recipe option `masses: composition` (`piclas_db/derive.py`): `MassIC` of molecules and ions = sum of the atom masses minus

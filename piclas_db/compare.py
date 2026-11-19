@@ -322,6 +322,23 @@ def compare_cross_sections(a: Database, b: Database, rtol: float, comparison: Co
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Species, reactions, diffusion and surface data
 # ----------------------------------------------------------------------------------------------------------------------------------
+def compare_vibrational(path: str, a: Species, b: Species, rtol: float) -> list[Difference]:
+    """Vibrational levels (one energy per row): present in one file only, number of levels, energies"""
+    levels_a, levels_b = a.vibrational_levels, b.vibrational_levels
+    if levels_a is None and levels_b is None:
+        return []
+    if levels_a is None or levels_b is None:
+        state_a = 'no levels' if levels_a is None else f'{len(levels_a)} levels'
+        state_b = 'no levels' if levels_b is None else f'{len(levels_b)} levels'
+        return [Difference(Change.STRUCTURE, path, f'{state_a} in A, {state_b} in B')]
+    if levels_a.shape != levels_b.shape:
+        return [Difference(Change.STRUCTURE, path, f'{len(levels_a)} levels in A, {len(levels_b)} levels in B')]
+    if np.allclose(levels_a, levels_b, rtol=rtol, atol=0.0):
+        return []
+    deviation = np.abs(levels_b - levels_a) / np.maximum(np.abs(levels_a), 1.0)
+    return [Difference(Change.NUMERIC, path, f'{int(np.sum(deviation > rtol))} energies differ (max relative deviation {deviation.max():.2e})')]
+
+
 def compare_species(a: Database, b: Database, rtol: float, comparison: Comparison) -> None:
     for name in sorted(set(a.species) | set(b.species)):
         if name not in b.species:
@@ -332,6 +349,7 @@ def compare_species(a: Database, b: Database, rtol: float, comparison: Compariso
             continue
         species_a, species_b = a.species[name], b.species[name]
         differences = compare_levels(f'/Species/{name}/ElectronicLevel', species_a, species_b, rtol)
+        differences += compare_vibrational(f'/Species/{name}/VibrationalLevel', species_a, species_b, rtol)
         # Attributes only exist in the current layout; a legacy electronic database has none
         if species_a.attributes and species_b.attributes:
             differences += compare_attributes(f'/Species/{name}', species_a.attributes, species_b.attributes, rtol)
