@@ -5,7 +5,7 @@ data model, so a legacy XSec or electronic state database can be compared direct
 
 ## Matching
 
-* **Species** by name, electronic levels and attributes.
+* **Species** by name, electronic and vibrational levels and attributes.
 * **Cross-sections** by collision pair (`A-B` equals `B-A`), kind and key: excitation thresholds are compared as numbers (`14`
   equals `14.0`), reaction products independently of their order (`electron-electron-XeIon1` equals `XeIon1-electron-electron`), and
   group names that are probable typos are matched with the intended name (`ELECTRONIIC` with `ELECTRONIC`). Such entries are
@@ -42,3 +42,28 @@ machine-readable form.
 | `Electronic-State-Database.h5` | `SpeciesDatabase.h5` | Ar scaled by 1.000193 (different cm⁻¹ → K constant); ArIon1 ground-state degeneracy 4 → 1 |
 | `DSMCSpecies_electronic_state_full_Data.h5` | `SpeciesDatabase.h5` | H scaled by 1.43878 (cm⁻¹ instead of K); CNIon1 lowest level differs; CO2Ion1, NCO only in A |
 | `XSec_Database_Xe_Plasma-Biagi7-1.h5` | `SpeciesDatabase.h5` | elastic up to −31 % (different source); ionization median −24 %; ionization renamed (product order) |
+
+## Output
+
+On a terminal, the differences are shown as one table per section (Species, Cross-Sections, Reactions, ...), fitted to the
+terminal width (long cells are wrapped), with colors unless `NO_COLOR` is set:
+
+```
+Species (6)
+┌──────┬───────────────────┬───────────┬─────────────────┬────────────┬───────────┐
+│ Name │ Item              │ Change    │ A               │ B          │   B/A - 1 │
+├──────┼───────────────────┼───────────┼─────────────────┼────────────┼───────────┤
+│ Ar   │ HeatOfFormation_K │ attribute │ 0               │ 1          │           │
+│      │ MassIC            │ attribute │ 6.633627059e-26 │ 6.6335e-26 │ -1.92e-05 │
+├┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┄┤
+│ C    │ MassIC            │ attribute │ 1.994e-26       │ 1.9944e-26 │ +2.01e-04 │
+│ CO2  │ Ediss_eV          │ only in A │ 5.43            │ -          │           │
+│ N2   │ VibrationalLevel  │ structure │ 67 levels       │ no levels  │           │
+│ O    │ NewThing          │ only in B │ -               │ 3          │           │
+└──────┴───────────────────┴───────────┴─────────────────┴────────────┴───────────┘
+```
+
+(`SpeciesDatabase.h5` against a copy with changed attributes.) Numbers have 10 significant digits; `B/A - 1` is given for numeric
+attributes. Differences without separate values (e.g. cross-sections that differ numerically) show their description in column A.
+Redirected into a file or a pipe (`piclas-db diff A.h5 B.h5 > diff.txt`), the output stays one plain line per difference, and
+`--json` gives the structured form (with `item`, `a`, `b`, `relative` where available).

@@ -58,9 +58,17 @@ class Difference:
     path: str  # path in the current layout
     message: str
     different_source: bool = False
+    # structured form for tables (empty where only the message describes the difference)
+    item: str = ''  # attribute or dataset, e.g. 'MassIC'
+    value_a: str = ''
+    value_b: str = ''
+    relative: Optional[float] = None  # (B - A) / |A| of numeric scalars
 
     def as_dict(self) -> dict[str, object]:
-        return {'change': self.change.value, 'path': self.path, 'message': self.message, 'different_source': self.different_source}
+        data: dict[str, object] = {'change': self.change.value, 'path': self.path, 'message': self.message, 'different_source': self.different_source}
+        if self.item:
+            data.update({'item': self.item, 'a': self.value_a, 'b': self.value_b, 'relative': self.relative})
+        return data
 
 
 @dataclass
@@ -112,12 +120,28 @@ def compare_attributes(path: str, a: dict[str, AttrValue], b: dict[str, AttrValu
     differences = []
     for name in sorted(set(a) | set(b)):
         if name not in b:
-            differences.append(Difference(Change.ATTRIBUTE, path, f"attribute '{name}' only in A"))
+            differences.append(Difference(Change.ATTRIBUTE, path, f"attribute '{name}' only in A", item=name, value_a=formatted(a[name]), value_b='-'))
         elif name not in a:
-            differences.append(Difference(Change.ATTRIBUTE, path, f"attribute '{name}' only in B"))
+            differences.append(Difference(Change.ATTRIBUTE, path, f"attribute '{name}' only in B", item=name, value_a='-', value_b=formatted(b[name])))
         elif not values_equal(a[name], b[name], rtol):
-            differences.append(Difference(Change.ATTRIBUTE, path, f"attribute '{name}': {short(a[name])} -> {short(b[name])}"))
+            value_a, value_b = a[name], b[name]
+            relative = None
+            if isinstance(value_a, (int, float)) and isinstance(value_b, (int, float)) and value_a != 0:
+                relative = (float(value_b) - float(value_a)) / abs(float(value_a))
+            differences.append(Difference(Change.ATTRIBUTE, path, f"attribute '{name}': {short(value_a)} -> {short(value_b)}", item=name, value_a=formatted(value_a), value_b=formatted(value_b), relative=relative))
     return differences
+
+
+def formatted(value: AttrValue) -> str:
+    """Value for a table cell: numbers with 10 significant digits, arrays and texts shortened"""
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (int, float)):
+        return f'{value:.10g}'
+    if isinstance(value, np.ndarray) and value.dtype.kind in 'iuf':
+        text = '[' + ', '.join(f'{item:.6g}' for item in value.ravel()[:6]) + (', ...' if value.size > 6 else '') + ']'
+        return text if value.ndim <= 1 else f'{text} {value.shape}'
+    return short(value)
 
 
 def short(value: AttrValue) -> str:
@@ -151,7 +175,7 @@ def compare_levels(path: str, a: Species, b: Species, rtol: float) -> list[Diffe
     if a.electronic_levels is None or b.electronic_levels is None:
         state_a, state_b = level_state(a), level_state(b)
         if state_a != state_b:
-            return [Difference(Change.STRUCTURE, path, f'{state_a} in A, {state_b} in B', source)]
+            return [Difference(Change.STRUCTURE, path, f'{state_a} in A, {state_b} in B', source, item='ElectronicLevel', value_a=state_a, value_b=state_b)]
         return []
     levels_a, levels_b = a.electronic_levels, b.electronic_levels
     if levels_a.shape == levels_b.shape and np.allclose(levels_a, levels_b, rtol=rtol, atol=0.0):
@@ -330,9 +354,9 @@ def compare_vibrational(path: str, a: Species, b: Species, rtol: float) -> list[
     if levels_a is None or levels_b is None:
         state_a = 'no levels' if levels_a is None else f'{len(levels_a)} levels'
         state_b = 'no levels' if levels_b is None else f'{len(levels_b)} levels'
-        return [Difference(Change.STRUCTURE, path, f'{state_a} in A, {state_b} in B')]
+        return [Difference(Change.STRUCTURE, path, f'{state_a} in A, {state_b} in B', item='VibrationalLevel', value_a=state_a, value_b=state_b)]
     if levels_a.shape != levels_b.shape:
-        return [Difference(Change.STRUCTURE, path, f'{len(levels_a)} levels in A, {len(levels_b)} levels in B')]
+        return [Difference(Change.STRUCTURE, path, f'{len(levels_a)} levels in A, {len(levels_b)} levels in B', item='VibrationalLevel', value_a=f'{len(levels_a)} levels', value_b=f'{len(levels_b)} levels')]
     if np.allclose(levels_a, levels_b, rtol=rtol, atol=0.0):
         return []
     deviation = np.abs(levels_b - levels_a) / np.maximum(np.abs(levels_a), 1.0)

@@ -200,3 +200,36 @@ def test_vibrational_levels() -> None:
     b.species['Qq'] = Species('Qq', vibrational_levels=np.array([[0.0], [1001.0]]))
     messages = {difference.path: difference.message for difference in compare(a, b).differences}
     assert messages == {'/Species/Tx/VibrationalLevel': '3 levels in A, no levels in B', '/Species/Qq/VibrationalLevel': '1 energies differ (max relative deviation 1.00e-03)'}
+
+
+def test_diff_table_on_terminal(files: tuple[pathlib.Path, pathlib.Path], capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    """On a terminal: one table per section with name, item, change, A, B and relative difference; plain lines otherwise"""
+    from piclas_db.commands import diff  # noqa: PLC0415
+
+    main(['diff', str(files[0]), str(files[1])])
+    plain = capsys.readouterr().out
+    assert '┌' not in plain
+    monkeypatch.setattr(diff, 'interactive', lambda: True)
+    monkeypatch.setattr(diff, 'use_color', lambda: False)
+    monkeypatch.setenv('COLUMNS', '100')
+    main(['diff', str(files[0]), str(files[1])])
+    table = capsys.readouterr().out
+    assert '┌' in table and '│ Name' in table and 'B/A - 1' in table
+    assert all(len(line) <= 100 for line in table.splitlines() if line.startswith(('┌', '│', '├', '└')))
+    assert plain.splitlines()[-1] == table.splitlines()[-1]  # same summary
+
+
+def test_table_lines_structured() -> None:
+    from piclas_db.commands.diff import table_lines  # noqa: PLC0415
+
+    a = Database(path='a.h5', schema=Schema.SPECIES_DATABASE)
+    b = Database(path='b.h5', schema=Schema.SPECIES_DATABASE)
+    a.species['Tx'] = Species('Tx', {'MassIC': 2.0e-26, 'Tref': 273.0, 'Old': 1.0})
+    b.species['Tx'] = Species('Tx', {'MassIC': 2.0002e-26, 'Tref': 273.0, 'New': 2.0})
+    lines = table_lines(compare(a, b).differences, width=90)
+    text = '\n'.join(lines)
+    assert lines[0] == 'Species (3)' and '+1.00e-04' in text and '2.0002e-26' in text
+    assert 'only in B' in [cell.strip() for cell in next(line for line in lines if 'New' in line).split('│')]
+    assert 'only in A' in [cell.strip() for cell in next(line for line in lines if 'Old' in line).split('│')]
+    narrow = table_lines(compare(a, b).differences, width=50)
+    assert all(len(line) <= 50 for line in narrow[1:])

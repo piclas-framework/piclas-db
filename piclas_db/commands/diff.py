@@ -16,14 +16,79 @@
 import argparse
 import json
 from collections import Counter
+from typing import Optional
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.compare import compare
+from piclas_db.common.table import Row, interactive, paint, render, use_color
+from piclas_db.compare import Change, Difference, compare
 from piclas_db.readers import DatabaseReadError
 from piclas_db.sources.any import read_any
 # ==================================================================================================================================
+
+
+CHANGE_COLORS = {
+    Change.ONLY_IN_A: 'red',
+    Change.ONLY_IN_B: 'green',
+    Change.NUMERIC: 'yellow',
+    Change.SCALED: 'yellow',
+    Change.STRUCTURE: 'magenta',
+    Change.ATTRIBUTE: 'cyan',
+    Change.RENAMED: 'blue',
+}
+CHANGE_SHORT = {
+    Change.ONLY_IN_A: 'only in A',
+    Change.ONLY_IN_B: 'only in B',
+    Change.NUMERIC: 'numeric',
+    Change.SCALED: 'scaled',
+    Change.STRUCTURE: 'structure',
+    Change.ATTRIBUTE: 'attribute',
+    Change.RENAMED: 'renamed',
+}
+
+
+def split_path(difference: Difference) -> tuple[str, str, str]:
+    """Section, object and item of a difference: /Species/Ar/ElectronicLevel -> ('Species', 'Ar', 'ElectronicLevel')"""
+    parts = difference.path.strip('/').split('/')
+    section, name = parts[0], parts[1] if len(parts) > 1 else ''
+    item = difference.item or '/'.join(parts[2:])
+    return section, name, item
+
+
+def table_lines(differences: list[Difference], color: bool = False, width: Optional[int] = None) -> list[str]:
+    """Differences as one table per section (Species, Cross-Sections, Reactions, ...), rows grouped by object"""
+    sections: dict[str, list[Difference]] = {}
+    for difference in differences:
+        sections.setdefault(split_path(difference)[0], []).append(difference)
+    lines: list[str] = []
+    for section, entries in sections.items():
+        sizes: dict[str, int] = {}
+        for difference in entries:
+            sizes[split_path(difference)[1]] = sizes.get(split_path(difference)[1], 0) + 1
+        rows, previous = [], None
+        for difference in entries:
+            _, name, item = split_path(difference)
+            structured = bool(difference.value_a or difference.value_b)
+            relative = f'{difference.relative:+.2e}' if difference.relative is not None else ''
+            source = ' [different source]' if difference.different_source else ''
+            cells = [
+                name if name != previous else '',
+                item,
+                'only in A' if difference.value_b == '-' else 'only in B' if difference.value_a == '-' else CHANGE_SHORT[difference.change],
+                (difference.value_a if structured else difference.message) + ('' if structured else source),
+                difference.value_b if structured else '',
+                relative,
+            ]
+            # a separator only around objects with several rows: single-row objects stay compact
+            separate = name != previous and (sizes[name] > 1 or (previous is not None and sizes[previous] > 1))
+            rows.append(Row(cells, colors=['bold' if name != previous else None, None, CHANGE_COLORS[difference.change]], group_start=separate))
+            previous = name
+        if lines:
+            lines.append('')
+        lines.append(paint(f'{section} ({len(entries)})', 'bold', color))
+        lines += render(['Name', 'Item', 'Change', 'A', 'B', 'B/A - 1'], rows, width=width, shrinkable=[0, 1, 3, 4], align_right=(5,), color=color)
+    return lines
 
 
 def run(args: argparse.Namespace) -> int:
@@ -48,7 +113,9 @@ def run(args: argparse.Namespace) -> int:
     print(f'Compared: {", ".join(comparison.compared) or "nothing"}' + (f'; not compared: {", ".join(comparison.skipped)} (use --all)' if comparison.skipped else ''))
     if comparison.differences:
         print()
-    for difference in comparison.differences:
+    if comparison.differences and interactive():
+        print('\n'.join(table_lines(comparison.differences, color=use_color())))
+    for difference in [] if interactive() else comparison.differences:
         source = ' [different source]' if difference.different_source else ''
         print(f'{difference.change.value:22s} {difference.path}: {difference.message}{source}')
     counts = Counter(difference.change.value for difference in comparison.differences)

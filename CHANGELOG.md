@@ -3,6 +3,13 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.37.0
+
+* `diff` on a terminal: one table per section (name, item, change, A, B, relative difference), rows grouped by species, pair or
+  reaction, fitted to the terminal width with wrapped cells, colors unless `NO_COLOR` is set; redirected output (file, pipe) stays
+  one plain line per difference (`piclas_db/common/table.py`, reusable for other commands)
+* Differences carry item, A and B values and the relative difference (`--json`: `item`, `a`, `b`, `relative`)
+
 ## 0.36.1
 
 * `diff` compares vibrational levels (present in one file only, number, energies); before, they were not compared at all
