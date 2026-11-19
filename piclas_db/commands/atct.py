@@ -53,7 +53,7 @@ def map_ids(args: argparse.Namespace) -> int:
         mappings = atct_map.map_species(database, names, atct.search, tolerance=args.tolerance)
     for mapping in mappings:
         chosen = mapping.chosen
-        print(f'{mapping.species:10s} {mapping.status.value:20s} ' + (atct_map.describe(chosen) if chosen else f'searched: {", ".join(mapping.queries) or "-"}'))
+        print(f'{mapping.species:10s} {mapping.status.value:20s} ' + (atct_map.describe(chosen) if chosen else f'searched: {", ".join(mapping.queries) or "-"} ({mapping.examined} records)'))
         if chosen is None:
             for candidate in mapping.candidates[:3]:
                 print(f'{"":31s}candidate {atct_map.describe(candidate)}')
@@ -79,7 +79,7 @@ def run(args: argparse.Namespace) -> int:
             return map_ids(args)
         if args.action == 'search':
             with progress(f'searching ATcT for {" ".join(args.arguments)!r}'):
-                found = atct.search(' '.join(args.arguments))
+                found = atct.search(' '.join(args.arguments), pages=1)  # first page; atct map reads all
             found = [record for record in found if record.gas or args.all]
             if not found:
                 print('No gas-phase species found' + ('' if args.all else ' (--all also shows other phases)'))

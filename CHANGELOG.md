@@ -3,6 +3,19 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.33.0
+
+First run of `atct map` on `SpeciesDatabase.h5` (TN 1.228): 17 match, 10 check, 8 not found.
+
+* `atct map`: states of one species within the tolerance (same ATcT ID before `*`: `C (g)` and `C (g, triplet)`, the ground state
+  listed twice; normal, ortho and para H₃⁺) give the record `*0` instead of check; isomers (different IDs) are still checked. With
+  the first run: C, CH, CO, H2Ion1, H3Ion1, He, N, NH, O, O2 become matches
+* ATcT searches read all pages (50 records each, at most 10 per term): the 8 species not found (CH2, CH3, CN, CNIon1, HIon1, NIon1,
+  NOIon1, OIon1) have short formulas that match hundreds of records, and only the first 50 were read; `atct search` still shows the
+  first page
+* Singly charged species are searched as `Ar+` and `[Ar]+`, `[CN]+` and `CN+` (ATcT writes both forms); `atct map` shows how many
+  records the searches returned for species without a match
+
 ## 0.32.0
 
 * `piclas-db atct map SOURCE` (`piclas_db/atct_map.py`, documented in `docs/atct.md`): ATcT IDs for the species of a database whose

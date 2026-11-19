@@ -62,12 +62,15 @@ For every species whose reference credits ATcT (35 in `SpeciesDatabase.h5`, `--s
 
 1. derives formula and charge from the PICLas name (`CO2`, `ArIon1` → Ar with charge 1, `CIon6` → C with charge 6; `electron` is
    skipped),
-2. searches ATcT by formula (`Ar+`, `[C]+6`, `CO2`) and by name (`argon cation`, `carbon dioxide`), each term once,
+2. searches ATcT by formula (`Ar+` and `[Ar]+`, `[CN]+` and `CN+`, `[C]+6`, `CO2`) and by name (`argon cation`, `carbon dioxide`),
+   each term once and page by page (at most 500 records per term: `CH2` or `H+` match hundreds),
 3. keeps gas-phase records with the same composition and charge (`[ArH]+ (g)` is not `ArIon1`, `CO (aq)` is not `CO`), and
 4. compares their ΔfH°(298.15 K) with `HeatOfFormation_K × R` of the file: **match** if exactly one record lies within the tolerance
-   (default 1 kJ/mol, `--tolerance`; TN versions differ by much less, electronic states and isomers by much more), or the closest
-   lies within it and all others more than ten times further away; **check** if none or several do; **not found** without
-   candidates.
+   (default 1 kJ/mol, `--tolerance`; TN versions differ by much less, electronic states and isomers by much more), or all within
+   it are states of one species (same ID before `*`: the ground state listed twice as `C (g)` and `C (g, triplet)`, or normal,
+   ortho and para H₃⁺), then the record `*0`, or the closest lies within it and all others more than ten times further away;
+   **check** if none or several species do (isomers); **not found** without candidates (the line shows how many records the
+   searches returned).
 
 Example for CO (numbers from the CO check under [Versions](#versions); to be replaced by the output of a real run):
 

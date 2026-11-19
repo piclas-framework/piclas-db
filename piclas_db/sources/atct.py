@@ -150,6 +150,23 @@ def get(atct_id: str) -> str:
     return request('species/get/by-atctid', {'atctid': atct_id})
 
 
-def search(query: str) -> list[ATcTSpecies]:
-    time.sleep(PAUSE)
-    return parse_atct(request('species/search', {'q': query, 'limit': '50'}))
+PAGE = 50  # records per search request
+PAGES = 10  # at most this many requests per search (500 records)
+
+
+def search(query: str, pages: int = PAGES) -> list[ATcTSpecies]:
+    """All records of a search, page by page: short formulas such as 'CH2' or 'H+' match hundreds of records, and the one wanted
+    need not be on the first page"""
+    found: list[ATcTSpecies] = []
+    for page in range(pages):
+        time.sleep(PAUSE)
+        text = request('species/search', {'q': query, 'limit': str(PAGE), 'offset': str(page * PAGE)})
+        records = parse_atct(text)
+        found += records
+        try:
+            total = int(json.loads(text).get('total', 0))
+        except (AttributeError, TypeError, ValueError):
+            total = 0
+        if len(records) < PAGE or (total and len(found) >= total):
+            break
+    return found

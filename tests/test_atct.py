@@ -193,8 +193,9 @@ def test_atct_map_parsing() -> None:
     assert atct_map.piclas_name('electron') is None
     assert atct_map.atct_formula('[ArH]+ (g)') == ({'Ar': 1, 'H': 1}, 1) and atct_map.atct_formula('OH- (g)') == ({'O': 1, 'H': 1}, -1)
     assert atct_map.atct_formula('HC(O)OH (g)') == ({'H': 2, 'C': 1, 'O': 2}, 0) and atct_map.atct_formula('[C]+6 (g)') == ({'C': 1}, 6)
-    assert atct_map.queries('Ar', {'Ar': 1}, 1) == ['Ar+', 'Ar', 'argon cation'] and atct_map.queries('C', {'C': 1}, 6) == ['[C]+6', 'C']
+    assert atct_map.queries('Ar', {'Ar': 1}, 1) == ['Ar+', '[Ar]+', 'Ar', 'argon cation'] and atct_map.queries('C', {'C': 1}, 6) == ['[C]+6', 'C']
     assert atct_map.queries('CO2', {'C': 1, 'O': 2}, 0) == ['CO2', 'carbon dioxide']
+    assert atct_map.queries('CN', {'C': 1, 'N': 1}, 1)[:2] == ['[CN]+', 'CN+']
 
 
 def test_atct_map(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -247,3 +248,35 @@ def test_atct_map_get(tmp_path: pathlib.Path, api: list[str], capsys: pytest.Cap
     assert '2 of 2 record(s) in the store' in capsys.readouterr().out
     assert sorted(entry.relative.split('/')[1] for entry in Store(store).entries()) == sorted([atct_dataset('111-11-1*0'), atct_dataset('222-22-2*0')])
     assert any(call.startswith('species/search') for call in api)
+
+
+def test_atct_map_states_of_one_species() -> None:
+    """The ground state named twice ('*0' and '*1 triplet') or ortho/para/normal: the '*0' record; isomers stay to be checked"""
+    from piclas_db import atct_map  # noqa: PLC0415
+
+    def candidate(atct_id: str, deviation: float) -> atct_map.Candidate:
+        return atct_map.Candidate(atct.species_from(record(atct_id, 'Tx  (g)', '1.0', 28.0)), deviation, None)
+
+    status, ordered = atct_map.decide([candidate('9-9-9*2', -0.006), candidate('9-9-9*0', -0.007), candidate('9-9-9*1', -0.008), candidate('9-9-9*3', 72.0)], 1.0)
+    assert status is atct_map.Status.MATCH and ordered[0].record.atct_id == '9-9-9*0' and len(ordered) == 4
+    status, _ = atct_map.decide([candidate('9-9-9*0', 0.01), candidate('8-8-8*0', 0.02)], 1.0)
+    assert status is atct_map.Status.CHECK
+    status, _ = atct_map.decide([candidate('9-9-9*1', 0.01), candidate('9-9-9*2', 0.02)], 1.0)
+    assert status is atct_map.Status.CHECK  # no '*0' record
+
+
+def test_search_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """All pages of a search, until 'total' is reached; at most 'pages' requests"""
+    items = [record(f'1-1-{number}*0', 'Tx  (g)', '1.0', 28.0) for number in range(120)]
+    offsets: list[str] = []
+
+    def request(path: str, parameters: dict[str, str], timeout: float = 60.0, retries: int = 3) -> str:
+        offsets.append(parameters['offset'])
+        start = int(parameters['offset'])
+        return json.dumps({'items': items[start : start + int(parameters['limit'])], 'total': len(items), 'limit': 50, 'offset': start})
+
+    monkeypatch.setattr(atct, 'request', request)
+    monkeypatch.setattr(atct, 'PAUSE', 0.0)
+    assert len(atct.search('Tx')) == 120 and offsets == ['0', '50', '100']
+    offsets.clear()
+    assert len(atct.search('Tx', pages=1)) == 50 and offsets == ['0']

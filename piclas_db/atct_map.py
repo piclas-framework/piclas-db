@@ -106,7 +106,8 @@ def atct_formula(formula: str) -> Optional[tuple[Composition, int]]:
 
 def queries(base: str, counts: Composition, charge: int) -> list[str]:
     """Search terms for ATcT, most specific first"""
-    terms = [f'{base}+' if charge == 1 else f'[{base}]+{charge}'] if charge > 0 else []
+    # ATcT writes Ar+, C+ and [CO]+, [N2]+, [C]+6: both forms for singly charged species
+    terms = ([f'[{base}]+', f'{base}+'] if sum(counts.values()) > 1 else [f'{base}+', f'[{base}]+']) if charge == 1 else [f'[{base}]+{charge}'] if charge > 1 else []
     terms.append(base)
     name = ELEMENT_NAMES.get(base) if len(counts) == 1 and sum(counts.values()) == 1 else MOLECULE_NAMES.get(base)
     if name and (charge == 0 or charge in ION_NAMES):
@@ -127,6 +128,7 @@ class Mapping:
     status: Status
     candidates: list[Candidate] = field(default_factory=list)  # closest first
     queries: list[str] = field(default_factory=list)
+    examined: int = 0  # gas-phase or other records returned by the searches
 
     @property
     def chosen(self) -> Optional[Candidate]:
@@ -148,16 +150,23 @@ def candidates_for(species: Species, records: list[ATcTSpecies], counts: Composi
     return sorted(found, key=lambda candidate: (candidate.deviation is None, abs(candidate.deviation or 0.0), candidate.record.atct_id))
 
 
-def decide(candidates: list[Candidate], tolerance: float) -> Status:
-    """MATCH: exactly one candidate within the tolerance, or the closest within it and all others more than ten times further away"""
+def decide(candidates: list[Candidate], tolerance: float) -> tuple[Status, list[Candidate]]:
+    """Status and the candidates with the chosen one first. MATCH if
+    * exactly one candidate lies within the tolerance,
+    * all within it are states of one species (same ATcT ID before '*', e.g. 7440-44-0*0 'C (g)' and 7440-44-0*1 'C (g, triplet)',
+      the ground state named twice, or ortho/para H3+): the gas-phase record '*0' is taken, or
+    * the closest lies within it and all others are more than ten times further away"""
     within = [candidate for candidate in candidates if candidate.deviation is not None and abs(candidate.deviation) <= tolerance]
     if not candidates:
-        return Status.NOT_FOUND
+        return Status.NOT_FOUND, candidates
     if len(within) == 1:
-        return Status.MATCH
+        return Status.MATCH, candidates
+    default = [candidate for candidate in within if candidate.record.atct_id.endswith('*0')]
+    if within and len({candidate.record.atct_id.split('*')[0] for candidate in within}) == 1 and default:
+        return Status.MATCH, default + [candidate for candidate in candidates if candidate is not default[0]]
     if within and all(abs(other.deviation or 0.0) > 10.0 * max(abs(within[0].deviation or 0.0), 1.0e-3) for other in within[1:]):
-        return Status.MATCH
-    return Status.CHECK
+        return Status.MATCH, candidates
+    return Status.CHECK, candidates
 
 
 def atct_species(database: Database) -> list[str]:
@@ -182,7 +191,8 @@ def map_species(database: Database, names: list[str], search: Callable[[str], li
                 cache[term] = search(term)
             records.update({record.atct_id: record for record in cache[term]})
         candidates = candidates_for(database.species[name], list(records.values()), counts, charge)
-        mappings.append(Mapping(name, decide(candidates, tolerance), candidates, terms))
+        status, candidates = decide(candidates, tolerance)
+        mappings.append(Mapping(name, status, candidates, terms, examined=len(records)))
     return mappings
 
 
@@ -204,6 +214,6 @@ def recipe_text(mappings: list[Mapping], source: str, own_data: Optional[str]) -
             key = yaml.safe_dump(mapping.species).splitlines()[0]  # quoted where YAML would read something else (e.g. 'NO')
             lines.append(f'  {key}: {{atct: {mapping.chosen.record.atct_id}}}  # {describe(mapping.chosen)}')
         else:
-            lines.append(f'  # {mapping.species}: {mapping.status.value} (searched: {", ".join(mapping.queries) or "-"})')
+            lines.append(f'  # {mapping.species}: {mapping.status.value} (searched: {", ".join(mapping.queries) or "-"}; {mapping.examined} records)')
             lines += [f'  #   candidate {describe(candidate)}' for candidate in mapping.candidates[:3]]
     return '\n'.join(lines) + '\n'
