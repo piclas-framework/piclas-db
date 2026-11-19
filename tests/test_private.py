@@ -134,3 +134,49 @@ def test_errors(remote: str, files: pathlib.Path, tmp_path: pathlib.Path, capsys
     entry.path.write_text('changed')
     assert main(['push', '--store', str(clone)]) == 1  # changed files are never pushed
     assert 'Not pushed' in capsys.readouterr().out
+
+
+def test_uncommitted_changes(remote: str, files: pathlib.Path, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """A clone with uncommitted changes: git pull refuses, piclas-db continues with the local store and says why"""
+    store = tmp_path / 'store'
+    assert main(['fetch', '--mirror', remote, '--store', str(store)]) == 0
+    assert main(['import', '--source-dir', str(files), '--store', str(store)]) == 0
+    assert main(['push', '--store', str(store)]) == 0
+    other = tmp_path / 'other'  # somebody else adds a commit, so that the next pull has something to do
+    git.git(['clone', '--quiet', remote, str(other)])
+    (other / 'notes.txt').write_text('x')
+    git.git(['add', 'notes.txt'], cwd=other)
+    git.git(['commit', '--quiet', '-m', 'notes'], cwd=other)
+    git.git(['push', '--quiet'], cwd=other)
+
+    meta = next(store.glob('lxcat/*/*/*.meta.yaml'))
+    meta.write_text(meta.read_text() + '# edited by hand\n')  # a tracked file changed: git pull --rebase refuses
+    monkeypatch.setattr(git, 'commit', lambda *arguments, **options: False)  # an import whose commit failed
+    stray = tmp_path / 'record.txt'
+    stray.write_text(LXCAT.replace('Test-A', 'Test-C'))
+    assert main(['import', str(stray), '--store', str(store)]) == 0
+    monkeypatch.undo()
+    for variable in ('GIT_AUTHOR_NAME', 'GIT_COMMITTER_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_EMAIL'):
+        monkeypatch.delenv(variable, raising=False)
+    monkeypatch.setenv('GIT_CONFIG_GLOBAL', '/dev/null')
+    monkeypatch.setenv('PICLAS_DB_CONFIG', str(tmp_path / 'no-config.yaml'))
+    monkeypatch.setenv('PICLAS_DB_USER_NAME', 'piclas-db test')
+    monkeypatch.setenv('PICLAS_DB_USER_EMAIL', 'test@example.com')
+    capsys.readouterr()
+
+    recipe = tmp_path / 'recipe.yaml'
+    recipe.write_text('cross_sections:\n  - source: lxcat/missing/n2\n    database: Test-A\n    species: e / N2\n')
+    assert main(['build', str(recipe), '-o', str(tmp_path / 'x.h5'), '--store', str(store)]) == 1  # missing file, but no crash
+    out = capsys.readouterr().out
+    assert 'WARNING: store not updated from the private repository' in out and 'uncommitted change(s)' in out
+    assert main(['store', '--store', str(store)]) == 0
+    out = capsys.readouterr().out
+    assert 'uncommitted change(s) in the clone' in out and 'lxcat/test-b+test-c' in out
+    assert main(['store', '--commit', '--store', str(store)]) == 0
+    assert 'Committed 3 file(s)' in capsys.readouterr().out  # the stray import (file and meta) and the edited meta file
+    assert git.changes(store) == []
+    assert main(['store', '--commit', '--store', str(store)]) == 0
+    assert 'Nothing to commit' in capsys.readouterr().out
+    assert main(['fetch', '--store', str(store)]) == 0  # pull works again
+    assert (store / 'notes.txt').is_file()
+    assert main(['store', '--commit', '--store', str(tmp_path / 'plain')]) == 1  # not a clone

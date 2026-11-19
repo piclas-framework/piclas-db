@@ -146,6 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
         elif name == 'store':
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
             sub.add_argument('--verify', action='store_true', help='check that every file still matches its sha256')
+            sub.add_argument('--commit', action='store_true', help='commit store files that were not committed (e.g. after a failed import)')
         elif name == 'export':
             sub.add_argument('source', help='database file (.h5) of any layout')
             sub.add_argument('-o', '--output', required=True, help='new or empty directory for the tables')

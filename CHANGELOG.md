@@ -3,6 +3,14 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.29.1
+
+* A clone of the private repository with uncommitted changes no longer stops `atct get`, `build` and `fetch --need` with a git
+  traceback: the store is used without the update, with a warning that says why
+* `piclas-db store` lists uncommitted changes in the clone; `piclas-db store --commit` commits store files that were not committed
+  (e.g. after a failed import), never originals whose sha256 no longer matches
+* `atct` reports git errors as messages
+
 ## 0.29.0
 
 * ATcT provider (`piclas_db/sources/atct.py`, documented in `docs/atct.md`), the first with automatic download: `piclas-db atct

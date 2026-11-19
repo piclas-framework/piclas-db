@@ -109,6 +109,11 @@ def pull(path: pathlib.Path) -> None:
         git(['checkout', '--quiet', '-B', branch.split('/', 1)[1], '--track', branch], cwd=path)
 
 
+def changes(path: pathlib.Path) -> list[str]:
+    """Uncommitted changes in a clone ('git status --porcelain' lines; untracked files included)"""
+    return [line for line in git(['status', '--porcelain'], cwd=path).splitlines() if line.strip()]
+
+
 def exclude(path: pathlib.Path, pattern: str) -> None:
     """Ignore a file in this clone only (.git/info/exclude), without committing a .gitignore"""
     exclude_file = path / '.git' / 'info' / 'exclude'

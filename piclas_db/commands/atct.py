@@ -19,6 +19,7 @@ import argparse
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db import config
+from piclas_db.git import GitError
 from piclas_db.resolve import Origin, Requirement, resolve
 from piclas_db.sources import atct
 from piclas_db.sources.identify import atct_dataset
@@ -54,6 +55,6 @@ def run(args: argparse.Namespace) -> int:
             state = 'downloaded' if resolution.origin is Origin.AUTOMATIC else 'in the store'
             print(f'  {state:12s} {record.atct_id:20s} {record.formula:24s} TN {record.version}  -> {resolution.entry.relative}')
         return 1 if failed else 0
-    except (atct.ATcTError, config.ConfigError) as e:
+    except (atct.ATcTError, config.ConfigError, GitError) as e:
         print(f'ERROR: {e}')
         return 1

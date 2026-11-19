@@ -79,3 +79,4 @@ adopts it).
 | `the store is a clone of ..., not of ...` | `mirror` in the configuration differs from the remote of the store |
 | `Not pushed: the store contains changed or missing files` | a file in the store was modified: `piclas-db store --verify` |
 | `Please tell piclas-db who you are` | `piclas-db config --set user.name/user.email` |
+| `WARNING: store not updated from the private repository (git pull failed: ... commit or stash them)` | the clone has uncommitted changes: `piclas-db store` lists them, `piclas-db store --commit` commits store files (e.g. after a failed import), anything else remove by hand |

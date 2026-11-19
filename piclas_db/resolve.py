@@ -92,10 +92,17 @@ def resolve(store: Store, requirements: list[Requirement], update: bool = True) 
     resolutions = [Resolution(requirement, Origin.LOCAL, find(store, requirement)) for requirement in requirements]
     missing = [resolution for resolution in resolutions if resolution.entry is None]
     if missing and update and store.is_repository:
-        git.pull(store.root)
-        store.write_index()
-        for resolution in missing:
-            resolution.entry, resolution.origin = find(store, resolution.requirement), Origin.PRIVATE
+        try:
+            git.pull(store.root)
+            store.write_index()
+            for resolution in missing:
+                resolution.entry, resolution.origin = find(store, resolution.requirement), Origin.PRIVATE
+        except git.GitError as e:
+            # the local store is still usable: continue without the update, say why (e.g. uncommitted changes in the clone)
+            changed = git.changes(store.root)
+            print(f'  WARNING: store not updated from the private repository ({str(e).splitlines()[0]})')
+            if changed:
+                print(f'           {len(changed)} uncommitted change(s) in {store.root}: piclas-db store shows them')
     for resolution in resolutions:
         if resolution.entry is None and update and resolution.requirement.provider == 'atct':
             resolution.entry = download_atct(store, resolution.requirement)

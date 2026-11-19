@@ -14,12 +14,43 @@
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import argparse
+import pathlib
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.store import Store
+from piclas_db import git
+from piclas_db.store import META_SUFFIX, Store
 # ==================================================================================================================================
+
+
+def commit_pending(store: Store) -> int:
+    """Commit store files that are not committed yet (e.g. an import whose commit failed); only verified files and their meta"""
+    if not store.is_repository:
+        print('ERROR: the store is not a clone of a private repository')
+        return 1
+    changed = {line.split(maxsplit=1)[1].strip('"') for line in git.changes(store.root)}  # 'XY path' (the first line may lose its blank)
+    if not changed:
+        print('Nothing to commit: the clone has no uncommitted changes')
+        return 0
+    files: list[pathlib.Path] = []
+    problems = {problem.split(':', 1)[0] for problem in store.verify()}  # changed or missing originals are never committed
+    for entry in store.entries():
+        meta = entry.path.with_name(entry.path.name + META_SUFFIX)
+        pending = [path for path in (entry.path, meta) if str(path.relative_to(store.root)) in changed or any(str(path.relative_to(store.root)).startswith(item.rstrip('/') + '/') for item in changed)]
+        if pending and entry.relative not in problems:
+            files.extend(pending)
+    if not files:
+        print('No store files among the uncommitted changes; they are not from piclas-db (git -C <store> status):')
+        for item in sorted(changed)[:10]:
+            print(f'    {item}')
+        return 1
+    git.commit(store.root, files, f'Add {len(files)} file(s) of the store that were not committed')
+    print(f'Committed {len(files)} file(s); push with piclas-db push')
+    rest = git.changes(store.root)
+    if rest:
+        print(f'Still uncommitted (not store files): {len(rest)}; see git -C {store.root} status')
+    return 0
 
 
 def run(args: argparse.Namespace) -> int:
@@ -27,6 +58,16 @@ def run(args: argparse.Namespace) -> int:
     store = Store(args.store)
     entries = store.entries()
     print(f'Store: {store.root} ({len(entries)} file(s))')
+    if args.commit:
+        return commit_pending(store)
+    if store.is_repository:
+        changed = git.changes(store.root)
+        if changed:
+            # e.g. a file copied into the store whose commit failed, or a file changed by hand: git pull refuses to work then
+            print(f'  {len(changed)} uncommitted change(s) in the clone of the private repository:')
+            for line in changed[:10]:
+                print(f'    {line}')
+            print('  Files that belong in the store: piclas-db store --commit; anything else: remove it (git -C <store> status)')
     if args.verify:
         problems = store.verify()
         for problem in problems:
