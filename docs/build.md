@@ -38,6 +38,22 @@ reactions:                                 # own data, written as /Reactions/<na
 
 `@sha256` (or a prefix of it) pins the exact original file; without it the newest file of the dataset is used.
 
+### Derived attributes: `masses` and `charges`
+
+```yaml
+masses: composition      # default: record (MassIC as given by own data or ATcT)
+charges: name            # default: data (ChargeIC as given by own data)
+```
+
+`masses: composition` sets `MassIC` of every molecule and ion to the sum of its atoms (the neutral atom species of the database,
+e.g. `C`, `O` from ATcT) minus charge × electron mass (species `electron`, else CODATA 2022). Every reaction then conserves mass
+exactly; ATcT masses alone do not, since ATcT gives them to about four decimals in u (`SpeciesDatabase.h5`: XeIon1 is Xe minus 0.911
+electron masses). Atoms keep their record masses; elements without an atom species (e.g. no `Fe` for `FeO`) are noted and the
+species keeps its mass. The reference says `MassIC: by composition, C + 2 O` and no longer names ATcT for the mass.
+`charges: name` sets `ChargeIC` to the charge in the name (`ArIon1`: 1, `electron`: −1) × 1.602176634e-19 C (exact since 2019).
+Values written in the recipe take precedence. Applied to the species of `SpeciesDatabase.h5`, the two options remove all
+`reaction-mass` and `species-ion-mass` warnings.
+
 ## From LXCat to PICLas
 
 | LXCat | PICLas |

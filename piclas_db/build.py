@@ -471,6 +471,13 @@ def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool 
         species.attributes.update(own)
         origin = ['own data'] * (stored is not None) + ['ATcT'] * bool((attributes or {}).get('atct')) + ['recipe'] * bool(own)
         report.added.append(f'/Species/{name} ({", ".join(origin) or "no values"})')
+    if recipe.masses == 'composition' or recipe.charges == 'name':
+        from piclas_db.derive import derive_charges, derive_masses  # noqa: PLC0415
+
+        if recipe.masses == 'composition':
+            derive_masses(database, recipe.species, report.notes)
+        if recipe.charges == 'name':
+            derive_charges(database, recipe.species, report.notes)
     for name, attributes in recipe.reactions.items():
         database.reactions[name] = Reaction(name=name, attributes=dict(attributes), provenance=Provenance(reference=f'recipe {recipe.path}'))
         report.added.append(f'/Reactions/{name} (from the recipe)')

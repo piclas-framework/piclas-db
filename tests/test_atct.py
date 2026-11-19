@@ -28,6 +28,7 @@ from piclas_db.piclas_db import main
 from piclas_db.readers import read_database
 from piclas_db.sources import atct
 from piclas_db.sources.identify import IdentifyError, atct_dataset, atct_id_of, identify
+from piclas_db.rules import run_checks
 from piclas_db.store import Store
 # ==================================================================================================================================
 # Records in the structure of the ATcT API (v1); the values are invented
@@ -293,3 +294,54 @@ def test_atct_map_without_file_value() -> None:
     assert status is atct_map.Status.MATCH and ordered[0].record.atct_id == '7-7-7*0'
     assert 'no HeatOfFormation_K in the file' in atct_map.describe(ordered[0])
     assert atct_map.decide([candidate('7-7-7*0'), candidate('6-6-6*0')], 1.0)[0] is atct_map.Status.CHECK
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Recipe options masses: composition, charges: name
+# ----------------------------------------------------------------------------------------------------------------------------------
+def test_masses_by_composition(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Rounded record masses (as ATcT gives them) replaced by atoms minus electrons: every reaction conserves mass exactly"""
+    store = tmp_path / 'store'
+    records = {
+        '1-1-1*0': record('1-1-1*0', 'Tx  (g)', '0', '20.1234'),
+        '2-2-2*0': record('2-2-2*0', 'Qq  (g)', '0', '3.0001'),
+        '3-3-3*0': record('3-3-3*0', 'TxQq2  (g)', '-50.', '26.1236'),  # rounded: not Tx + 2 Qq
+        '4-4-4*0': record('4-4-4*0', 'Tx+  (g)', '700.', '20.1229', charge=1),  # rounded: Tx minus 0.91 electron masses
+    }
+    files = []
+    for atct_id, item in records.items():
+        files.append(tmp_path / f'{atct_id[0]}.json')
+        files[-1].write_text(json.dumps(item, ensure_ascii=False))
+    own = tmp_path / 'own.yaml'
+    own.write_text('format: piclas-db own data\nname: piclas-parameters\nspecies:\n  electron: {MassIC: 9.1093837139e-31, Reference: CODATA 2022}\n')
+    assert main(['import', *map(str, files), str(own), '--store', str(store), '--retrieved', '2026-01-01']) == 0
+    recipe = tmp_path / 'recipe.yaml'
+    recipe.write_text(
+        'masses: composition\ncharges: name\nown_data: own/piclas-parameters\nspecies:\n'
+        '  Tx: {atct: 1-1-1*0}\n  Qq: {atct: 2-2-2*0}\n  TxQq2: {atct: 3-3-3*0}\n  TxIon1: {atct: 4-4-4*0}\n  QqIon1: {ChargeIC: 1.0, MassIC: 1.0}\n  electron: {}\n'
+    )
+    output = tmp_path / 'db.h5'
+    capsys.readouterr()
+    assert main(['build', str(recipe), '-o', str(output), '--store', str(store), '--offline']) == 0
+    out = capsys.readouterr().out
+    assert 'masses: composition: MassIC of 2 species from their atoms' in out and 'charges: name: ChargeIC of' in out
+    species = read_database(output).species
+    mass = {name: float(species[name].attributes['MassIC']) for name in species}  # ty: ignore[invalid-argument-type]
+    electron = 9.1093837139e-31
+    assert mass['TxQq2'] == pytest.approx(mass['Tx'] + 2 * mass['Qq'], rel=1e-15, abs=0)
+    assert mass['TxIon1'] + electron == pytest.approx(mass['Tx'], rel=1e-15, abs=0)
+    assert (mass['QqIon1'], species['QqIon1'].attributes['ChargeIC']) == pytest.approx((1.0, 1.0), rel=0)  # written in the recipe: kept
+    assert (species['TxIon1'].attributes['ChargeIC'], species['electron'].attributes['ChargeIC']) == pytest.approx((1.602176634e-19, -1.602176634e-19), rel=0, abs=0)
+    reference = str(species['TxQq2'].provenance.reference)
+    assert ': HeatOfFormation_K;' in reference and 'MassIC: by composition, Tx + 2 Qq' in reference and 'HeatOfFormation_K, MassIC' not in reference
+    assert 'MassIC: by composition, Tx - e' in str(species['TxIon1'].provenance.reference)
+    assert 'HeatOfFormation_K, MassIC' in str(species['Tx'].provenance.reference)  # atoms keep the record mass
+    assert [finding.path for finding in run_checks(read_database(output)) if finding.rule == 'species-ion-mass'] == ['/Species/QqIon1']  # only the recipe value
+
+
+def test_recipe_derive_options() -> None:
+    from piclas_db.recipe import RecipeError, parse_recipe  # noqa: PLC0415
+
+    assert parse_recipe('masses: composition\n', 'r').masses == 'composition' and parse_recipe('', 'r').charges == 'data'
+    with pytest.raises(RecipeError, match='masses'):
+        parse_recipe('masses: atoms\n', 'r')

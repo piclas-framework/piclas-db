@@ -49,10 +49,9 @@ from piclas_db.reference import (
 )
 from piclas_db import provenance
 from piclas_db.schema import Schema
+from piclas_db.derive import ELECTRON_MASS, ELEMENTARY_CHARGE  # CODATA 2022; exact (SI 2019)
 # ==================================================================================================================================
 
-ELEMENTARY_CHARGE = 1.602176634e-19  # C
-ELECTRON_MASS = 9.1093837139e-31  # kg, CODATA 2022 (used if the database has no species 'electron')
 SIGMA_MAX_M2 = 1.0e-16  # larger cross-sections are most likely given in cm^2
 KIND_NAMES = [kind.value for kind in XSEC_DATASET_KINDS + XSEC_GROUP_KINDS]
 

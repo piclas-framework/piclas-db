@@ -3,6 +3,17 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.36.0
+
+* Recipe option `masses: composition` (`piclas_db/derive.py`): `MassIC` of molecules and ions = sum of the atom masses minus
+  charge × electron mass, so that every reaction conserves mass exactly (ATcT masses are rounded to about four decimals in u);
+  atoms keep their record masses, the reference of each species says `MassIC: by composition, C + 2 O` and the ATcT reference no
+  longer names the mass; `build` notes the number of species and the largest change
+* Recipe option `charges: name`: `ChargeIC` = charge from the name × 1.602176634e-19 C (exact, SI 2019), electron −e
+* Values written in the recipe take precedence over both; `rebuild` keeps the options in derived recipes
+* CODATA 2022 electron mass and the elementary charge in one place (`derive.py`), used by `check` as well
+* On the species of `SpeciesDatabase.h5` both options remove all 23 `reaction-mass` and 7 `species-ion-mass` warnings
+
 ## 0.35.0
 
 * `check`: rule `species-ion-mass`, the mass of `<X>Ion<n>` against `<X>` minus n electron masses, given in electron masses.

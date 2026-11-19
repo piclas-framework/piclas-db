@@ -114,7 +114,9 @@ data or the recipe that replaces an ATcT value. With all ATcT species of the rec
 piclas-db export SpeciesDatabase.h5 --own-data piclas-parameters.yaml --origin "SpeciesDatabase.h5 (2026-10-09)" --atct-from recipe.yaml
 ```
 
-The electron is not in ATcT; its mass is own data (`SpeciesDatabase.h5`: 9.11e-31 kg, three digits).
+The electron is not in ATcT; its mass is own data (`SpeciesDatabase.h5`: 9.11e-31 kg, three digits; CODATA 2022:
+9.1093837139e-31 kg). With `masses: composition` and `charges: name` in the recipe ([build](build.md)), only the masses of the atoms
+and the electron come from records and own data; molecules and ions follow from them, and every reaction conserves mass and charge.
 
 ## Versions
 

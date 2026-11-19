@@ -176,6 +176,10 @@ def recipe_yaml(recipe: Recipe, unresolved: list[str]) -> dict[str, object]:
         data['cross_sections'] = [{'source': str(selection.source), 'database': selection.database, 'species': selection.species, 'pair': selection.pair} for selection in recipe.cross_sections]
     if recipe.levels:
         data['levels'] = [{'source': str(selection.source), 'species': selection.species} for selection in recipe.levels]
+    if recipe.masses != 'record':
+        data['masses'] = recipe.masses
+    if recipe.charges != 'data':
+        data['charges'] = recipe.charges
     if unresolved:
         data['notes'] = ['No usable provenance in the old file (rebuilt only if the selected original data contain them):', *unresolved]
     return data

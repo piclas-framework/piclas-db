@@ -121,6 +121,8 @@ class Recipe:
     own_data: list[Requirement] = field(default_factory=list)  # own/<name>: PICLas parameters of species, from the store
     species: dict[str, dict[str, object]] = field(default_factory=dict)  # own data: species attributes
     reactions: dict[str, dict[str, object]] = field(default_factory=dict)  # own data: reaction attributes
+    masses: str = 'record'  # 'composition': MassIC of molecules and ions from their atoms (piclas_db/derive.py)
+    charges: str = 'data'  # 'name': ChargeIC from the name
 
     @property
     def requirements(self) -> list[Requirement]:
@@ -165,11 +167,16 @@ def parse_recipe(text: str, path: str) -> Recipe:
         raise RecipeError(f'cannot read recipe {path}: {e}') from e
     if not isinstance(data, dict):
         raise RecipeError(f'{path}: a recipe is a mapping with cross_sections, levels, species and reactions')
-    unknown = set(data) - {'cross_sections', 'levels', 'literature', 'species', 'reactions', 'own_data', 'description', 'notes'}
+    unknown = set(data) - {'cross_sections', 'levels', 'literature', 'species', 'reactions', 'own_data', 'masses', 'charges', 'description', 'notes'}
     if unknown:
         raise RecipeError(f'{path}: unknown sections {", ".join(sorted(unknown))}')
 
     recipe = Recipe(path=str(path))
+    for key, allowed in (('masses', ('record', 'composition')), ('charges', ('data', 'name'))):
+        value = str(data.get(key, allowed[0]))
+        if value not in allowed:
+            raise RecipeError(f'{path}: {key}: {value!r} unknown ({" or ".join(allowed)})')
+        setattr(recipe, key, value)
     for number, entry in enumerate(data.get('cross_sections') or [], start=1):
         context = f'cross_sections #{number}'
         if not isinstance(entry, dict) or 'species' not in entry:
