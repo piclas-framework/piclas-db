@@ -53,7 +53,7 @@ piclas-db -v
 | --- | --- | --- |
 | `piclas-db guide lxcat/biagi-v7.1/ar` | Step-by-step guide for a manual download ([details](docs/rebuild.md)) | **available** |
 | `piclas-db import --source-dir ~/Downloads` | Identify by content, validate, copy into the local store ([details](docs/store.md)) | **available** |
-| `piclas-db atct search\|get` | ATcT: find species, download their records (heat of formation, mass) automatically ([details](docs/atct.md)) | **available** |
+| `piclas-db atct search\|get\|map` | ATcT: find species, download their records (heat of formation, mass) automatically, map the species of a database to ATcT IDs ([details](docs/atct.md)) | **available** |
 | `piclas-db config [--init]` | Configuration file: store, private repository, defaults for options ([details](docs/configuration.md)) | **available** |
 | `piclas-db store [--verify]` | List the local store, verify the files against their sha256 | **available** |
 | `piclas-db fetch [--mirror <private repo>] [--need ...]` | Clone or update the store from the private repository, locate required files ([details](docs/store.md#private-repository)) | **available** |

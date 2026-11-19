@@ -156,3 +156,94 @@ def test_build_with_atct(api: list[str], tmp_path: pathlib.Path, monkeypatch: py
     recipe.write_text('species:\n  Tx: {atct: 111-11-1*1}\n')
     assert main(['build', str(recipe), '-o', str(tmp_path / 'other.h5'), '--store', str(store)]) == 1
     assert 'Please tell piclas-db who you are' in capsys.readouterr().out
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# ATcT IDs for the species of a database (atct map)
+# ----------------------------------------------------------------------------------------------------------------------------------
+R = atct.GAS_CONSTANT  # kJ/(mol K)
+MAP_RECORDS = [
+    record('111-11-1*0', 'Tx  (g)', '-110.000', 28.0),
+    record('111-11-1*1', 'Tx  (g, triplet)', '470.', '28.00000'),
+    record('222-22-2*0', 'Tx+  (g)', '1500.000', '27.99945', charge=1),
+    record('333-33-3*1000', 'Tx  (aq, undissoc)', '-110.000', 28.0),
+    record('444-44-4*0', 'TxQ2  (g)', '50.000', 60.0),
+    record('444-44-5*0', 'QTxQ  (g)', '50.400', 60.0),  # isomer, nearly the same heat of formation
+    record('555-55-5*0', '[Tx]+3  (g)', '9000.000', 27.9984, charge=3),
+]
+
+
+def map_database(path: pathlib.Path) -> pathlib.Path:
+    import h5py  # noqa: PLC0415
+
+    values = {'Tx': -110.3 / R, 'TxIon1': 1500.2 / R, 'TxQ2': 50.2 / R, 'TxIon3': 9100.0 / R, 'Zq': 1.0, 'TxIon2': 3000.0 / R}
+    with h5py.File(path, 'w') as h5:
+        for name, heat in values.items():
+            group = h5.create_group(f'Species/{name}')
+            group.attrs['HeatOfFormation_K'] = heat
+            group.attrs['MassIC'] = 28.0 * atct.ATOMIC_MASS_UNIT * (1 + 1.0e-5)
+            group.attrs['* Reference'] = 'HeatOfFormation: Book' if name == 'Zq' else 'HeatOfFormation: ATcT 9.9'
+    return path
+
+
+def test_atct_map_parsing() -> None:
+    from piclas_db import atct_map  # noqa: PLC0415
+
+    assert atct_map.piclas_name('ArIon1') == ('Ar', {'Ar': 1}, 1) and atct_map.piclas_name('CO2') == ('CO2', {'C': 1, 'O': 2}, 0)
+    assert atct_map.piclas_name('electron') is None
+    assert atct_map.atct_formula('[ArH]+ (g)') == ({'Ar': 1, 'H': 1}, 1) and atct_map.atct_formula('OH- (g)') == ({'O': 1, 'H': 1}, -1)
+    assert atct_map.atct_formula('HC(O)OH (g)') == ({'H': 2, 'C': 1, 'O': 2}, 0) and atct_map.atct_formula('[C]+6 (g)') == ({'C': 1}, 6)
+    assert atct_map.queries('Ar', {'Ar': 1}, 1) == ['Ar+', 'Ar', 'argon cation'] and atct_map.queries('C', {'C': 1}, 6) == ['[C]+6', 'C']
+    assert atct_map.queries('CO2', {'C': 1, 'O': 2}, 0) == ['CO2', 'carbon dioxide']
+
+
+def test_atct_map(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    from piclas_db import atct_map  # noqa: PLC0415
+
+    searched: list[str] = []
+
+    def search(term: str) -> list[atct.ATcTSpecies]:
+        searched.append(term)
+        return [atct.species_from(item) for item in MAP_RECORDS]
+
+    database = read_database(map_database(tmp_path / 'old.h5'))
+    assert atct_map.atct_species(database) == ['Tx', 'TxIon1', 'TxIon2', 'TxIon3', 'TxQ2']
+    mappings = {mapping.species: mapping for mapping in atct_map.map_species(database, atct_map.atct_species(database), search)}
+    assert mappings['Tx'].status is atct_map.Status.MATCH and chosen_id(mappings['Tx']) == '111-11-1*0'
+    assert [candidate.record.atct_id for candidate in mappings['Tx'].candidates] == ['111-11-1*0', '111-11-1*1']  # not the aqueous record
+    assert mappings['Tx'].candidates[0].mass_deviation == pytest.approx(1.0e-5)
+    assert chosen_id(mappings['TxIon1']) == '222-22-2*0'
+    assert mappings['TxQ2'].status is atct_map.Status.CHECK  # two isomers within the tolerance
+    assert mappings['TxIon3'].status is atct_map.Status.CHECK and mappings['TxIon2'].status is atct_map.Status.NOT_FOUND
+    assert searched.count('Tx') == 1  # cached
+    recipe = atct_map.recipe_text(list(mappings.values()), 'old.h5', 'own/piclas-parameters')
+    assert '  Tx: {atct: 111-11-1*0}  # 111-11-1*0 Tx (g) TN 9.999, dfH +0.300 kJ/mol vs. file' in recipe
+    assert '  # TxQ2: check' in recipe and '  #   candidate 444-44-4*0' in recipe
+
+    monkeypatch.setattr(atct, 'search', search)
+    out = tmp_path / 'recipe.yaml'
+    assert main(['atct', 'map', str(tmp_path / 'old.h5'), '--recipe-out', str(out), '--species', 'Tx', 'TxIon1']) == 0
+    assert '2 match' in capsys.readouterr().out
+    assert set(load_species(out)) == {'Tx', 'TxIon1'}
+    assert main(['atct', 'map', str(tmp_path / 'old.h5')]) == 2  # not everything matched
+    assert main(['atct', 'map', str(tmp_path / 'old.h5'), '--species', 'Nope']) == 1
+
+
+def chosen_id(mapping: object) -> str | None:
+    chosen = getattr(mapping, 'chosen', None)
+    return None if chosen is None else chosen.record.atct_id
+
+
+def load_species(path: pathlib.Path) -> dict:
+    import yaml  # noqa: PLC0415
+
+    return yaml.safe_load(path.read_text())['species']
+
+
+def test_atct_map_get(tmp_path: pathlib.Path, api: list[str], capsys: pytest.CaptureFixture[str]) -> None:
+    """--get downloads the records of the matched species into the store"""
+    store = tmp_path / 'store'
+    assert main(['atct', 'map', str(map_database(tmp_path / 'old.h5')), '--species', 'Tx', 'TxIon1', '--get', '--store', str(store)]) == 0
+    assert '2 of 2 record(s) in the store' in capsys.readouterr().out
+    assert sorted(entry.relative.split('/')[1] for entry in Store(store).entries()) == sorted([atct_dataset('111-11-1*0'), atct_dataset('222-22-2*0')])
+    assert any(call.startswith('species/search') for call in api)

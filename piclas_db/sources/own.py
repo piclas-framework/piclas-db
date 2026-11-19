@@ -139,6 +139,11 @@ def split_reference(provenance: Provenance, attributes: dict[str, Any]) -> tuple
     return labelled, other
 
 
+def credits_atct(labelled: dict[str | None, str]) -> bool:
+    """True if the reference names ATcT as source of the heat of formation (split_reference)"""
+    return 'atct' in labelled.get('HeatOfFormation_K', '').lower()
+
+
 def plain(value: Any) -> Any:
     """Attribute value as a plain YAML value (lists for arrays, exact floats)"""
     if isinstance(value, np.ndarray):
@@ -163,7 +168,7 @@ def own_data_from_database(database: Database, origin: str, name: str = 'piclas-
     for species_name, species in sorted(database.species.items()):
         attributes = {key: plain(value) for key, value in species.attributes.items()}
         labelled, other = split_reference(species.provenance, attributes)
-        atct = 'atct' in labelled.get('HeatOfFormation_K', '').lower()
+        atct = credits_atct(labelled)
         if atct:
             export.atct_species.append(species_name)
             if not keep_atct:

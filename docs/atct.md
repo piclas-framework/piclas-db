@@ -51,6 +51,36 @@ like a file downloaded by hand; in a store that is a clone of the private reposi
 `https://atct.anl.gov/api/v1/species/get/by-atctid/` with a pause of 1 s, a time limit and retries. A record saved by hand (e.g. with
 `curl`) can be imported with `piclas-db import record.json --retrieved YYYY-MM-DD`.
 
+## ATcT IDs for an existing database
+
+```bash
+piclas-db atct map SpeciesDatabase.h5 --recipe-out atct-species.yaml
+piclas-db atct map SpeciesDatabase.h5 --species CO COIon1 --get     # only these, and download the matched records
+```
+
+For every species whose reference credits ATcT (35 in `SpeciesDatabase.h5`, `--species` for others), `map`
+
+1. derives formula and charge from the PICLas name (`CO2`, `ArIon1` → Ar with charge 1, `CIon6` → C with charge 6; `electron` is
+   skipped),
+2. searches ATcT by formula (`Ar+`, `[C]+6`, `CO2`) and by name (`argon cation`, `carbon dioxide`), each term once,
+3. keeps gas-phase records with the same composition and charge (`[ArH]+ (g)` is not `ArIon1`, `CO (aq)` is not `CO`), and
+4. compares their ΔfH°(298.15 K) with `HeatOfFormation_K × R` of the file: **match** if exactly one record lies within the tolerance
+   (default 1 kJ/mol, `--tolerance`; TN versions differ by much less, electronic states and isomers by much more), or the closest
+   lies within it and all others more than ten times further away; **check** if none or several do; **not found** without
+   candidates.
+
+Example for CO (numbers from the CO check under [Versions](#versions); to be replaced by the output of a real run):
+
+```
+CO         match                630-08-0*0 CO (g) TN 1.228, dfH -0.001 kJ/mol vs. file, mass of the file -1.2e-05
+```
+
+The line shows the record, the difference of the heat of formation to the file and the relative deviation of the mass of the file
+(finding A7). `--recipe-out` writes the matched species as recipe entries (`CO: {atct: 630-08-0*0}`, with `own_data:
+own/piclas-parameters`, `--own-data ""` for none) and the others as comments with up to three candidates, to be decided with
+`atct search` and entered by hand. `--get` downloads the matched records into the store. The exit code is 0 if every species
+matched, 2 if some need a decision, 1 on errors. ATcT is asked at most once per second: all 35 species take about two minutes.
+
 ## Versions
 
 The API returns the current thermochemical network (TN) version, e.g. 1.228; every record names it. `SpeciesDatabase.h5` used

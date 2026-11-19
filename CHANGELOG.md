@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.32.0
+
+* `piclas-db atct map SOURCE` (`piclas_db/atct_map.py`, documented in `docs/atct.md`): ATcT IDs for the species of a database whose
+  reference credits ATcT; formula and charge from the PICLas name, ATcT searched by formula and name, gas-phase records with the
+  same composition and charge as candidates, the heat of formation of the file decides (tolerance 1 kJ/mol, `--tolerance`); status
+  match, check or not found per species, with the deviations of heat of formation and mass; `--recipe-out` writes recipe entries
+  (matched species with `atct:`, the others as comments with candidates), `--get` downloads the matched records, `--species` selects
+* Tests with invented ATcT records: states and phases, isomers within the tolerance, missing charge states, cached searches, `--get`
+
 ## 0.31.0
 
 * `piclas-db export SOURCE --own-data FILE`: the species attributes of a database as an own-data file, every species with a

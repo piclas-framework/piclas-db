@@ -135,9 +135,14 @@ def build_parser() -> argparse.ArgumentParser:
         elif name == 'push':
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
         elif name == 'atct':
-            sub.add_argument('action', choices=['search', 'get'], help='search: find species by name or formula; get: download records by ATcT ID')
-            sub.add_argument('arguments', nargs='+', help='search: name or formula (e.g. carbon monoxide); get: ATcT IDs (e.g. 630-08-0*0)')
+            sub.add_argument('action', choices=['search', 'get', 'map'], help='search: find species by name or formula; get: download records by ATcT ID; map: ATcT IDs for the species of a database')
+            sub.add_argument('arguments', nargs='+', help='search: name or formula (e.g. carbon monoxide); get: ATcT IDs (e.g. 630-08-0*0); map: database file (.h5)')
             sub.add_argument('--all', action='store_true', help='search: also species that are not in the gas phase')
+            sub.add_argument('--species', nargs='+', help='map: only these species (default: all whose reference credits ATcT)')
+            sub.add_argument('--tolerance', type=float, default=1.0, help='map: accepted difference of the heat of formation in kJ/mol (default 1.0)')
+            sub.add_argument('--recipe-out', help='map: write recipe entries (matched species with their ATcT ID, the others as comments)')
+            sub.add_argument('--own-data', default='own/piclas-parameters', help='map: own data named in the recipe (default own/piclas-parameters, "" for none)')
+            sub.add_argument('--get', action='store_true', help='map: download the records of the matched species into the store')
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE, configuration, ~/.local/share/piclas-db/store)')
         elif name == 'config':
             sub.add_argument('--init', action='store_true', help='write a commented template of the configuration file')
