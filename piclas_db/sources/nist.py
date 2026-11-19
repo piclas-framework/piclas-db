@@ -12,7 +12,8 @@
 # ==================================================================================================================================
 """Parser for energy-level exports of the NIST Atomic Spectra Database (https://physics.nist.gov/asd)
 
-The ASD level form exports tables as CSV, tab-separated or formatted text ('|' separated). The header contains the columns
+The ASD level form exports tables as CSV (values written as Excel formulas, '="93143.7600"'), tab-separated or formatted text
+('|' separated, 'ASCII (text)'); all give the same levels. The header contains the columns
 'J' and 'Level (<unit>)' with the unit cm-1, eV or Ry. The species is not part of every export, so it is taken from a spectrum
 name above the table (e.g. 'Ar II'), from the file name or from the command line.
 """
@@ -44,6 +45,8 @@ class NistLevels:
     species: Optional[str]  # PICLas name, e.g. 'ArIon1'
     levels: np.ndarray = field(default_factory=lambda: np.empty((0, 2)))  # degeneracy 2J+1, energy in the given unit
     skipped: int = 0  # rows without J or energy (e.g. limits, headers repeated in the table)
+    limit: Optional[float] = None  # lowest ionization limit ('Limit' row), in the given unit
+    estimated: int = 0  # levels with the energy in brackets or parentheses (theoretical or derived values, e.g. '[126211.5]')
 
 
 def is_nist_levels(text: str) -> bool:
@@ -95,18 +98,31 @@ def parse_nist_levels(text: str, name_hint: str = '') -> NistLevels:
     if 'J' not in columns:
         raise ValueError('no "J" column found')
     j_column = columns.index('J')
+    term_column = columns.index('Term') if 'Term' in columns else None
+    prefix_column = columns.index('Prefix') if 'Prefix' in columns else None  # CSV: brackets of the level in their own columns
 
-    levels, skipped = [], 0
+    levels, skipped, limits, estimated = [], 0, [], 0
     for row in rows[1:]:
         if len(row) <= max(level_column, j_column):
             skipped += 1
             continue
         j, energy = parse_j(row[j_column]), parse_energy(row[level_column])
+        if term_column is not None and len(row) > term_column and clean(row[term_column]).lower() == 'limit' and energy is not None:
+            limits.append(energy)
         if j is None or energy is None:
             skipped += 1
             continue
+        prefix = clean(row[prefix_column]) if prefix_column is not None and len(row) > prefix_column else ''
+        estimated += bool(re.search(r'[\[\(]', clean(row[level_column]) + prefix))
         levels.append((2.0 * j + 1.0, energy))
 
     # Spectrum name before the table (the table itself names the next ion in its 'Limit' rows), otherwise from the file name
     species = piclas_species('\n'.join(lines[:header_index])) or piclas_species(name_hint)
-    return NistLevels(unit=unit_match.group(1), species=species, levels=np.array(levels, dtype=np.float64).reshape(-1, 2), skipped=skipped)
+    return NistLevels(
+        unit=unit_match.group(1),
+        species=species,
+        levels=np.array(levels, dtype=np.float64).reshape(-1, 2),
+        skipped=skipped,
+        limit=min(limits) if limits else None,
+        estimated=estimated,
+    )

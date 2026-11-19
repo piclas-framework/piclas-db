@@ -3,6 +3,18 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.38.0
+
+Checked with the two formats of the NIST ASD levels form for Ar I ("CSV (text)", "ASCII (text)"): identical 503 levels, species
+from the file name, the `Ar II ... Limit` row not taken as species or level.
+
+* NIST ASD levels: the ionization limit (`Limit` row) is read; `build` leaves out the levels above it (Ar I: 77 autoionizing levels
+  `3s.3p6.np`), `above_limit: true` in a level selection keeps them; the number of bracketed (theoretical or derived) energies is
+  noted, also from the separate Prefix column of the CSV; `import` shows the limit
+* `guide nist-asd`: the format names of the current form ("CSV (text)", "ASCII (text)")
+* Finding: `SpeciesDatabase.h5` Ar levels are the bound levels of an older ASD version (421; now 426) converted with 1.43873021 K per
+  cm⁻¹ instead of 1.438776877 (all energies 3.24e-5 too low)
+
 ## 0.37.0
 
 * `diff` on a terminal: one table per section (name, item, change, A, B, relative difference), rows grouped by species, pair or

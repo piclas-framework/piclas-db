@@ -74,6 +74,20 @@ Every cross-section gets the LXCat recommended reference of its database (`Refer
 its threshold (`Threshold [eV]`) and the original file with its sha256 (`* Source`). NIST ASD levels are converted to K with the
 exact constants (hc/k_B = 1.438776877 cm K, 1 eV = 11604.51812 K) and sorted.
 
+Levels above the ionization limit of the file (the `Limit` row, e.g. `Ar II (3p5 2P*<3/2>) | Limit | 127109.842`) are left out:
+they autoionize and are not bound states of the species; `above_limit: true` in the level selection keeps them. Energies in brackets
+(theoretical or derived values in NIST ASD) are kept and counted. Both formats of the levels form, "CSV (text)" and "ASCII (text)",
+give the same levels. For Ar I (current ASD), `build` reports:
+
+```
+  added  /Species/Ar/ElectronicLevel (426 levels, converted from cm-1 to K)
+  note   Ar (nist-asd/levels/ar/2026-11-19_96e5938d.csv): 77 levels above the ionization limit (127109.842 cm-1) left out (above_limit: true keeps them)
+  note   Ar (nist-asd/levels/ar/2026-11-19_96e5938d.csv): 4 levels with energies in brackets (theoretical or derived values in NIST ASD)
+```
+
+and `diff` against `SpeciesDatabase.h5`: `421 levels in A, 426 in B; energies scaled by 1.0000324`. The old file holds the bound
+levels of an older ASD version (one level less) converted with 1.43873021 K per cm⁻¹ instead of 1.438776877.
+
 ## Example: GEC reference cell
 
 Built from the LXCat download in the store, `recipes/gec-argon.yaml` reproduces the GEC tutorial file

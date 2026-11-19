@@ -323,6 +323,16 @@ def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry,
     parsed = parse_nist_levels(entry.path.read_text(encoding='utf-8', errors='replace'), name_hint=entry.path.name)
     factor = {'cm-1': CM_TO_K, 'eV': EV_TO_K, 'Ry': RYDBERG_EV * EV_TO_K}[parsed.unit]
     levels = parsed.levels.copy()
+    label = f'{selection.species} ({entry.relative})'
+    if parsed.limit is None:
+        report.notes.append(f'{label}: no ionization limit in the file, all {len(levels)} levels kept')
+    elif not selection.above_limit:
+        above = levels[:, 1] > parsed.limit
+        if above.any():
+            report.notes.append(f'{label}: {int(above.sum())} levels above the ionization limit ({parsed.limit:.10g} {parsed.unit}) left out (above_limit: true keeps them)')
+        levels = levels[~above]
+    if parsed.estimated:
+        report.notes.append(f'{label}: {parsed.estimated} levels with energies in brackets (theoretical or derived values in NIST ASD)')
     levels[:, 1] *= factor
     levels = levels[np.argsort(levels[:, 1], kind='stable')]
     species = database.species.setdefault(selection.species, Species(name=selection.species))

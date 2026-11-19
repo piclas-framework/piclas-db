@@ -218,3 +218,20 @@ def test_build_xsec_layout(store: Store, tmp_path: pathlib.Path, capsys: pytest.
     with h5py.File(output, 'r') as h5:
         assert 'Ar-electron' in h5 and 'Cross-Sections' not in h5 and 'Species' not in h5  # pairs at the root (Particles-CollXSec-Database)
         assert h5.attrs['* piclas-db command'].endswith('--layout xsec')
+
+
+def test_levels_below_the_ionization_limit(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """Levels above the ionization limit (autoionizing) are left out unless above_limit: true; bracketed energies are noted"""
+    from tests.test_import import NIST_CSV_FORM  # noqa: PLC0415
+
+    (tmp_path / 'NIST-Tx-I-CSV.csv').write_text(NIST_CSV_FORM)
+    assert main(['import', str(tmp_path / 'NIST-Tx-I-CSV.csv'), '--store', str(tmp_path / 'store'), '--retrieved', '2026-11-19']) == 0
+    for keep, count in ((False, 4), (True, 5)):
+        recipe = write_recipe(tmp_path, 'levels:\n  - source: nist-asd/levels/tx\n    species: Tx\n' + ('    above_limit: true\n' if keep else ''))
+        output = tmp_path / f'db-{keep}.h5'
+        capsys.readouterr()
+        assert main(['build', str(recipe), '-o', str(output), '--store', str(tmp_path / 'store'), '--offline']) == 0
+        out = capsys.readouterr().out
+        assert len(read_database(output).species['Tx'].electronic_levels) == count  # ty: ignore[invalid-argument-type]
+        assert ('1 levels above the ionization limit (100000 cm-1) left out' in out) is not keep
+        assert '1 levels with energies in brackets' in out

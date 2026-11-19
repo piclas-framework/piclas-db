@@ -22,8 +22,9 @@ nist-asd:
   steps:
     - Open the levels form https://physics.nist.gov/PhysRefData/ASD/levels_form.html
     - "Enter the spectrum: {spectrum}"
-    - Select the level units (cm-1 or eV) and as output format "CSV (to file)" or "Tab-delimited (to file)".
-    - Make sure the columns Configuration, Term, J and Level are selected; press "Retrieve Data".
+    - Select the level units (cm-1 or eV) and as format output "CSV (text)" (or "ASCII (text)"; both give the same levels).
+    - Make sure the columns Configuration, Term, J and Level are selected; press "Retrieve Data" and save the page as it is
+      (the limit rows stay in the file; build uses the ionization limit to leave out autoionizing levels).
     - "Save the file with the spectrum in its name, e.g. {spectrum_file}.csv, or give the species to import with --species {species}."
 custom:
   name: own or other data

@@ -130,8 +130,9 @@ def test_parse_nist() -> None:
     assert levels.unit == 'cm-1'
     assert levels.species == 'Ar'  # from the file name, not from the 'Ar II' limit row
     assert levels.levels.tolist() == [[1.0, 0.0], [5.0, 93000.0]]
-    assert levels.skipped == 1
+    assert levels.skipped == 1 and levels.limit == pytest.approx(127109.842)
     text = parse_nist_levels(NIST_TEXT)
+    assert text.limit is None
     assert (text.unit, text.species) == ('eV', 'ArIon1')
     assert text.levels[:, 0].tolist() == [4.0, 2.0]
     assert piclas_species('XeIon test Xe_III') == 'XeIon2'
@@ -201,3 +202,40 @@ def test_default_store(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) 
     monkeypatch.delenv('PICLAS_DB_STORE')
     monkeypatch.setenv('XDG_DATA_HOME', str(tmp_path / 'xdg'))
     assert default_store() == tmp_path / 'xdg' / 'piclas-db' / 'store'
+
+
+# Both "Format output" variants of the ASD levels form, in their real structure (values invented)
+NIST_ASCII_FORM = """--------------------------------------------------------------------------------------------------------------
+Configuration          | Term      |   J |          Level (cm-1)   | Uncertainty (cm-1) |   Landé | Reference
+-----------------------|-----------|-----|-------------------------|--------------------|---------|-----------
+                       |           |     |                         |                    |         |
+3s2.3p6                | 1S        |   0 |            0.0000       |             0      |         |     L0001
+                       |           |     |                         |                    |         |
+3s2.3p5.(2P*<3/2>).4s  | 2[3/2]*   |   2 |        90000.0000       |                    |   1.506 |
+                       |           |   1 |        91000.0000       |                    |   1.404 |
+                       |           |   3 |      [99000.5]          |                    |         |
+Tx II (3p5 2P*<3/2>)   | Limit     | --- |       100000.000        |             0.004  |         |     L0002
+                       |           |     |                         |                    |         |
+3s.3p6.24p             | 1P*       |   1 |       150000.00         |                    |         |
+--------------------------------------------------------------------------------------------------------------
+"""
+NIST_CSV_FORM = 'Configuration,Term,J,Prefix,Level (cm-1),Suffix,Uncertainty (cm-1),Lande,Reference\n' + ''.join(
+    ','.join(f'"=""{value}"""' for value in row) + '\n'
+    for row in (
+        ('3s2.3p6', '1S', '0', '', '0.0000', '', '0', '', 'L0001'),
+        ('3s2.3p5.(2P*<3/2>).4s', '2[3/2]*', '2', '', '90000.0000', '', '', '1.506', ''),
+        ('3s2.3p5.(2P*<3/2>).4s', '2[3/2]*', '1', '', '91000.0000', '', '', '1.404', ''),
+        ('3s2.3p5.(2P*<3/2>).4d', '2[7/2]', '3', '[', '99000.5', ']', '', '', ''),
+        ('Tx II (3p5 2P*<3/2>)', 'Limit', '---', '', '100000.000', '', '0.004', '', 'L0002'),
+        ('3s.3p6.24p', '1P*', '1', '', '150000.00', '', '', '', ''),
+    )
+)
+
+
+def test_parse_nist_form_formats() -> None:
+    """ASCII (text) and CSV (text): same levels, the limit (not a level), bracketed values counted, species from the file name"""
+    ascii_, csv_ = parse_nist_levels(NIST_ASCII_FORM, 'NIST-Tx-I-ASCII.txt'), parse_nist_levels(NIST_CSV_FORM, 'NIST-Tx-I-CSV.csv')
+    for parsed in (ascii_, csv_):
+        assert parsed.species == 'Tx' and parsed.unit == 'cm-1' and parsed.limit == pytest.approx(100000.0)
+        assert parsed.levels.tolist() == [[1.0, 0.0], [5.0, 90000.0], [3.0, 91000.0], [7.0, 99000.5], [3.0, 150000.0]]
+    assert ascii_.estimated == csv_.estimated == 1  # '[99000.5]' in the column; the CSV writes the brackets into Prefix/Suffix

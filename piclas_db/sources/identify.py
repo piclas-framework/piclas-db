@@ -207,7 +207,7 @@ def identify(
             kind='levels',
             dataset=f'levels/{slug(name)}',
             species=[name],
-            details={'unit': parsed_levels.unit, 'levels': len(parsed_levels.levels), 'rows skipped': parsed_levels.skipped},
+            details={'unit': parsed_levels.unit, 'levels': len(parsed_levels.levels), 'rows skipped': parsed_levels.skipped} | ({'ionization limit': parsed_levels.limit} if parsed_levels.limit is not None else {}),
         )
 
     raise IdentifyError('not recognized as LXCat or NIST ASD download (use --custom NAME to store other data)')
