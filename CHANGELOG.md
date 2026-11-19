@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.30.2
+
+* Progress of slow steps (`piclas_db/common/progress.py`): spinner with elapsed time on a terminal, one line with the time otherwise,
+  for ATcT downloads and searches, cloning, updating and pushing the private repository; `atct get` reports the total time
+
+## 0.30.1
+
+* A committed `index.yaml` (store repository set up by hand) is removed from the repository automatically (it stays on disk): it
+  changes with every import and blocked `git pull`
+
 ## 0.30.0
 
 * Own data in the store (`piclas_db/sources/own.py`): YAML files with PICLas parameters of species (`format: piclas-db own data`),

@@ -27,6 +27,7 @@ from typing import Optional
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db import git
+from piclas_db.common.progress import progress
 from piclas_db.store import META_SUFFIX, Store, StoreEntry
 # ==================================================================================================================================
 
@@ -93,7 +94,8 @@ def resolve(store: Store, requirements: list[Requirement], update: bool = True) 
     missing = [resolution for resolution in resolutions if resolution.entry is None]
     if missing and update and store.is_repository:
         try:
-            git.pull(store.root)
+            with progress('updating the store from the private repository'):
+                git.pull(store.root)
             store.write_index()
             for resolution in missing:
                 resolution.entry, resolution.origin = find(store, resolution.requirement), Origin.PRIVATE
@@ -123,7 +125,8 @@ def download_atct(store: Store, requirement: Requirement) -> Optional[StoreEntry
 
     try:
         by = config.require_identity()
-        text = atct.get(atct_id_of(requirement.dataset))
+        with progress(f'downloading {requirement} from ATcT'):
+            text = atct.get(atct_id_of(requirement.dataset))
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / f'{requirement.dataset}.json'
             path.write_text(text, encoding='utf-8')
@@ -140,7 +143,8 @@ def synchronize(store: Store, url: Optional[str]) -> str:
         current = git.remote_url(root)
         if url and current and url != current:
             raise git.GitError(f'the store is a clone of {current}, not of {url}')
-        git.pull(root)
+        with progress('updating the store from the private repository'):
+            git.pull(root)
         store.write_index()
         return f'updated from {current}'
     if not url:
@@ -149,7 +153,8 @@ def synchronize(store: Store, url: Optional[str]) -> str:
         root.parent.mkdir(parents=True, exist_ok=True)
         if root.exists():
             root.rmdir()
-        git.clone(url, root)
+        with progress(f'cloning {url}'):
+            git.clone(url, root)
         store.write_index()
         return f'cloned from {url}'
 
@@ -157,7 +162,8 @@ def synchronize(store: Store, url: Optional[str]) -> str:
     clone = root.with_name(f'.{root.name}.clone')
     if clone.exists():
         shutil.rmtree(clone)
-    git.clone(url, clone)
+    with progress(f'cloning {url}'):
+        git.clone(url, clone)
     added = []
     for meta_file in sorted(root.rglob(f'*{META_SUFFIX}')):
         relative = meta_file.relative_to(root)

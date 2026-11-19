@@ -116,7 +116,9 @@ def test_search_and_get(api: list[str], tmp_path: pathlib.Path, capsys: pytest.C
     assert '333-33-3*1000' in capsys.readouterr().out
 
     assert main(['atct', 'get', '111-11-1*0', '222-22-2*0', '--store', str(store)]) == 0
-    assert capsys.readouterr().out.count('downloaded') == 2
+    out = capsys.readouterr().out
+    assert out.count('downloaded') == 2 and 'downloading atct/111-11-1-0 from ATcT done (' in out  # progress with elapsed time
+    assert '2 of 2 record(s) in the store (' in out
     entries = Store(store).entries()
     assert {entry.meta['dataset'] for entry in entries} == {'111-11-1-0', '222-22-2-0'}
     assert entries[0].meta['imported_by'] == 'piclas-db test <test@example.com>'

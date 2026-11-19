@@ -180,3 +180,17 @@ def test_uncommitted_changes(remote: str, files: pathlib.Path, tmp_path: pathlib
     assert main(['fetch', '--store', str(store)]) == 0  # pull works again
     assert (store / 'notes.txt').is_file()
     assert main(['store', '--commit', '--store', str(tmp_path / 'plain')]) == 1  # not a clone
+
+
+def test_tracked_index_is_untracked(remote: str, files: pathlib.Path, tmp_path: pathlib.Path) -> None:
+    """A store whose repository has index.yaml committed (e.g. set up by hand): piclas-db stops tracking it"""
+    store = tmp_path / 'store'
+    assert main(['fetch', '--mirror', remote, '--store', str(store)]) == 0
+    assert main(['import', '--source-dir', str(files), '--store', str(store)]) == 0
+    git.git(['add', '--force', 'index.yaml'], cwd=store)
+    git.git(['commit', '--quiet', '-m', 'index committed by hand'], cwd=store)
+    assert git.git(['ls-files', 'index.yaml'], cwd=store) == 'index.yaml'
+    assert main(['store', '--store', str(store)]) == 0
+    assert git.git(['ls-files', 'index.yaml'], cwd=store) == '' and (store / 'index.yaml').is_file()
+    assert git.changes(store) == []
+    assert main(['push', '--store', str(store)]) == 0

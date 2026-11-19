@@ -154,6 +154,9 @@ class Store:
         self.root.mkdir(parents=True, exist_ok=True)
         if self.is_repository:
             git.exclude(self.root, 'index.yaml')
+            # a store whose repository was set up by hand may have committed the generated index: it changes with every import
+            # and blocks 'git pull' (uncommitted change); it is removed from the repository, the local file stays
+            git.untrack(self.root, 'index.yaml', 'Stop tracking index.yaml (generated locally by piclas-db)')
         with (self.root / 'index.yaml').open('w', encoding='utf-8') as file:
             yaml.safe_dump({'files': index}, file, sort_keys=False, allow_unicode=True, width=1000)
 

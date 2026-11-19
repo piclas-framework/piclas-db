@@ -57,6 +57,8 @@ def run(args: argparse.Namespace) -> int:
     """List the local store, or verify that every file still matches its sha256"""
     store = Store(args.store)
     entries = store.entries()
+    if store.is_repository and entries:
+        store.write_index()  # also stops tracking an index.yaml that was committed by hand
     print(f'Store: {store.root} ({len(entries)} file(s))')
     if args.commit:
         return commit_pending(store)

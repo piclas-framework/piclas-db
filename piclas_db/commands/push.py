@@ -19,6 +19,7 @@ import argparse
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db import git
+from piclas_db.common.progress import progress
 from piclas_db.store import Store
 # ==================================================================================================================================
 
@@ -42,7 +43,8 @@ def run(args: argparse.Namespace) -> int:
         if count == 0:
             print('Nothing to push, the store is in sync with the private repository')
             return 0
-        git.push(store.root)
+        with progress('pushing to the private repository'):
+            git.push(store.root)
     except git.GitError as e:
         print(f'ERROR: {e}')
         return 1

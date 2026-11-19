@@ -114,6 +114,15 @@ def changes(path: pathlib.Path) -> list[str]:
     return [line for line in git(['status', '--porcelain'], cwd=path).splitlines() if line.strip()]
 
 
+def untrack(path: pathlib.Path, name: str, message: str) -> bool:
+    """Stop tracking a file that is generated locally (it stays on disk); True if it was tracked"""
+    if not git(['ls-files', '--', name], cwd=path).strip():
+        return False
+    git(['rm', '--cached', '--quiet', '--', name], cwd=path)
+    git(['commit', '--quiet', '-m', message], cwd=path)
+    return True
+
+
 def exclude(path: pathlib.Path, pattern: str) -> None:
     """Ignore a file in this clone only (.git/info/exclude), without committing a .gitignore"""
     exclude_file = path / '.git' / 'info' / 'exclude'

@@ -14,11 +14,13 @@
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import argparse
+import time
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db import config
+from piclas_db.common.progress import progress
 from piclas_db.git import GitError
 from piclas_db.resolve import Origin, Requirement, resolve
 from piclas_db.sources import atct
@@ -31,7 +33,8 @@ def run(args: argparse.Namespace) -> int:
     """ATcT (Active Thermochemical Tables): find the ATcT ID of a species, download species records into the store"""
     try:
         if args.action == 'search':
-            found = atct.search(' '.join(args.arguments))
+            with progress(f'searching ATcT for {" ".join(args.arguments)!r}'):
+                found = atct.search(' '.join(args.arguments))
             found = [record for record in found if record.gas or args.all]
             if not found:
                 print('No gas-phase species found' + ('' if args.all else ' (--all also shows other phases)'))
@@ -47,6 +50,7 @@ def run(args: argparse.Namespace) -> int:
         store = Store(args.store)
         requirements = [Requirement('atct', atct_dataset(atct_id)) for atct_id in args.arguments]
         failed = 0
+        start = time.monotonic()
         for resolution in resolve(store, requirements, update=True):
             if resolution.entry is None:
                 failed += 1
@@ -54,6 +58,7 @@ def run(args: argparse.Namespace) -> int:
             record = atct.parse_atct(resolution.entry.path.read_text(encoding='utf-8'))[0]
             state = 'downloaded' if resolution.origin is Origin.AUTOMATIC else 'in the store'
             print(f'  {state:12s} {record.atct_id:20s} {record.formula:24s} TN {record.version}  -> {resolution.entry.relative}')
+        print(f'{len(requirements) - failed} of {len(requirements)} record(s) in the store ({time.monotonic() - start:.1f} s; ATcT is asked at most once per second)')
         return 1 if failed else 0
     except (atct.ATcTError, config.ConfigError, GitError) as e:
         print(f'ERROR: {e}')
