@@ -3,6 +3,14 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.30.0
+
+* Own data in the store (`piclas_db/sources/own.py`): YAML files with PICLas parameters of species (`format: piclas-db own data`),
+  every species with a `Reference`; imported like every original (into the private repository); recipes use them with `own_data:`;
+  values written in a recipe are noted by `build`; precedence recipe, own data, ATcT
+* Data sources: overview table in `README.md`, chapter `docs/sources.md` (websites, access, APIs, what piclas-db reads, own data)
+* Tutorial T5: species from own data and ATcT
+
 ## 0.29.1
 
 * A clone of the private repository with uncommitted changes no longer stops `atct get`, `build` and `fetch --need` with a git

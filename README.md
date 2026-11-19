@@ -74,28 +74,23 @@ piclas-db -v
 [Getting started](docs/tutorials/T1-getting-started.md), [checking and comparing databases](docs/tutorials/T2-checking-and-comparing.md), [adding data](docs/tutorials/T3-adding-data.md), [the private source repository](docs/tutorials/T4-private-repository.md), [recipes and building](docs/tutorials/T5-recipes-and-build.md); overview in [docs/tutorials](docs/tutorials/README.md).
 
 # Where the data comes from
-For every dataset a database needs (`build`, `rebuild`), piclas-db looks in the following places, in this order, and only
-moves on to the next one if the dataset was not found:
 
-1. **Local store**: original files already on your machine.
-2. **Private repository**: the organisation's private backup of the original files, accessed via SSH with your own git
-   permissions. Found files are copied into the local store.
-3. **Automatic download**: only from sources whose terms allow it (no provider supported yet; a candidate is the IAEA
-   CollisionDB API).
-4. **Guided manual download**: step-by-step instructions for the source website with `piclas-db guide` (LXCat, NIST ASD),
-   followed by `piclas-db import`. Data that only exist in papers are entered from the paper with an extraction record and a
-   review ([data from papers](docs/literature.md)).
+All original data (downloads, extractions from papers, own data) are kept in one place: the store, a clone of the private source
+repository of the group. piclas-db publishes no data; users build `database.h5` locally. Sources (details, APIs and own data:
+[docs/sources.md](docs/sources.md)):
 
-Files obtained in steps 3 and 4 are added to the private repository step by step: each imported file is committed with its
-provenance (source, dataset, retrieval date, sha256) and pushed with `piclas-db push`, if you have write access. Users without
-access to the private repository continue with steps 1, 3 and 4 only.
-
-The layout of `database.h5` (what PICLas reads and what piclas-db writes) is specified in [docs/layout.md](docs/layout.md).
-
-The database is used in PICLas with
-```ini
-Particles-Species-Database = database.h5
-```
+| Source | Data | Website | Access | piclas-db |
+| --- | --- | --- | --- | --- |
+| LXCat (v2) | electron and ion cross-sections | https://www.lxcat.net | web download (TXT, XML, ZIP) | reads |
+| LXCat 3 | cross-sections (JSON, versioned) | https://github.com/LXCat-project/LXCat | API (token), beta | planned |
+| NIST ASD | atomic levels, ionization energies | https://physics.nist.gov/PhysRefData/ASD/levels_form.html | web form | reads levels |
+| NIST Chemistry WebBook | thermochemistry, molecular constants | https://webbook.nist.gov/chemistry/ | web | planned |
+| NIST CCCBDB | rotational constants, moments of inertia | https://cccbdb.nist.gov | web | planned |
+| ATcT | enthalpies of formation, masses | https://atct.anl.gov | API | reads, downloads automatically |
+| IAEA CollisionDB / ALADDIN2 | collision cross-sections, rate coefficients | https://db-amdis.org/collisiondb/ | web, API | planned |
+| NIFS | atomic and molecular collision data | https://dbshino.nifs.ac.jp | web | planned |
+| Papers | tables, figures, fit formulas | journals (DOI) | PDF | reads (`extract`, `literature`) |
+| Own data | PICLas parameters with references | – | YAML file in the store | reads (`own_data:`) |
 
 # Development
 piclas-db uses [prek pre-commit](https://prek.j178.dev/quickstart/) for maintaining code quality. The hooks run

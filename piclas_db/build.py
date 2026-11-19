@@ -434,17 +434,39 @@ def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool 
         entry = entries[str(level_selection.source)]
         assert entry is not None
         add_levels(database, level_selection, entry, report)
+    own_files = []
+    for requirement in recipe.own_data:
+        entry = entries[str(requirement)]
+        assert entry is not None
+        from piclas_db.sources.own import parse_own_data  # noqa: PLC0415
+
+        own_files.append((entry, parse_own_data(entry.path.read_text(encoding='utf-8'))))
     for name, attributes in recipe.species.items():
         species = database.species.setdefault(name, Species(name=name))
-        own = {key: value for key, value in attributes.items() if key != 'atct'}
-        if attributes.get('atct'):
+        own = {key: value for key, value in (attributes or {}).items() if key != 'atct'}
+        if own:
+            # values in the recipe are not in the store: fine for tests, but the data belong into an own-data file
+            report.notes.append(f'{name}: {", ".join(sorted(own))} written in the recipe, not in the store (move them into an own-data file)')
+        stored = next(((entry, content['species'][name]) for entry, content in own_files if name in content['species']), None)
+        if stored is not None:
+            entry, values = stored
+            for key, value in values.items():
+                if key == 'Reference':
+                    species.provenance.reference = '; '.join(filter(None, [species.provenance.reference, str(value)]))
+                elif key not in own:
+                    species.attributes[key] = value
+            species.provenance.extra = {**species.provenance.extra, **source_provenance(entry)}
+        elif own_files:
+            report.notes.append(f'{name}: not in the own data ({", ".join(entry.relative for entry, _ in own_files)})')
+        if (attributes or {}).get('atct'):
             from piclas_db.recipe import atct_requirement  # noqa: PLC0415
 
-            entry = entries[str(atct_requirement(str(attributes['atct'])))]
-            assert entry is not None
-            add_atct(species, entry, own, report)
+            atct_entry = entries[str(atct_requirement(str(attributes['atct'])))]
+            assert atct_entry is not None
+            add_atct(species, atct_entry, {**own, **{k: v for k, v in (stored[1] if stored else {}).items() if k != 'Reference'}}, report)
         species.attributes.update(own)
-        report.added.append(f'/Species/{name} ({len(own)} attribute(s) from the recipe' + (f', ATcT {attributes["atct"]})' if attributes.get('atct') else ')'))
+        origin = ['own data'] * (stored is not None) + ['ATcT'] * bool((attributes or {}).get('atct')) + ['recipe'] * bool(own)
+        report.added.append(f'/Species/{name} ({", ".join(origin) or "no values"})')
     for name, attributes in recipe.reactions.items():
         database.reactions[name] = Reaction(name=name, attributes=dict(attributes), provenance=Provenance(reference=f'recipe {recipe.path}'))
         report.added.append(f'/Reactions/{name} (from the recipe)')

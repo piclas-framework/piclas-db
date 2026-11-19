@@ -60,25 +60,37 @@ What `build` does with every LXCat process:
 
 ## 2. Species and own data
 
-A database for `Particles-Species-Database` also needs the species. Data that come from no download (masses, charges, PICLas
-parameters) are given in the recipe, each species with its source:
+A database for `Particles-Species-Database` also needs the species. Values that come from no download (PICLas parameters such as
+`InteractionID`, VHS/VSS parameters, characteristic temperatures) are kept in an **own-data file in the store**, like every other
+source, each species with its reference ([sources.md](../sources.md#own-data)):
 
 ```yaml
+# argon-parameters.yaml, imported with: piclas-db import argon-parameters.yaml
+format: piclas-db own data
+format_version: 1
+name: argon-parameters
 species:
-  Ar:       {MassIC: 6.63352088e-26, ChargeIC: 0.0,             InteractionID: 1,  Reference: "CODATA 2018 / NIST atomic weights"}
-  ArIon1:   {MassIC: 6.63260979e-26, ChargeIC: 1.60217653e-19,  InteractionID: 10, Reference: "Ar mass minus one electron mass"}
-  electron: {MassIC: 9.1093826e-31,  ChargeIC: -1.60217653e-19, InteractionID: 4,  Reference: "CODATA"}
+  Ar:       {InteractionID: 1,  Reference: "PICLas species conventions"}
+  ArIon1:   {InteractionID: 10, Reference: "PICLas species conventions"}
+  electron: {MassIC: 9.1093837e-31, ChargeIC: -1.602176634e-19, InteractionID: 4, Reference: "CODATA 2018"}
 ```
 
-Without the species, `check` warns that the products of the ionization (`electron`, `ArIon1`) are not in `/Species`, and without
-`Reference` that the species have no source. With both:
+The recipe only names the species and the sources:
 
-```
-argon.h5: 10 entries; check: 0 error(s), 0 warning(s)
+```yaml
+own_data: own/argon-parameters
+species:
+  Ar:       {atct: 7440-37-1*0}
+  ArIon1:   {atct: 14791-69-6*0}
+  electron: {}
 ```
 
-Heats of formation and masses can come from ATcT instead of being typed in: `CO: {atct: 630-08-0*0, InteractionID: 2}` downloads
-the record and sets `HeatOfFormation_K` and `MassIC` ([atct.md](../atct.md); `piclas-db atct search carbon monoxide` finds the ID).
+Without the species, `check` warns that the products of the ionization (`electron`, `ArIon1`) are not in `/Species`; without a
+`Reference`, an own-data file is not imported. Values written directly in the recipe work too (for quick tests), but `build` notes
+them, as they belong into the own data.
+
+Heats of formation and masses come from ATcT: `atct: 7440-37-1*0` downloads the record and sets `HeatOfFormation_K` and `MassIC`
+([atct.md](../atct.md); `piclas-db atct search argon` finds the ID).
 
 Attributes are written as they are: their names must be those PICLas reads (`check` knows them, e.g. `alphaVSS`, not `alpha`).
 Reactions with own data (Arrhenius parameters) go into a `reactions:` section the same way.

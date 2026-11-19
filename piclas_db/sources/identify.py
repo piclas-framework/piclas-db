@@ -26,6 +26,7 @@ from typing import Optional
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db.sources.own import OwnDataError, is_own_data, parse_own_data
 from piclas_db.sources.atct import ATcTError, is_atct, parse_atct
 from piclas_db.sources.lxcat import LXCatFile, compare, is_lxcat, is_lxcat_xml, parse_lxcat, parse_lxcat_xml, validate, zip_texts
 from piclas_db.sources.nist import is_nist_levels, parse_nist_levels
@@ -137,6 +138,20 @@ def identify(
     text = read_text(path)
     if text is None:
         raise IdentifyError('binary file, not an LXCat or NIST ASD download (use --custom NAME to store other data)')
+
+    if is_own_data(text):
+        try:
+            content = parse_own_data(text)
+        except OwnDataError as e:
+            raise IdentifyError(f'own data: {e}') from e
+        return Identified(
+            provider='own',
+            kind='species-parameters',
+            retrieved=datetime.date.today(),  # own data: the date of the import
+            dataset=slug(str(content['name'])),
+            species=sorted(content['species']),
+            details={'description': content.get('description'), 'species_count': len(content['species'])},
+        )
 
     if is_atct(text):
         try:

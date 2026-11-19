@@ -39,7 +39,8 @@ inline. Example:
         pair: H2-electron
         kind: REACTION
         key: H2Ion1-electron-electron
-    species:                                 # own data, written as attributes
+    own_data: own/piclas-parameters          # PICLas parameters of the species (own-data file in the store)
+    species:                                 # species of the database; values here only for tests (store them in own data)
       Ar: {MassIC: 6.63E-26, InteractionID: 1}
       CO: {atct: 630-08-0*0, InteractionID: 2} # HeatOfFormation_K and MassIC from ATcT (downloaded automatically)
 """
@@ -116,6 +117,7 @@ class Recipe:
     cross_sections: list[CrossSectionSelection] = field(default_factory=list)
     levels: list[LevelSelection] = field(default_factory=list)
     literature: list[LiteratureSelection] = field(default_factory=list)
+    own_data: list[Requirement] = field(default_factory=list)  # own/<name>: PICLas parameters of species, from the store
     species: dict[str, dict[str, object]] = field(default_factory=dict)  # own data: species attributes
     reactions: dict[str, dict[str, object]] = field(default_factory=dict)  # own data: reaction attributes
 
@@ -129,6 +131,8 @@ class Recipe:
         for literature in self.literature:
             for part, _ in literature.parts:
                 unique.setdefault(str(part), part)
+        for requirement in self.own_data:
+            unique.setdefault(str(requirement), requirement)
         for attributes in self.species.values():
             if attributes.get('atct'):
                 requirement = atct_requirement(str(attributes['atct']))
@@ -160,7 +164,7 @@ def parse_recipe(text: str, path: str) -> Recipe:
         raise RecipeError(f'cannot read recipe {path}: {e}') from e
     if not isinstance(data, dict):
         raise RecipeError(f'{path}: a recipe is a mapping with cross_sections, levels, species and reactions')
-    unknown = set(data) - {'cross_sections', 'levels', 'literature', 'species', 'reactions', 'description', 'notes'}
+    unknown = set(data) - {'cross_sections', 'levels', 'literature', 'species', 'reactions', 'own_data', 'description', 'notes'}
     if unknown:
         raise RecipeError(f'{path}: unknown sections {", ".join(sorted(unknown))}')
 
@@ -225,6 +229,15 @@ def parse_recipe(text: str, path: str) -> Recipe:
         if selection.kind in ('ELECTRONIC', 'VIBRATION', 'ROTATION') and selection.threshold is None:
             raise RecipeError(f'{context}: "threshold" (eV) required for {selection.kind}')
         recipe.literature.append(selection)
+    own = data.get('own_data') or []
+    for number, source in enumerate([own] if isinstance(own, str) else own, start=1):
+        try:
+            own_source = Requirement.parse(str(source))
+        except ValueError as e:
+            raise RecipeError(f'own_data #{number}: {e}') from e
+        if own_source.provider != 'own':
+            raise RecipeError(f'own_data #{number}: source must be own/<name> (an own-data file in the store)')
+        recipe.own_data.append(own_source)
     for section in ('species', 'reactions'):
         values = data.get(section) or {}
         if not isinstance(values, dict) or not all(isinstance(value, dict) for value in values.values()):
