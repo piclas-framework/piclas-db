@@ -22,6 +22,7 @@ INFO    cosmetic, or a remark on how PICLas treats the data
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import difflib
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from enum import Enum, unique
@@ -51,6 +52,7 @@ from piclas_db.schema import Schema
 # ==================================================================================================================================
 
 ELEMENTARY_CHARGE = 1.602176634e-19  # C
+ELECTRON_MASS = 9.1093837139e-31  # kg, CODATA 2022 (used if the database has no species 'electron')
 SIGMA_MAX_M2 = 1.0e-16  # larger cross-sections are most likely given in cm^2
 KIND_NAMES = [kind.value for kind in XSEC_DATASET_KINDS + XSEC_GROUP_KINDS]
 
@@ -115,6 +117,32 @@ def check_species_attributes(database: Database) -> Iterator[Finding]:
         interaction = species.attributes.get('InteractionID')
         if interaction is not None and not isinstance(interaction, int):
             yield Finding(Severity.INFO, 'species-attribute-type', path, 'InteractionID is stored as float instead of integer')
+
+
+def check_ion_masses(database: Database) -> Iterator[Finding]:
+    """Mass of <X>Ion<n> = mass of <X> - n electron masses (electron of the database, else CODATA); reported in electron masses,
+    since an ion with one electron too many or too few is a typical error (SpeciesDatabase.h5: CIon2 to CIon5)"""
+    electron = database.species.get('electron')
+    electron_mass = electron.attributes.get('MassIC') if electron is not None else None
+    if not isinstance(electron_mass, (int, float)) or electron_mass <= 0:
+        electron_mass = ELECTRON_MASS
+    for species in database.species.values():
+        match = re.fullmatch(r'(.+)Ion(\d+)', species.name)
+        parent = database.species.get(match.group(1)) if match else None
+        if match is None or parent is None:
+            continue
+        mass, parent_mass = species.attributes.get('MassIC'), parent.attributes.get('MassIC')
+        if not isinstance(mass, (int, float)) or not isinstance(parent_mass, (int, float)):
+            continue
+        electrons = (parent_mass - mass) / electron_mass
+        charge = int(match.group(2))
+        if abs(electrons - charge) > 0.01:
+            yield Finding(
+                Severity.WARNING,
+                'species-ion-mass',
+                species_path(database, species),
+                f'MassIC is {parent.name} minus {electrons:.3f} electron masses, the charge {charge} needs {charge} (relative difference {(mass - (parent_mass - charge * electron_mass)) / mass:+.1e})',
+            )
 
 
 def check_electronic_levels(database: Database) -> Iterator[Finding]:
@@ -449,7 +477,7 @@ def check_literature_review(database: Database) -> Iterator[Finding]:
                 yield Finding(Severity.WARNING, 'literature-unreviewed', path, f'data from a paper, extraction {status.split(" ", maxsplit=1)[0]}')
 
 
-RULES: tuple[Rule, ...] = (check_file_provenance, check_literature_review, check_species_attributes, check_electronic_levels, check_reactions, check_cross_sections, check_provenance)
+RULES: tuple[Rule, ...] = (check_file_provenance, check_literature_review, check_species_attributes, check_ion_masses, check_electronic_levels, check_reactions, check_cross_sections, check_provenance)
 
 
 def run_checks(database: Database) -> list[Finding]:

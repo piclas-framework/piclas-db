@@ -3,6 +3,14 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.35.0
+
+* `check`: rule `species-ion-mass`, the mass of `<X>Ion<n>` against `<X>` minus n electron masses, given in electron masses.
+  `SpeciesDatabase.h5`: CIon2 to CIon5 are carbon minus n+1 electron masses (one too many, relative -4.6e-5); ArIon1, CIon6 and
+  XeIon1 come from another source than their neutral (Ar minus 2.162, C minus 1.346, Xe minus 0.911 electron masses)
+* `atct map` on the 8 species without ATcT credit: HeIon1, HeIon2, CIon2 to CIon5 match by formula and charge; Fe and FeIon1 are not
+  in ATcT (TN 1.228) and stay own data
+
 ## 0.34.0
 
 Decision: heats of formation and masses from ATcT for every species with an ATcT record (`docs/atct.md`, "Masses: one source").

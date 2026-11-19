@@ -23,6 +23,7 @@ have one of three severities, and the exit code is 1 if at least one error is fo
 | `reaction-attribute-missing` | ERROR | `Reactants`, `Products`, `ReactionModel`, `ChemistryModel`, Arrhenius parameters for TCE | |
 | `reaction-species-missing` | ERROR | reactant or product not in `/Species` | |
 | `reaction-charge` | ERROR | charge not conserved | |
+| `species-ion-mass` | WARNING | `MassIC` of `<X>Ion<n>` is not that of `<X>` minus n electron masses (electron of the file, else CODATA), given in electron masses | CIon2–CIon5: one electron too many removed; ArIon1, XeIon1, CIon6 (SpeciesDatabase.h5) |
 | `reaction-mass` | WARNING | mass not conserved, i.e. inconsistent `MassIC` (one finding for all reactions) | CO, CO2 (SpeciesDatabase.h5) |
 | `xsec-name-unknown` | ERROR / WARNING | group or dataset name not read by PICLas; ERROR with a suggestion if it looks like a typo | `ELECTRONIIC` (XSec_Database_O2_O.h5) |
 | `xsec-products-missing` | WARNING | product of a reaction cross-section not in `/Species`: the reaction cannot be used | XeIon2 (SpeciesDatabase.h5) |

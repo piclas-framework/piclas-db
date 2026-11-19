@@ -74,6 +74,20 @@ def test_clean_species_database() -> None:
     assert [finding.rule for finding in run_checks(species_db(ar))] == ['provenance-file']  # INFO: not written by piclas-db
 
 
+def test_ion_masses() -> None:
+    """Ion = parent minus n electron masses; one electron too many (CIon2 in SpeciesDatabase.h5) is reported in electron masses"""
+    electron = 9.1e-31
+    species = [
+        Species('electron', {'MassIC': electron, 'InteractionID': 4}, provenance=REFERENCE),
+        Species('Tx', {'MassIC': 2.0e-26, 'InteractionID': 1}, provenance=REFERENCE),
+        Species('TxIon1', {'MassIC': 2.0e-26 - electron, 'InteractionID': 10}, provenance=REFERENCE),
+        Species('TxIon2', {'MassIC': 2.0e-26 - 3 * electron, 'InteractionID': 10}, provenance=REFERENCE),
+        Species('QqIon1', {'MassIC': 1.0e-26, 'InteractionID': 10}, provenance=REFERENCE),  # no parent: not checked
+    ]
+    findings = [finding for finding in run_checks(species_db(*species)) if finding.rule == 'species-ion-mass']
+    assert len(findings) == 1 and findings[0].path.endswith('TxIon2') and 'minus 3.000 electron masses, the charge 2 needs 2' in findings[0].message
+
+
 def test_attribute_typo_and_missing() -> None:
     fe = Species('Fe', {'MassIC': 9.27e-26, 'InteractionID': 1.0, 'alpha': 1.4, 'Comment2': 'x'}, provenance=REFERENCE)
     xe = Species('Xe', {'MassIC': 2.18e-25}, provenance=REFERENCE)
