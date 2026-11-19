@@ -74,19 +74,26 @@ Every cross-section gets the LXCat recommended reference of its database (`Refer
 its threshold (`Threshold [eV]`) and the original file with its sha256 (`* Source`). NIST ASD levels are converted to K with the
 exact constants (hc/k_B = 1.438776877 cm K, 1 eV = 11604.51812 K) and sorted.
 
-Levels above the ionization limit of the file (the `Limit` row, e.g. `Ar II (3p5 2P*<3/2>) | Limit | 127109.842`) are left out:
-they autoionize and are not bound states of the species; `above_limit: true` in the level selection keeps them. Energies in brackets
-(theoretical or derived values in NIST ASD) are kept and counted. Both formats of the levels form, "CSV (text)" and "ASCII (text)",
-give the same levels. For Ar I (current ASD), `build` reports:
+NIST ASD levels follow the PICLas convention of `SpeciesDatabase.h5` (from the former `maintain_database.py`): the bound levels,
+then the ionization limit of the file (the first `Limit` row, e.g. `Ar II (3p5 2P*<3/2>) | Limit | 127109.842`) as last level with
+degeneracy 1. PICLas takes the last level as ionization energy (QK ionization; heat of formation of the ion), and `check` reports a
+last level that is not the limit (`levels-ionization-limit`). Levels at or above the limit (autoionizing) are left out, levels with
+relative (`+x`) or doubtful (`?`) energies too; energies in brackets (theoretical or derived) are kept and counted. Both formats
+of the levels form, "CSV (text)" and "ASCII (text)", give the same levels. For Ar I (current ASD), `build` reports:
 
 ```
-  added  /Species/Ar/ElectronicLevel (426 levels, converted from cm-1 to K)
-  note   Ar (nist-asd/levels/ar/2026-11-19_96e5938d.csv): 77 levels above the ionization limit (127109.842 cm-1) left out (above_limit: true keeps them)
+  added  /Species/Ar/ElectronicLevel (427 levels, the last one the ionization limit, converted from cm-1 to K)
+  note   Ar (nist-asd/levels/ar/2026-11-19_96e5938d.csv): 77 levels at or above the ionization limit (127109.842 cm-1) left out
   note   Ar (nist-asd/levels/ar/2026-11-19_96e5938d.csv): 4 levels with energies in brackets (theoretical or derived values in NIST ASD)
 ```
 
-and `diff` against `SpeciesDatabase.h5`: `421 levels in A, 426 in B; energies scaled by 1.0000324`. The old file holds the bound
-levels of an older ASD version (one level less) converted with 1.43873021 K per cm⁻¹ instead of 1.438776877.
+and `diff` against `SpeciesDatabase.h5`: `421 levels in A, 427 in B; energies scaled by 1.0000324`. The old file holds the bound
+levels of an older ASD version (one level less) converted with 1.43873021 K per cm⁻¹ instead of 1.438776877, and lacks the limit
+level for Ar (the only atom without it).
+
+Missing NIST levels are downloaded automatically by `build` and `fetch` (not with `--offline`): the levels form is called as a URL
+(`https://physics.nist.gov/cgi-bin/ASD/energy1.pl`, spectrum from the dataset, `levels/arion1` → `Ar II`, whole table as CSV in
+cm⁻¹), and the response is stored like a manual download (`NIST-Ar-II.csv`, retrieved today, by `user.name`).
 
 ## Example: GEC reference cell
 

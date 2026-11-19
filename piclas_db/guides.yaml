@@ -20,11 +20,12 @@ nist-asd:
     NIST Standard Reference Data are copyrighted by the U.S. Secretary of Commerce; redistribution requires permission. Download
     the levels yourself and cite the database.
   steps:
+    - "Usually not needed: build and fetch download the levels automatically (piclas-db fetch --need {species}). By hand:"
     - Open the levels form https://physics.nist.gov/PhysRefData/ASD/levels_form.html
     - "Enter the spectrum: {spectrum}"
     - Select the level units (cm-1 or eV) and as format output "CSV (text)" (or "ASCII (text)"; both give the same levels).
     - Make sure the columns Configuration, Term, J and Level are selected; press "Retrieve Data" and save the page as it is
-      (the limit rows stay in the file; build uses the ionization limit to leave out autoionizing levels).
+      (the limit rows stay in the file; build adds the ionization limit as last level, as PICLas expects).
     - "Save the file with the spectrum in its name, e.g. {spectrum_file}.csv, or give the species to import with --species {species}."
 custom:
   name: own or other data

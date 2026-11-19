@@ -13,7 +13,7 @@ Status of the table: November 2026. Check the terms of a source before automated
 | --- | --- | --- | --- | --- |
 | **LXCat** (v2) | electron and ion cross-sections (many databases: Biagi, Phelps, Hayashi, Itikawa, …), swarm data | https://www.lxcat.net | web download: TXT, XML, ZIP | **reads** TXT, XML, ZIP; `guide`, `import`; TXT = XML checked |
 | **LXCat 3** | same data, JSON, versioned, permalinks | https://github.com/LXCat-project/LXCat (demo: https://demo.lxcat.net) | **API** (token, developer role); beta | planned (JSON, API) |
-| **NIST ASD** | atomic energy levels, ionization energies | https://physics.nist.gov/PhysRefData/ASD/levels_form.html, https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html | web form ("CSV (text)", "ASCII (text)") | **reads** levels (CSV, tab, text) with the ionization limit; `guide` |
+| **NIST ASD** | atomic energy levels, ionization energies | https://physics.nist.gov/PhysRefData/ASD/levels_form.html, https://physics.nist.gov/PhysRefData/ASD/ionEnergy.html | web form ("CSV (text)", "ASCII (text)") | **reads** levels (CSV, tab, text) with the ionization limit; **downloads automatically** (levels form as URL) |
 | **NIST Chemistry WebBook** | thermochemistry (JANAF), molecular constants (Huber–Herzberg) | https://webbook.nist.gov/chemistry/ | web pages | planned (tables); meanwhile own data |
 | **NIST CCCBDB** | rotational constants, moments of inertia, vibrational frequencies | https://cccbdb.nist.gov | web pages | planned; meanwhile own data |
 | **ATcT** (Argonne) | enthalpies of formation (0 K, 298.15 K), molar masses | https://atct.anl.gov | **API** (https://atct.anl.gov/api/v1/) | **reads and downloads automatically**: `atct search`, `atct get`, recipes `atct:` |

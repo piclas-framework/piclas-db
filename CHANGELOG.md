@@ -3,6 +3,22 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.39.0
+
+From the former `maintain_database.py` scripts (`edit_species.py`): NIST ASD is queried as a URL, and the levels end with the
+ionization limit (degeneracy 1), which PICLas uses as ionization energy.
+
+* NIST ASD levels are downloaded automatically by `build` and `fetch` (`energy1.pl`, whole table as CSV in cm⁻¹; spectrum from the
+  dataset, `levels/arion1` → `Ar II`); an unknown spectrum gives the message of the NIST page
+* Levels: bound levels plus the ionization limit as last level with degeneracy 1 (PICLas convention, as in `SpeciesDatabase.h5`);
+  levels at or above the limit are always left out (`above_limit` of 0.38.0 removed: PICLas would take the highest autoionizing
+  level as ionization energy); levels with relative (`+x`) or doubtful (`?`) energies are left out and counted (before, `+x` was
+  stripped and the relative value used as absolute energy)
+* `check`: rule `levels-ionization-limit`, last level not the ionization limit; `SpeciesDatabase.h5`: Ar (last level 182830 K,
+  a bound level, instead of the limit 182883 K)
+* Findings: the old script forced the ground level to degeneracy 1 (explains ArIon1, A4) and converted with
+  100 × 1.986e-25 / 1.38065e-23 K per cm⁻¹ in its last version
+
 ## 0.38.0
 
 Checked with the two formats of the NIST ASD levels form for Ar I ("CSV (text)", "ASCII (text)"): identical 503 levels, species

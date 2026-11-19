@@ -106,8 +106,8 @@ def resolve(store: Store, requirements: list[Requirement], update: bool = True) 
             if changed:
                 print(f'           {len(changed)} uncommitted change(s) in {store.root}: piclas-db store shows them')
     for resolution in resolutions:
-        if resolution.entry is None and update and resolution.requirement.provider == 'atct':
-            resolution.entry = download_atct(store, resolution.requirement)
+        if resolution.entry is None and update and resolution.requirement.provider in AUTOMATIC:
+            resolution.entry = AUTOMATIC[resolution.requirement.provider](store, resolution.requirement)
             if resolution.entry is not None:
                 resolution.origin = Origin.AUTOMATIC
         if resolution.entry is None:
@@ -134,6 +134,31 @@ def download_atct(store: Store, requirement: Requirement) -> Optional[StoreEntry
     except (atct.ATcTError, IdentifyError, config.ConfigError) as e:
         print(f'  automatic download of {requirement} failed: {str(e).splitlines()[0]}')
         return None
+
+
+def download_nist(store: Store, requirement: Requirement) -> Optional[StoreEntry]:
+    """NIST ASD levels via the levels form as a URL (levels/arion1 -> spectrum 'Ar II'), stored like a file downloaded by hand"""
+    import tempfile  # noqa: PLC0415
+
+    from piclas_db import config  # noqa: PLC0415
+    from piclas_db.sources import nist  # noqa: PLC0415
+    from piclas_db.sources.identify import IdentifyError, identify  # noqa: PLC0415
+
+    try:
+        by = config.require_identity()
+        species = nist.species_of_dataset(requirement.dataset)
+        with progress(f'downloading {requirement} from NIST ASD ({nist.spectrum_of(species)})'):
+            name, text = nist.download(species)
+        with tempfile.TemporaryDirectory() as directory:
+            path = pathlib.Path(directory) / name
+            path.write_text(text, encoding='utf-8')
+            return store.add(path, identify(path), retrieved=datetime.date.today(), by=by)
+    except (nist.NistError, IdentifyError, config.ConfigError) as e:
+        print(f'  automatic download of {requirement} failed: {str(e).splitlines()[0]}')
+        return None
+
+
+AUTOMATIC = {'atct': download_atct, 'nist-asd': download_nist}  # providers whose originals piclas-db downloads itself
 
 
 def synchronize(store: Store, url: Optional[str]) -> str:

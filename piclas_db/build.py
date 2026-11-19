@@ -325,12 +325,16 @@ def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry,
     levels = parsed.levels.copy()
     label = f'{selection.species} ({entry.relative})'
     if parsed.limit is None:
-        report.notes.append(f'{label}: no ionization limit in the file, all {len(levels)} levels kept')
-    elif not selection.above_limit:
-        above = levels[:, 1] > parsed.limit
+        report.notes.append(f'{label}: no ionization limit in the file, all {len(levels)} levels kept and no limit level added')
+    else:
+        # PICLas convention: the bound levels, then the ionization limit as last level with degeneracy 1 (PICLas takes the last
+        # level as ionization energy, e.g. for QK ionization and the heat of formation of the ion)
+        above = levels[:, 1] >= parsed.limit
         if above.any():
-            report.notes.append(f'{label}: {int(above.sum())} levels above the ionization limit ({parsed.limit:.10g} {parsed.unit}) left out (above_limit: true keeps them)')
-        levels = levels[~above]
+            report.notes.append(f'{label}: {int(above.sum())} levels at or above the ionization limit ({parsed.limit:.10g} {parsed.unit}) left out')
+        levels = np.vstack([levels[~above], [[1.0, parsed.limit]]])
+    if parsed.doubtful:
+        report.notes.append(f'{label}: {parsed.doubtful} levels with relative (+x) or doubtful (?) energies left out')
     if parsed.estimated:
         report.notes.append(f'{label}: {parsed.estimated} levels with energies in brackets (theoretical or derived values in NIST ASD)')
     levels[:, 1] *= factor
@@ -340,7 +344,8 @@ def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry,
     retrieved = entry.meta.get('retrieved')
     species.provenance.reference = 'NIST Atomic Spectra Database (https://physics.nist.gov/asd)' + (f', retrieved on {retrieved}' if retrieved else '')
     species.provenance.extra.update(source_provenance(entry))
-    report.added.append(f'/Species/{selection.species}/ElectronicLevel ({len(levels)} levels, converted from {parsed.unit} to K)')
+    limit = '' if parsed.limit is None else ', the last one the ionization limit'
+    report.added.append(f'/Species/{selection.species}/ElectronicLevel ({len(levels)} levels{limit}, converted from {parsed.unit} to K)')
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------

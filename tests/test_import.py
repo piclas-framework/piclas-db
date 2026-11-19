@@ -28,6 +28,7 @@ from piclas_db.piclas_db import main
 from piclas_db.sources.identify import IdentifyError, database_slug, identify
 from piclas_db.sources.lxcat import parse_lxcat, validate
 from piclas_db.sources.nist import parse_nist_levels, piclas_species
+from piclas_db.readers import read_database
 from piclas_db.store import Store, default_store
 # ==================================================================================================================================
 # Synthetic files in the formats of the providers (structure only, invented numbers; no third-party data)
@@ -239,3 +240,46 @@ def test_parse_nist_form_formats() -> None:
         assert parsed.species == 'Tx' and parsed.unit == 'cm-1' and parsed.limit == pytest.approx(100000.0)
         assert parsed.levels.tolist() == [[1.0, 0.0], [5.0, 90000.0], [3.0, 91000.0], [7.0, 99000.5], [3.0, 150000.0]]
     assert ascii_.estimated == csv_.estimated == 1  # '[99000.5]' in the column; the CSV writes the brackets into Prefix/Suffix
+
+
+def test_nist_relative_and_doubtful_levels() -> None:
+    text = NIST_ASCII_FORM.replace('91000.0000       ', '91000.0000+x     ').replace('90000.0000       ', '90000.0000?      ')
+    parsed = parse_nist_levels(text, 'NIST-Tx-I.txt')
+    assert parsed.doubtful == 2 and parsed.levels[:, 1].tolist() == [0.0, 99000.5, 150000.0]
+
+
+def test_nist_spectrum_names() -> None:
+    from piclas_db.sources import nist  # noqa: PLC0415
+
+    assert [nist.spectrum_of(name) for name in ('Ar', 'ArIon1', 'CIon5', 'He')] == ['Ar I', 'Ar II', 'C VI', 'He I']
+    assert [nist.species_of_dataset(dataset) for dataset in ('levels/ar', 'levels/arion1', 'levels/cion5')] == ['Ar', 'ArIon1', 'CIon5']
+    with pytest.raises(nist.NistError):
+        nist.spectrum_of('N2')
+    with pytest.raises(nist.NistError):
+        nist.species_of_dataset('levels/n2')
+
+
+def test_nist_automatic_download(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """build without --offline downloads missing NIST levels (levels form as URL) into the store; unknown spectra fail clearly"""
+    from piclas_db.sources import nist  # noqa: PLC0415
+
+    asked: list[str] = []
+
+    def request(spectrum: str, timeout: float = 120.0, retries: int = 3) -> str:
+        asked.append(spectrum)
+        return NIST_CSV_FORM if spectrum == 'Tx II' else '<html><body><h2>Unrecognized spectrum Qq I</h2></body></html>'
+
+    monkeypatch.setattr(nist, 'request', request)
+    nist_query = nist.parameters('Ar II')
+    assert (nist_query['spectrum'], nist_query['units'], nist_query['format'], nist_query['output']) == ('Ar II', '0', '2', '0')
+    recipe = tmp_path / 'recipe.yaml'
+    recipe.write_text('levels:\n  - source: nist-asd/levels/txion1\n    species: TxIon1\n')
+    store = tmp_path / 'store'
+    assert main(['build', str(recipe), '-o', str(tmp_path / 'db.h5'), '--store', str(store)]) == 0
+    assert asked == ['Tx II'] and 'TxIon1' in read_database(tmp_path / 'db.h5').species
+    entries = [entry for entry in Store(store).entries() if entry.relative.startswith('nist-asd/levels/txion1/')]
+    assert len(entries) == 1 and entries[0].meta['retrieved']
+    capsys.readouterr()
+    recipe.write_text('levels:\n  - source: nist-asd/levels/qq\n    species: Qq\n')
+    assert main(['build', str(recipe), '-o', str(tmp_path / 'db2.h5'), '--store', str(store)]) != 0
+    assert 'NIST ASD has no levels for Qq I: Unrecognized spectrum Qq I' in capsys.readouterr().out

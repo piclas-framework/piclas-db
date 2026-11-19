@@ -70,7 +70,7 @@ def levels(rows: list[list[float]]) -> np.ndarray:
 # Species
 # ----------------------------------------------------------------------------------------------------------------------------------
 def test_clean_species_database() -> None:
-    ar = Species('Ar', {'MassIC': 6.63e-26, 'InteractionID': 1}, levels([[1, 0], [5, 134013.1]]), provenance=REFERENCE)
+    ar = Species('Ar', {'MassIC': 6.63e-26, 'InteractionID': 1}, levels([[1, 0], [5, 134013.1], [1, 127109.842 * CM_TO_K]]), provenance=REFERENCE)
     assert [finding.rule for finding in run_checks(species_db(ar))] == ['provenance-file']  # INFO: not written by piclas-db
 
 
@@ -101,6 +101,15 @@ def test_attribute_typo_and_missing() -> None:
 def test_ground_state_degeneracy() -> None:
     ion = Species('ArIon1', {'MassIC': 6.63e-26, 'InteractionID': 10}, levels([[1, 0], [2, 2059.3]]), provenance=REFERENCE)
     assert 'levels-ground-state' in rules_of(run_checks(species_db(ion)), Severity.ERROR)
+
+
+def test_ionization_limit_as_last_level() -> None:
+    """PICLas takes the last level as ionization energy: a bound level there (SpeciesDatabase.h5: Ar) is reported"""
+    limit = 13.598434 * EV_TO_K
+    good = Species('H', {'MassIC': 1.67e-27, 'InteractionID': 1}, levels([[2, 0], [2, 118352.3], [1, limit]]), provenance=REFERENCE)
+    bad = Species('H', {'MassIC': 1.67e-27, 'InteractionID': 1}, levels([[2, 0], [2, 118352.3], [6, 0.99 * limit]]), provenance=REFERENCE)
+    assert 'levels-ionization-limit' not in rules_of(run_checks(species_db(good)), Severity.WARNING)
+    assert 'levels-ionization-limit' in rules_of(run_checks(species_db(bad)), Severity.WARNING)
 
 
 def test_missing_ground_state_and_unit() -> None:

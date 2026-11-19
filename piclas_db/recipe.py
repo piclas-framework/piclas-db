@@ -110,7 +110,6 @@ class LiteratureSelection:
 class LevelSelection:
     source: Requirement
     species: str  # PICLas name
-    above_limit: bool = False  # keep levels above the ionization limit (autoionizing levels); default: only bound levels
 
 
 @dataclass
@@ -206,7 +205,7 @@ def parse_recipe(text: str, path: str) -> Recipe:
         problems = name_problems([entry['species']], context)
         if problems:
             raise RecipeError('; '.join(problems))
-        recipe.levels.append(LevelSelection(source=requirement(entry, context), species=str(entry['species']), above_limit=bool(entry.get('above_limit', False))))
+        recipe.levels.append(LevelSelection(source=requirement(entry, context), species=str(entry['species'])))
     for number, entry in enumerate(data.get('literature') or [], start=1):
         context = f'literature #{number}'
         if not isinstance(entry, dict) or not entry.get('pair') or entry.get('kind') not in KINDS:

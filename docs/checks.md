@@ -18,6 +18,7 @@ have one of three severities, and the exit code is 1 if at least one error is fo
 | `levels-ground-state` | ERROR | lowest level not at 0 K, or ground-state degeneracy different from NIST ASD | ArIon1 (SpeciesDatabase.h5), CNIon1 (DSMCSpecies_electronic_state_full_Data.h5) |
 | `levels-unit` | ERROR | highest level × hc/k_B equals the ionization energy, i.e. energies in cm⁻¹ instead of K | H (DSMCSpecies_electronic_state_full_Data.h5) |
 | `levels-above-ionization` | WARNING | level above the ionization energy | |
+| `levels-ionization-limit` | WARNING | last level is not the ionization limit with degeneracy 1 (PICLas takes the last level as ionization energy) | Ar (SpeciesDatabase.h5) |
 | `levels-values`, `levels-degeneracy` | ERROR | negative or non-finite energies, non-integer degeneracies | |
 | `levels-unsorted`, `levels-duplicate`, `levels-dummy` | INFO | unsorted levels (PICLas sorts them), equal energies, dummy levels above 1e10 K | Ar (several files) |
 | `reaction-attribute-missing` | ERROR | `Reactants`, `Products`, `ReactionModel`, `ChemistryModel`, Arrhenius parameters for TCE | |

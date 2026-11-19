@@ -199,6 +199,14 @@ def check_electronic_levels(database: Database) -> Iterator[Finding]:
                 )
             elif highest > 1.001 * limit:
                 yield Finding(Severity.WARNING, 'levels-above-ionization', path, f'highest level {highest:.6g} K above the ionization energy {limit:.6g} K')
+            elif round(float(degeneracy[-1])) != 1 or energy[-1] < 0.999 * limit:
+                # PICLas takes the last level as ionization energy (QK ionization, heat of formation of the ion)
+                yield Finding(
+                    Severity.WARNING,
+                    'levels-ionization-limit',
+                    path,
+                    f'last level ({degeneracy[-1]:g}, {energy[-1]:.6g} K) is not the ionization limit (1, {limit:.6g} K); PICLas takes the last level as ionization energy',
+                )
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------

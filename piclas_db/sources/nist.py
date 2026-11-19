@@ -47,6 +47,7 @@ class NistLevels:
     skipped: int = 0  # rows without J or energy (e.g. limits, headers repeated in the table)
     limit: Optional[float] = None  # lowest ionization limit ('Limit' row), in the given unit
     estimated: int = 0  # levels with the energy in brackets or parentheses (theoretical or derived values, e.g. '[126211.5]')
+    doubtful: int = 0  # rows with relative ('+x') or doubtful ('?') energies, left out
 
 
 def is_nist_levels(text: str) -> bool:
@@ -75,7 +76,12 @@ def parse_j(value: str) -> Optional[float]:
 
 
 def parse_energy(value: str) -> Optional[float]:
-    value = re.sub(r'[\[\]()?+a-zA-Z]', '', clean(value)).strip()
+    """Energy of a level; None for empty cells and for values that are not absolute or doubtful: '1234.5+x' (relative to an
+    unknown level of another system), '1234.5?' (level may not be real)"""
+    value = clean(value)
+    if re.search(r'[a-wyzA-Z]|\+\s*[a-z]|\?|\bx\b', value):
+        return None
+    value = re.sub(r'[\[\]()]', '', value).strip()
     try:
         return float(value)
     except ValueError:
@@ -101,7 +107,7 @@ def parse_nist_levels(text: str, name_hint: str = '') -> NistLevels:
     term_column = columns.index('Term') if 'Term' in columns else None
     prefix_column = columns.index('Prefix') if 'Prefix' in columns else None  # CSV: brackets of the level in their own columns
 
-    levels, skipped, limits, estimated = [], 0, [], 0
+    levels, skipped, limits, estimated, doubtful = [], 0, [], 0, 0
     for row in rows[1:]:
         if len(row) <= max(level_column, j_column):
             skipped += 1
@@ -109,6 +115,9 @@ def parse_nist_levels(text: str, name_hint: str = '') -> NistLevels:
         j, energy = parse_j(row[j_column]), parse_energy(row[level_column])
         if term_column is not None and len(row) > term_column and clean(row[term_column]).lower() == 'limit' and energy is not None:
             limits.append(energy)
+        if j is not None and energy is None and re.search(r'\+\s*[a-z]|\?', clean(row[level_column])):
+            doubtful += 1
+            continue
         if j is None or energy is None:
             skipped += 1
             continue
@@ -125,4 +134,88 @@ def parse_nist_levels(text: str, name_hint: str = '') -> NistLevels:
         skipped=skipped,
         limit=min(limits) if limits else None,
         estimated=estimated,
+        doubtful=doubtful,
     )
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Automatic download (the levels form as a URL, as used by the former maintain_database.py)
+# ----------------------------------------------------------------------------------------------------------------------------------
+URL = 'https://physics.nist.gov/cgi-bin/ASD/energy1.pl'
+ROMAN_OF = {charge: numeral for numeral, charge in ROMAN.items()}
+
+
+class NistError(Exception):
+    pass
+
+
+def spectrum_of(species: str) -> str:
+    """NIST spectrum of a PICLas species: Ar -> 'Ar I', ArIon1 -> 'Ar II', CIon5 -> 'C VI'"""
+    match = re.fullmatch(r'([A-Z][a-z]?)(?:Ion(\d+))?', species)
+    if match is None or int(match.group(2) or 0) + 1 not in ROMAN_OF:
+        raise NistError(f'{species}: not an atom or atomic ion with a NIST spectrum (e.g. Ar, ArIon1)')
+    return f'{match.group(1)} {ROMAN_OF[int(match.group(2) or 0) + 1]}'
+
+
+def species_of_dataset(dataset: str) -> str:
+    """PICLas species of a store dataset: 'levels/arion1' -> 'ArIon1'"""
+    match = re.fullmatch(r'levels/([a-z]{1,2})(?:ion(\d+))?', dataset)
+    if match is None:
+        raise NistError(f'{dataset}: not a NIST levels dataset (levels/<species>, e.g. levels/arion1)')
+    return match.group(1).capitalize() + (f'Ion{match.group(2)}' if match.group(2) else '')
+
+
+def parameters(spectrum: str) -> dict[str, str]:
+    """Query of the levels form: the whole table as CSV in cm-1, ordered by energy, with the columns of a manual download"""
+    return {
+        'de': '0',
+        'spectrum': spectrum,
+        'units': '0',  # cm-1
+        'format': '2',  # CSV
+        'output': '0',  # entire table, no pages
+        'page_size': '15',
+        'multiplet_ordered': '0',  # by energy
+        'conf_out': 'on',
+        'term_out': 'on',
+        'level_out': 'on',
+        'unc_out': '1',
+        'j_out': 'on',
+        'lande_out': 'on',
+        'perc_out': 'on',
+        'biblio': 'on',
+        'temp': '',
+        'submit': 'Retrieve Data',
+    }
+
+
+def request(spectrum: str, timeout: float = 120.0, retries: int = 3) -> str:
+    """Response of the levels form (the CSV table, or an HTML page with an error message)"""
+    import time  # noqa: PLC0415
+    import urllib.error  # noqa: PLC0415
+    import urllib.parse  # noqa: PLC0415
+    import urllib.request  # noqa: PLC0415
+
+    from piclas_db.common.common_vars import Common  # noqa: PLC0415
+
+    url = f'{URL}?{urllib.parse.urlencode(parameters(spectrum))}'
+    headers = {'User-Agent': f'piclas-db/{Common().version} (https://github.com/piclas-framework/piclas-db)'}
+    last: Optional[Exception] = None
+    for attempt in range(retries):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as response:  # noqa: S310 (fixed https host)
+                return response.read().decode('utf-8', errors='replace')
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last = e
+            time.sleep(2.0 * (attempt + 1))
+    raise NistError(f'NIST ASD not reachable ({url}): {last}')
+
+
+def download(species: str) -> tuple[str, str]:
+    """Levels of a species from NIST ASD: (file name with the spectrum, e.g. 'NIST-Ar-II.csv', CSV text as received)"""
+    spectrum = spectrum_of(species)
+    text = request(spectrum)
+    if not is_nist_levels(text):
+        message = re.sub(r'<[^>]+>', ' ', text)
+        message = ' '.join(message.split())[:200]
+        raise NistError(f'NIST ASD has no levels for {spectrum}: {message or "empty response"}')
+    return f'NIST-{spectrum.replace(" ", "-")}.csv', text
