@@ -65,5 +65,6 @@ species:
 ```
 
 Every species needs a `Reference`. Changing a value means importing a new version of the file (the old one stays in the store, recipes
-use the newest, or a pinned one: `own/piclas-parameters@<sha256>`). Values written directly in a recipe still work (for tests), but
+use the newest, or a pinned one: `own/piclas-parameters@<sha256>`)). An existing database gives a first own-data file with
+`piclas-db export SpeciesDatabase.h5 --own-data piclas-parameters.yaml` ([details](migrate.md)). Values written directly in a recipe still work (for tests), but
 `build` notes them: they belong into the own data. Precedence: recipe, own data, ATcT.

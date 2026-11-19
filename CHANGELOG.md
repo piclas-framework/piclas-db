@@ -3,6 +3,20 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.31.0
+
+* `piclas-db export SOURCE --own-data FILE`: the species attributes of a database as an own-data file, every species with a
+  `Reference` (origin, sources named per value, values without a named source); heats of formation and masses credited to ATcT are
+  left out (a recipe takes them from ATcT), `--keep-atct` keeps them; `--origin`, `--name`, `--force`. Round trip with `--keep-atct`,
+  import and build: every species attribute of the old file again (values and integer/float types). `SpeciesDatabase.h5`: 44 species,
+  35 credited to ATcT (the 34 with `HeatOfFormation: ATcT 1.130` and CIon6 with a tabular ATcT reference)
+* Tabular references (`[['HeatOfFormation', ' ATcT 1.130'], ...]`) read as `HeatOfFormation: ATcT 1.130; ...` instead of joined with
+  spaces, and kept as (label, text) rows (`Provenance.reference_parts`)
+* Recipes and own-data files: species names read by YAML as something else (`NO` as false) are rejected with a hint to quote them;
+  before, a recipe species `NO` became a species `False`
+* `diff`: electronic levels present in one file and missing in the other are reported (`421 levels in A, no levels in B`); before,
+  such species counted as identical
+
 ## 0.30.2
 
 * Progress of slow steps (`piclas_db/common/progress.py`): spinner with elapsed time on a terminal, one line with the time otherwise,

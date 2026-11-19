@@ -18,6 +18,8 @@ import pathlib
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Third-party libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import h5py
+import numpy as np
 import pytest
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -25,7 +27,8 @@ import pytest
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.piclas_db import main
 from piclas_db.readers import read_database
-from piclas_db.recipe import RecipeError, load_recipe
+from piclas_db.recipe import RecipeError, load_recipe, parse_recipe
+from piclas_db.sources.own import OwnDataError, own_data_from_database, parse_own_data
 from piclas_db.sources.identify import IdentifyError, identify
 from piclas_db.store import Store
 # ==================================================================================================================================
@@ -84,3 +87,106 @@ def test_build_with_own_data(tmp_path: pathlib.Path, capsys: pytest.CaptureFixtu
             load_recipe(recipe)
     recipe.write_text('own_data: own/missing\nspecies:\n  Ar: {}\n')
     assert main(['build', str(recipe), '-o', str(output), '--store', str(store), '--offline', '--force']) == 1  # not in the store
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Own data from an existing database (export --own-data)
+# ----------------------------------------------------------------------------------------------------------------------------------
+def old_database(path: pathlib.Path) -> pathlib.Path:
+    """Synthetic file in the layout of SpeciesDatabase.h5: tabular and plain references, an unknown source, a species named NO"""
+    with h5py.File(path, 'w') as h5:
+        rows = np.array([[b'HeatOfFormation', b' Tables 1.0'], [b'Moments of Inertia [kg * m^2]', b' Constants Book 2001']], dtype='S100')
+        attributes: dict[str, tuple[dict, object]] = {
+            'Xy': ({'MassIC': 5.0e-26, 'ChargeIC': 0.0, 'HeatOfFormation_K': 0.0, 'InteractionID': 1.0, 'Tref': 273.0, 'dref': 4.0e-10, 'omega': 0.24}, 'HeatOfFormation: ATcT 9.9'),
+            'NO': (
+                {
+                    'MassIC': 4.9e-26,
+                    'HeatOfFormation_K': 10.5,
+                    'InteractionID': 2.0,
+                    'CharaTempVib': np.array([100.0, 200.0]),
+                    'MomentOfInertia': 1.0e-46,
+                    'LinearMolec': np.int32(1),
+                    'Tref': 273.0,
+                    'dref': 4.2e-10,
+                    'omega': 0.24,
+                },
+                rows,
+            ),
+            'XyIon2': ({'MassIC': 4.99e-26, 'ChargeIC': 3.2e-19, 'InteractionID': 10, 'PreviousState': b'XyIon1', 'Tref': 300.0, 'dref': 3.0e-10, 'omega': 0.2}, 'Unknown'),
+            'Zz': (
+                {'MassIC': 9.0e-26, 'HeatOfFormation_K': 500.0, 'InteractionID': 1.0, 'Tref': 1000.0, 'dref': 5.0e-10, 'omega': 0.3},
+                'HeatOfFormation: Thermo Book (1998); A. Author. A paper: part 2. Journal, 1(2):3–4, 1997.',
+            ),
+            'Ww': (
+                {'MassIC': 8.0e-26, 'HeatOfFormation_K': 7.0, 'InteractionID': 1, 'Tref': 300.0, 'dref': 4.0e-10, 'omega': 0.2},
+                np.array([[b'Electronic Energy Levels', b'Spectra Database'], [b'HeatOfFormation_K', b'ATcT 9.9; online'], [b'MassIC', b'ATcT 9.9; online'], [b'Tref', b'User input']], dtype='S50'),
+            ),
+        }
+        for name, (values, reference) in attributes.items():
+            group = h5.create_group(f'Species/{name}')
+            for key, value in values.items():
+                group.attrs[key] = value
+            group.attrs['* Reference'] = reference
+            group.attrs['* Created'] = 'January 01, 2020'
+            group.create_dataset('ElectronicLevel', data=np.array([[1.0, 0.0], [3.0, 100.0]]))
+    return path
+
+
+def test_reference_rows_readable(tmp_path: pathlib.Path) -> None:
+    database = read_database(old_database(tmp_path / 'old.h5'))
+    provenance = database.species['NO'].provenance
+    assert provenance.reference == 'HeatOfFormation: Tables 1.0; Moments of Inertia [kg * m^2]: Constants Book 2001'
+    assert provenance.reference_parts[1] == ('Moments of Inertia [kg * m^2]', 'Constants Book 2001')
+    assert database.species['Xy'].provenance.reference_parts == []
+
+
+def test_own_data_from_database(tmp_path: pathlib.Path) -> None:
+    export = own_data_from_database(read_database(old_database(tmp_path / 'old.h5')), 'old.h5 (2020-01-01)')
+    species = export.content['species']
+    assert sorted(export.atct_species) == ['Ww', 'Xy'] and export.left_out['Xy'] == ['HeatOfFormation_K', 'MassIC']
+    assert 'MassIC' not in species['Xy'] and 'HeatOfFormation_K' not in species['Ww']
+    assert species['Xy']['Reference'] == 'old.h5 (2020-01-01); source unknown: ChargeIC, InteractionID, Tref, dref, omega'
+    assert species['Ww']['Reference'] == 'old.h5 (2020-01-01); Tref: User input; source unknown: InteractionID, dref, omega'
+    assert species['NO']['Reference'] == ('old.h5 (2020-01-01); HeatOfFormation_K: Tables 1.0; MomentOfInertia: Constants Book 2001; source unknown: MassIC, InteractionID, Tref, dref, omega, CharaTempVib, LinearMolec')
+    assert species['NO']['CharaTempVib'] == [100.0, 200.0] and species['XyIon2']['PreviousState'] == 'XyIon1'
+    assert species['Zz']['Reference'] == (
+        'old.h5 (2020-01-01); HeatOfFormation_K: Thermo Book (1998); not stated which of MassIC, InteractionID, Tref, dref, omega come from: A. Author. A paper: part 2. Journal, 1(2):3–4, 1997.'
+    )
+    assert export.unknown['XyIon2'] == ['MassIC', 'ChargeIC', 'InteractionID', 'PreviousState', 'Tref', 'dref', 'omega']
+    kept = own_data_from_database(read_database(tmp_path / 'old.h5'), 'old.h5', keep_atct=True).content['species']
+    assert kept['Xy']['MassIC'] == pytest.approx(5.0e-26, rel=0) and kept['Xy']['Reference'] == 'old.h5; HeatOfFormation_K: ATcT 9.9; source unknown: MassIC, ChargeIC, InteractionID, Tref, dref, omega'
+    assert kept['Ww']['Reference'].startswith('old.h5; HeatOfFormation_K: ATcT 9.9; online; MassIC: ATcT 9.9; online; Tref: User input')
+
+
+def test_export_own_data_round_trip(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """export --own-data --keep-atct, import, build: the species attributes of the old file again (values and integer/float type)"""
+    old = old_database(tmp_path / 'old.h5')
+    own = tmp_path / 'own.yaml'
+    assert main(['export', str(old), '--own-data', str(own), '--origin', 'old.h5 (2020-01-01)', '--keep-atct']) == 0
+    assert '5 species' in capsys.readouterr().out
+    assert "\n  'NO': {" in own.read_text()  # quoted: YAML reads NO as false
+    assert main(['export', str(old), '--own-data', str(own)]) == 1 and 'exists' in capsys.readouterr().out
+    assert main(['export', str(old)]) == 1 and '--own-data' in capsys.readouterr().out
+    store = tmp_path / 'store'
+    assert main(['import', str(own), '--store', str(store)]) == 0
+    recipe = tmp_path / 'recipe.yaml'
+    recipe.write_text('own_data: own/piclas-parameters\nspecies:\n' + ''.join(f"  '{name}': {{}}\n" for name in ('NO', 'Ww', 'Xy', 'XyIon2', 'Zz')))
+    output = tmp_path / 'new.h5'
+    assert main(['build', str(recipe), '-o', str(output), '--store', str(store), '--offline']) == 0
+    before, after = read_database(old), read_database(output)
+    for name, species in before.species.items():
+        rebuilt = after.species[name].attributes
+        assert set(rebuilt) == set(species.attributes), name
+        for key, value in species.attributes.items():
+            assert np.array_equal(np.asarray(rebuilt[key]), np.asarray(value)) and np.asarray(rebuilt[key]).dtype.kind == np.asarray(value).dtype.kind, (name, key)
+    assert str(after.species['Xy'].provenance.reference).startswith('old.h5 (2020-01-01); HeatOfFormation_K: ATcT 9.9')
+
+
+def test_unquoted_yaml_names(tmp_path: pathlib.Path) -> None:
+    with pytest.raises(OwnDataError, match='read by YAML as bool'):
+        parse_own_data('format: piclas-db own data\nname: x\nspecies:\n  NO: {Tref: 273, Reference: Book}\n')
+    with pytest.raises(RecipeError, match='write it in quotes'):
+        parse_recipe('species:\n  NO: {}\n', 'test')
+    with pytest.raises(RecipeError, match='read by YAML as bool'):
+        parse_recipe('levels:\n  - source: nist-asd/levels/no\n    species: NO\n', 'test')
+    assert list(parse_recipe("species:\n  'NO': {}\n", 'test').species) == ['NO']

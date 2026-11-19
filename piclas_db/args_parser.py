@@ -149,7 +149,12 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--commit', action='store_true', help='commit store files that were not committed (e.g. after a failed import)')
         elif name == 'export':
             sub.add_argument('source', help='database file (.h5) of any layout')
-            sub.add_argument('-o', '--output', required=True, help='new or empty directory for the tables')
+            sub.add_argument('-o', '--output', help='new or empty directory for the tables')
+            sub.add_argument('--own-data', metavar='FILE', help='write the species attributes as an own-data file (YAML) for the store')
+            sub.add_argument('--origin', help='with --own-data: name of the file in every Reference (default: file name and modification date)')
+            sub.add_argument('--name', default='piclas-parameters', help='with --own-data: dataset name in the store (default: piclas-parameters)')
+            sub.add_argument('--keep-atct', action='store_true', help='with --own-data: keep heats of formation and masses that the file credits to ATcT')
+            sub.add_argument('--force', action='store_true', help='with --own-data: overwrite an existing file')
         elif name == 'migrate':
             sub.add_argument('source', help='database file (.h5) of any layout, or a directory with ASCII tables')
             sub.add_argument('-o', '--output', required=True, help='new database file (.h5)')

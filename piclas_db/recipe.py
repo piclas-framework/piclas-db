@@ -61,6 +61,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db.common.names import name_problems
 from piclas_db.model import XSecKind
 from piclas_db.resolve import Requirement
 # ==================================================================================================================================
@@ -194,6 +195,9 @@ def parse_recipe(text: str, path: str) -> Recipe:
         context = f'levels #{number}'
         if not isinstance(entry, dict) or 'species' not in entry:
             raise RecipeError(f'{context}: "species" (PICLas name, e.g. ArIon1) required')
+        problems = name_problems([entry['species']], context)
+        if problems:
+            raise RecipeError('; '.join(problems))
         recipe.levels.append(LevelSelection(source=requirement(entry, context), species=str(entry['species'])))
     for number, entry in enumerate(data.get('literature') or [], start=1):
         context = f'literature #{number}'
@@ -242,5 +246,8 @@ def parse_recipe(text: str, path: str) -> Recipe:
         values = data.get(section) or {}
         if not isinstance(values, dict) or not all(isinstance(value, dict) for value in values.values()):
             raise RecipeError(f'{section}: mapping of names to attributes required')
+        problems = name_problems(values, section)
+        if problems:
+            raise RecipeError('; '.join(problems))
         setattr(recipe, section, values)
     return recipe

@@ -94,6 +94,16 @@ def test_levels_missing_ground_state_and_placeholder() -> None:
     messages = {difference.path: difference.message for difference in comparison.differences}
     assert 'lowest level' in messages['/Species/CNIon1/ElectronicLevel']
     assert changes(comparison)['/Species/Xe/ElectronicLevel'] is Change.STRUCTURE
+    assert messages['/Species/Xe/ElectronicLevel'] == 'placeholder in A, 2 levels in B'
+
+
+def test_levels_missing_in_one_file() -> None:
+    a = electronic_db(Ar=[[1, 0], [5, 133982.9]])
+    b = Database(path='levels.h5', schema=Schema.LEGACY_ELECTRONIC)
+    b.species['Ar'] = Species('Ar')
+    comparison = compare(a, b)
+    assert not comparison.equal and comparison.identical == 0
+    assert [difference.message for difference in comparison.differences] == ['2 levels in A, no levels in B']
 
 
 def test_cross_sections_renamed_typo_and_sources() -> None:

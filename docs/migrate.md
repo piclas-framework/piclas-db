@@ -51,3 +51,33 @@ surface.yaml, surface/<name>.csv           surface chemistry
 
 Numbers are written with 17 significant digits. Converting the tables back with `piclas-db migrate DIRECTORY -o file.h5`
 reproduces every value, attribute and data type of a migrated file exactly (round-trip test in `tests/test_migrate.py`).
+
+## `piclas-db export SOURCE --own-data FILE`
+
+Writes the species attributes of a database as an own-data file (YAML, [format](sources.md#own-data)) for the store, the first step of
+rebuilding an existing file from sources: the values stay as they are, and every species gets a `Reference` that says where each value
+comes from, as far as the file tells.
+
+```bash
+piclas-db export SpeciesDatabase.h5 --own-data piclas-parameters.yaml --origin "SpeciesDatabase.h5 (2026-10-09)"
+```
+
+```
+SpeciesDatabase.h5 -> piclas-parameters.yaml: 44 species, origin "SpeciesDatabase.h5 (2026-10-09)"
+  ATcT (35 species): HeatOfFormation_K, MassIC left out (use --keep-atct to keep them)
+  source unknown: 332 values in 42 species (see the Reference of each species)
+```
+
+* The `Reference` of a species starts with the origin (`--origin`, default: file name and modification date), then the sources named
+  per value (labels such as `HeatOfFormation`, `Moments of Inertia` or attribute names in tabular references), then the values without
+  a named source (`source unknown: ...`). A reference without labels (e.g. a paper for the electron) is kept with the note which values
+  it may stand for.
+* Heats of formation and masses of species whose reference names ATcT are left out: a recipe takes them from ATcT (`atct: <ID>`),
+  which documents version and record. `--keep-atct` keeps them (exact copy of the old values).
+* Electronic and vibrational levels are not own data; they come from NIST ASD (recipe `levels`).
+* Species names that YAML would read as something else are quoted (`'NO'`, YAML reads `NO` as false); recipes and own-data files with
+  such unquoted names are rejected.
+
+Check the file (replace `source unknown` where the source is found), then `piclas-db import piclas-parameters.yaml`. Round trip: with
+`--keep-atct`, import and `build` with all species reproduce every species attribute of the old file, values and integer/float types
+(`tests/test_own.py`).

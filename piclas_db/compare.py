@@ -139,13 +139,18 @@ def constant_factor(a: np.ndarray, b: np.ndarray, rtol: float) -> Optional[float
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Electronic levels
 # ----------------------------------------------------------------------------------------------------------------------------------
+def level_state(species: Species) -> str:
+    if species.electronic_placeholder:
+        return 'placeholder'
+    return 'no levels' if species.electronic_levels is None else f'{len(species.electronic_levels)} levels'
+
+
 def compare_levels(path: str, a: Species, b: Species, rtol: float) -> list[Difference]:
     # Species references usually describe other properties (e.g. heat of formation), so they are not used to identify the source
     source = False
     if a.electronic_levels is None or b.electronic_levels is None:
-        if a.electronic_placeholder != b.electronic_placeholder:
-            state_a = 'placeholder' if a.electronic_placeholder else 'levels'
-            state_b = 'placeholder' if b.electronic_placeholder else 'levels'
+        state_a, state_b = level_state(a), level_state(b)
+        if state_a != state_b:
             return [Difference(Change.STRUCTURE, path, f'{state_a} in A, {state_b} in B', source)]
         return []
     levels_a, levels_b = a.electronic_levels, b.electronic_levels

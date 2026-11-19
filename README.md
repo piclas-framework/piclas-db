@@ -62,6 +62,7 @@ piclas-db -v
 | `piclas-db extract paper --page 4 [--table 12] -o work/` | Read the data series of a vector figure, or a table, into extraction records ([details](docs/extract.md)) | **available** |
 | `piclas-db build recipe.yaml -o database.h5` | Build a database from the original files according to a recipe ([details](docs/build.md)) | **available** |
 | `piclas-db export database.h5 -o tables/` | Write a database of any layout as ASCII tables ([details](docs/migrate.md)) | **available** |
+| `piclas-db export database.h5 --own-data own.yaml` | Write the species attributes as an own-data file with a `Reference` per species ([details](docs/migrate.md)) | **available** |
 | `piclas-db plot db.h5 lxcat.txt --pair Ar-electron --compare` | Plot σ(E), k(T) or electronic levels from any sources ([details](docs/plot.md)) | **available** |
 | `piclas-db reservoir db.h5 --pair Ar-electron --energies 16 20 50 -o study/` | PICLas reservoir study and its evaluation against the database ([details](docs/reservoir.md)) | **available** |
 | `piclas-db reservoir [db.h5] --regressioncheck <piclas>/regressioncheck/NIG_Reservoir_single_core` | Compare the reference results of the PICLas reservoir regression checks with a database ([details](docs/reservoir.md#regression-checks-of-piclas)) | **available** |

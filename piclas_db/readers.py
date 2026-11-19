@@ -74,9 +74,21 @@ def decode(value: object) -> AttrValue:
     return value
 
 
+def label_rows(value: AttrValue) -> list[tuple[str, str]]:
+    """(label, text) rows of a reference written as a table, e.g. [['HeatOfFormation', ' ATcT 1.130'], ...]; [] for other shapes"""
+    rows = [item for item in value if item not in ('', None)] if isinstance(value, list) else []
+    if rows and all(isinstance(row, list) and len(row) == 2 and all(isinstance(part, str) for part in row) for row in rows):
+        return [(str(label).strip(), str(text).strip()) for label, text in rows]
+    return []
+
+
 def flatten_text(value: AttrValue) -> str:
-    """Join string attributes of any shape (e.g. [['...']] written by some converters) into one string"""
+    """Join string attributes of any shape (e.g. [['...']] written by some converters) into one string; a list of (label, text) rows
+    (e.g. [['HeatOfFormation', ' ATcT 1.130'], ...]) becomes 'label: text; label: text'"""
     if isinstance(value, list):
+        rows = label_rows(value)
+        if rows:
+            return '; '.join(f'{label}: {text}' for label, text in rows)
         return ' '.join(flatten_text(item) for item in value if item not in ('', None))
     return str(value)
 
@@ -94,6 +106,7 @@ def split_attributes(attrs: h5py.AttributeManager, all_metadata: bool = False) -
         value = decode(attrs[name])
         if name in REFERENCE_ATTRIBUTES:
             text = flatten_text(value)
+            provenance.reference_parts += label_rows(value)
             provenance.reference = text if provenance.reference is None else f'{provenance.reference} {text}'
         elif name in INFO_ATTRIBUTES:
             provenance.info = flatten_text(value)

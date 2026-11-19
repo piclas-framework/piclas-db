@@ -70,6 +70,7 @@ class Provenance:
     reference: Optional[str] = None  # 'Reference', '* Reference' or 'Source'
     info: Optional[str] = None  # LXCat 'Info' (process description, parameters, comments)
     extra: dict[str, AttrValue] = field(default_factory=dict)  # any other metadata attribute (e.g. 'Note', 'PROCESS', '* Created')
+    reference_parts: list[tuple[str, str]] = field(default_factory=list)  # (label, text) rows of a tabular reference, e.g. ('MassIC', 'ATcT ...')
 
     @property
     def is_empty(self) -> bool:
