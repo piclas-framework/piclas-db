@@ -60,6 +60,31 @@ def is_own_data(text: str) -> bool:
     return f'format: {FORMAT}' in text[:2000]
 
 
+LEVEL_KEYS = ('ElectronicLevel', 'VibrationalLevel')  # datasets, not attributes: [[degeneracy, energy in K], ...] / [energy in K, ...]
+
+
+def level_problems(name: str, attributes: dict[str, Any]) -> list[str]:
+    problems = []
+    for key, columns in (('ElectronicLevel', 2), ('VibrationalLevel', 1)):
+        if key not in attributes:
+            continue
+        try:
+            array = np.asarray(attributes[key], dtype=np.float64)
+        except (TypeError, ValueError):
+            problems.append(f'{name}: {key} must hold numbers')
+            continue
+        if array.ndim == 1 and columns == 1:
+            array = array.reshape(-1, 1)
+        if array.ndim != 2 or array.shape[1] != columns or not len(array):
+            problems.append(f'{name}: {key} must be a list of ' + ('[degeneracy, energy in K]' if columns == 2 else 'energies in K'))
+    return problems
+
+
+def level_array(key: str, value: Any) -> np.ndarray:
+    array = np.asarray(value, dtype=np.float64)
+    return array.reshape(-1, 1) if key == 'VibrationalLevel' and array.ndim == 1 else array
+
+
 def parse_own_data(text: str) -> dict[str, Any]:
     """Content of an own-data file, checked: format, name, species with attributes and a Reference each"""
     try:
@@ -81,6 +106,8 @@ def parse_own_data(text: str) -> dict[str, Any]:
             problems.append(f'{name}: attributes must be a mapping')
         elif not str(attributes.get('Reference', '')).strip():
             problems.append(f'{name}: "Reference" missing (where do the values come from?)')
+        else:
+            problems += level_problems(name, attributes)
     if problems:
         raise OwnDataError('; '.join(problems))
     return content
@@ -160,7 +187,18 @@ def ordered(attributes: dict[str, Any]) -> dict[str, Any]:
     return {key: attributes[key] for key in keys}
 
 
-def own_data_from_database(database: Database, origin: str, name: str = 'piclas-parameters', keep_atct: bool = False, atct: frozenset[str] = frozenset()) -> OwnDataExport:
+def keeps_levels(species_name: str, levels: Any) -> bool:
+    """Levels that no level source of piclas-db provides: molecules (NIST ASD has only atoms) and the dummy levels of bare nuclei
+    ([[1, 0], [1, 1e99]]: no further ionization)"""
+    from piclas_db.atct_map import piclas_name  # noqa: PLC0415
+
+    parsed = piclas_name(species_name)
+    molecule = parsed is None or sum(parsed[1].values()) > 1
+    dummy = levels is not None and len(levels) == 2 and float(np.max(levels[:, 1])) >= 1.0e30
+    return molecule or dummy
+
+
+def own_data_from_database(database: Database, origin: str, name: str = 'piclas-parameters', keep_atct: bool = False, atct: frozenset[str] = frozenset(), levels: bool = False) -> OwnDataExport:
     """Own data with every species attribute of a database; heat of formation and mass are left out for species whose reference
     credits ATcT and for the species in 'atct' (with an ATcT ID in a recipe): a recipe takes them from ATcT; keep_atct keeps the
     credited ones. Every species gets a Reference: origin, the sources named per value, the values without one"""
@@ -177,7 +215,12 @@ def own_data_from_database(database: Database, origin: str, name: str = 'piclas-
             export.left_out[species_name] = [key for key in ATCT_ATTRIBUTES if attributes.pop(key, None) is not None]
             for key in ATCT_ATTRIBUTES:
                 labelled.pop(key, None)
-        if not attributes:
+        datasets: dict[str, Any] = {}
+        if levels and species.electronic_levels is not None and species_name != 'electron' and keeps_levels(species_name, species.electronic_levels):
+            datasets['ElectronicLevel'] = plain(species.electronic_levels)
+        if levels and species.vibrational_levels is not None:
+            datasets['VibrationalLevel'] = plain(species.vibrational_levels[:, 0])
+        if not attributes and not datasets:
             continue
         parts = [origin]
         named = {key for key in labelled if key in attributes}
@@ -190,7 +233,10 @@ def own_data_from_database(database: Database, origin: str, name: str = 'piclas-
         elif rest:
             parts.append(f'source unknown: {", ".join(rest)}')
             export.unknown[species_name] = rest
-        species_data[species_name] = {**ordered(attributes), 'Reference': '; '.join(parts)}
+        if datasets:
+            parts.append(f'source unknown: {", ".join(datasets)}')
+            export.unknown.setdefault(species_name, []).extend(datasets)
+        species_data[species_name] = {**ordered(attributes), **datasets, 'Reference': '; '.join(parts)}
     export.content = {
         'format': FORMAT,
         'format_version': VERSION,

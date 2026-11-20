@@ -75,7 +75,11 @@ SpeciesDatabase.h5 -> piclas-parameters.yaml: 44 species, origin "SpeciesDatabas
 * Heats of formation and masses of species whose reference names ATcT are left out: a recipe takes them from ATcT (`atct: <ID>`),
   which documents version and record. `--keep-atct` keeps them (exact copy of the old values). `--atct-from RECIPE` also leaves
   them out for the species with an ATcT ID in the recipe (e.g. ions mapped by formula and charge, [masses from one source](atct.md)).
-* Electronic and vibrational levels are not own data; they come from NIST ASD (recipe `levels`).
+* Electronic and vibrational levels are not own data by default; atomic levels come from NIST ASD (recipe `levels`). `--levels`
+  writes the levels no level source of piclas-db provides: molecules (`ElectronicLevel: [[degeneracy, K], ...]`), the dummy levels
+  of bare nuclei (`[[1, 0], [1, 1e99]]`, no further ionization) and vibrational levels (`VibrationalLevel: [K, ...]`), each marked
+  `source unknown` in the Reference. `SpeciesDatabase.h5`: 23 species; `build` reproduces them exactly. Levels of a recipe
+  `levels` entry take precedence over those of the own data.
 * Species names that YAML would read as something else are quoted (`'NO'`, YAML reads `NO` as false); recipes and own-data files with
   such unquoted names are rejected.
 

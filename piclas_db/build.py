@@ -48,6 +48,7 @@ from piclas_db.schema import Schema
 from piclas_db.sources.identify import database_slug
 from piclas_db.sources.lxcat import LXCatFile, LXCatProcess, canonical_parameters, canonical_process, fingerprint, load_lxcat
 from piclas_db.sources.nist import parse_nist_levels
+from piclas_db.sources.own import LEVEL_KEYS, level_array
 from piclas_db.store import Store, StoreEntry
 # ==================================================================================================================================
 
@@ -324,6 +325,15 @@ def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry,
     factor = {'cm-1': CM_TO_K, 'eV': EV_TO_K, 'Ry': RYDBERG_EV * EV_TO_K}[parsed.unit]
     levels = parsed.levels.copy()
     label = f'{selection.species} ({entry.relative})'
+    if parsed.estimated and not selection.estimated:
+        # theoretical or derived energies stay in the store (the original file) but not in the database unless asked for
+        bound = parsed.levels[:, 1] < parsed.limit if parsed.limit is not None else np.ones(len(parsed.levels), dtype=bool)
+        theoretical = int((parsed.estimated_mask & bound).sum())
+        levels = levels[~parsed.estimated_mask]
+        report.notes.append(f'{label}: {parsed.estimated} levels with energies in brackets (theoretical or derived) left out (estimated: true keeps them)')
+        if theoretical > 0.5 * int(bound.sum()):
+            # e.g. He I, H-like ions: NIST ASD gives (accurate) theoretical values for most levels
+            report.notes.append(f'WARNING {label}: {theoretical} of {int(bound.sum())} bound levels are theoretical; without them {int(bound.sum()) - theoretical} remain (estimated: true keeps them)')
     if parsed.limit is None:
         report.notes.append(f'{label}: no ionization limit in the file, all {len(levels)} levels kept and no limit level added')
     else:
@@ -335,8 +345,8 @@ def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry,
         levels = np.vstack([levels[~above], [[1.0, parsed.limit]]])
     if parsed.doubtful:
         report.notes.append(f'{label}: {parsed.doubtful} levels with relative (+x) or doubtful (?) energies left out')
-    if parsed.estimated:
-        report.notes.append(f'{label}: {parsed.estimated} levels with energies in brackets (theoretical or derived values in NIST ASD)')
+    if parsed.estimated and selection.estimated:
+        report.notes.append(f'{label}: {parsed.estimated} levels with energies in brackets (theoretical or derived values in NIST ASD) kept')
     levels[:, 1] *= factor
     levels = levels[np.argsort(levels[:, 1], kind='stable')]
     species = database.species.setdefault(selection.species, Species(name=selection.species))
@@ -472,6 +482,14 @@ def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool 
             for key, value in values.items():
                 if key == 'Reference':
                     species.provenance.reference = '; '.join(filter(None, [species.provenance.reference, str(value)]))
+                elif key in LEVEL_KEYS:
+                    current = species.electronic_levels if key == 'ElectronicLevel' else species.vibrational_levels
+                    if current is not None:
+                        report.notes.append(f'{name}: {key} of the own data not used, the levels of the recipe are')
+                    elif key == 'ElectronicLevel':
+                        species.electronic_levels = level_array(key, value)
+                    else:
+                        species.vibrational_levels = level_array(key, value)
                 elif key not in own:
                     species.attributes[key] = value
             species.provenance.extra = {**species.provenance.extra, **source_provenance(entry)}

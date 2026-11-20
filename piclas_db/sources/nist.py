@@ -47,6 +47,7 @@ class NistLevels:
     skipped: int = 0  # rows without J or energy (e.g. limits, headers repeated in the table)
     limit: Optional[float] = None  # lowest ionization limit ('Limit' row), in the given unit
     estimated: int = 0  # levels with the energy in brackets or parentheses (theoretical or derived values, e.g. '[126211.5]')
+    estimated_mask: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=bool))  # per level: energy in brackets
     doubtful: int = 0  # rows with relative ('+x') or doubtful ('?') energies, left out
 
 
@@ -107,7 +108,7 @@ def parse_nist_levels(text: str, name_hint: str = '') -> NistLevels:
     term_column = columns.index('Term') if 'Term' in columns else None
     prefix_column = columns.index('Prefix') if 'Prefix' in columns else None  # CSV: brackets of the level in their own columns
 
-    levels, skipped, limits, estimated, doubtful = [], 0, [], 0, 0
+    levels, skipped, limits, estimated, doubtful, mask = [], 0, [], 0, 0, []
     for row in rows[1:]:
         if len(row) <= max(level_column, j_column):
             skipped += 1
@@ -122,7 +123,9 @@ def parse_nist_levels(text: str, name_hint: str = '') -> NistLevels:
             skipped += 1
             continue
         prefix = clean(row[prefix_column]) if prefix_column is not None and len(row) > prefix_column else ''
-        estimated += bool(re.search(r'[\[\(]', clean(row[level_column]) + prefix))
+        bracketed = bool(re.search(r'[\[\(]', clean(row[level_column]) + prefix))
+        estimated += bracketed
+        mask.append(bracketed)
         levels.append((2.0 * j + 1.0, energy))
 
     # Spectrum name before the table (the table itself names the next ion in its 'Limit' rows), otherwise from the file name
@@ -135,6 +138,7 @@ def parse_nist_levels(text: str, name_hint: str = '') -> NistLevels:
         limit=min(limits) if limits else None,
         estimated=estimated,
         doubtful=doubtful,
+        estimated_mask=np.array(mask, dtype=bool),
     )
 
 

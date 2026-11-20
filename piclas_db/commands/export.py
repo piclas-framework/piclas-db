@@ -48,7 +48,7 @@ def export_own_data(database: Database, args: argparse.Namespace) -> int:
             print('ERROR: --keep-atct and --atct-from contradict each other')
             return 1
     origin = args.origin or f'{source.name} ({datetime.date.fromtimestamp(source.stat().st_mtime).isoformat()})'
-    export = own_data_from_database(database, origin, name=args.name, keep_atct=args.keep_atct, atct=atct)
+    export = own_data_from_database(database, origin, name=args.name, keep_atct=args.keep_atct, atct=atct, levels=args.levels)
     if not export.content['species']:
         print(f'ERROR: {source}: no species attributes')
         return 1
@@ -59,7 +59,11 @@ def export_own_data(database: Database, args: argparse.Namespace) -> int:
     ]
     if export.left_out:
         header += ['', f'Heat of formation and mass left out (a recipe takes them from ATcT with "atct: <ID>"): {", ".join(sorted(export.left_out))}']
-    header += ['Electronic and vibrational levels are not own data (recipe "levels", NIST ASD).']
+    header += (
+        ['Levels of molecules and bare nuclei and vibrational levels included (ElectronicLevel: [[degeneracy, K]], VibrationalLevel: [K]);', 'atomic levels come from NIST ASD (recipe "levels").']
+        if args.levels
+        else ['Electronic and vibrational levels are not own data (recipe "levels", NIST ASD; --levels for molecules and bare nuclei).']
+    )
     try:
         text = dump_own_data(export.content, header)
     except OwnDataError as e:

@@ -3,6 +3,17 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.40.0
+
+* NIST ASD levels with energies in brackets (theoretical or derived) stay in the store but are left out of the database; a level
+  selection with `estimated: true` keeps them; `build` warns when most bound levels are theoretical (He I, H-like ions)
+* Own data holds levels: `ElectronicLevel` (`[[degeneracy, K], ...]`) and `VibrationalLevel` (`[K, ...]`), checked on import and
+  written by `build`; levels of a recipe `levels` entry take precedence (noted)
+* `export --own-data --levels`: levels no level source provides (molecules, dummy levels of bare nuclei, vibrational levels) into
+  the own data, Reference `source unknown`; `SpeciesDatabase.h5`: 23 species, reproduced exactly by `build`
+* Finding: the molecular levels of `SpeciesDatabase.h5` are Huber and Herzberg (1979) values converted with 1.439585 K per cm⁻¹
+  (5.6e-4 too high), N2 with ν00, CO and O2 with Te; degeneracies 2S+1 only (Π and Δ states without the factor 2)
+
 ## 0.39.1
 
 * `diff` of electronic levels: both sets sorted by energy first (PICLas sorts after reading; `SpeciesDatabase.h5` holds the

@@ -28,7 +28,7 @@ import pytest
 from piclas_db.piclas_db import main
 from piclas_db.readers import read_database
 from piclas_db.recipe import RecipeError, load_recipe, parse_recipe
-from piclas_db.sources.own import OwnDataError, own_data_from_database, parse_own_data
+from piclas_db.sources.own import OwnDataError, dump_own_data, own_data_from_database, parse_own_data
 from piclas_db.sources.identify import IdentifyError, identify
 from piclas_db.store import Store
 # ==================================================================================================================================
@@ -219,3 +219,37 @@ def test_build_notes_own_value_over_atct(tmp_path: pathlib.Path, capsys: pytest.
     capsys.readouterr()
     assert main(['build', str(recipe), '-o', str(tmp_path / 'db.h5'), '--store', str(store), '--offline']) == 0
     assert 'Ar: MassIC from the own data or recipe (6.6e-26), not from ATcT 111-11-1*0' in capsys.readouterr().out
+
+
+def test_own_data_levels(tmp_path: pathlib.Path) -> None:
+    """--levels: levels of molecules and dummy levels of bare nuclei and vibrational levels into the own data, and back by build;
+    atomic levels stay out (NIST ASD)"""
+    old = tmp_path / 'old.h5'
+    with h5py.File(old, 'w') as h5:
+        for name, levels in (('Tx', [[1.0, 0.0], [3.0, 100.0]]), ('TxQ2', [[1.0, 0.0], [3.0, 70000.0]]), ('TxIon1', [[1.0, 0.0], [1.0, 1.0e99]])):
+            group = h5.create_group(f'Species/{name}')
+            group.create_dataset('ElectronicLevel', data=np.array(levels))
+            group.attrs['MassIC'] = 1.0e-26
+            group.attrs['* Reference'] = 'Unknown'
+        h5['Species/TxQ2'].attrs['CharaTempVib'] = 3000.0
+        h5['Species/TxQ2'].create_dataset('VibrationalLevel', data=np.array([[0.0], [3000.0], [5900.0]]))
+    database = read_database(old)
+    assert database.species['TxQ2'].vibrational_levels is not None
+    content = own_data_from_database(database, 'old.h5', levels=True).content['species']
+    assert 'ElectronicLevel' not in content['Tx'] and content['TxIon1']['ElectronicLevel'] == [[1.0, 0.0], [1.0, 1.0e99]]
+    assert content['TxQ2']['ElectronicLevel'] == [[1.0, 0.0], [3.0, 70000.0]] and content['TxQ2']['VibrationalLevel'] == [0.0, 3000.0, 5900.0]
+    assert content['TxQ2']['Reference'].endswith('source unknown: ElectronicLevel, VibrationalLevel')
+    with pytest.raises(OwnDataError, match='ElectronicLevel must be a list'):
+        parse_own_data('format: piclas-db own data\nname: x\nspecies:\n  Tx: {ElectronicLevel: [1, 2, 3], Reference: Book}\n')
+
+    own = tmp_path / 'own.yaml'
+    own.write_text(dump_own_data({'format': 'piclas-db own data', 'format_version': 1, 'name': 'piclas-parameters', 'species': content}, ['test']))
+    store = tmp_path / 'store'
+    assert main(['import', str(own), '--store', str(store)]) == 0
+    recipe = tmp_path / 'recipe.yaml'
+    recipe.write_text('own_data: own/piclas-parameters\nspecies:\n  Tx: {}\n  TxQ2: {}\n  TxIon1: {}\n')
+    assert main(['build', str(recipe), '-o', str(tmp_path / 'new.h5'), '--store', str(store), '--offline']) == 0
+    built = read_database(tmp_path / 'new.h5').species
+    assert np.array_equal(built['TxQ2'].electronic_levels, [[1.0, 0.0], [3.0, 70000.0]])  # ty: ignore[invalid-argument-type]
+    assert np.array_equal(built['TxQ2'].vibrational_levels, [[0.0], [3000.0], [5900.0]])  # ty: ignore[invalid-argument-type]
+    assert built['Tx'].electronic_levels is None and 'ElectronicLevel' not in built['TxQ2'].attributes
