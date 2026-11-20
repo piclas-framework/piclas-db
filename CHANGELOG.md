@@ -5,6 +5,8 @@ feature complete, which will be released as version 1.0.0. The version is define
 
 ## 0.40.0
 
+* `CITATION.cff`: version 0.40.0 (was still 0.30.2, the release workflow stopped); a test now checks `CITATION.cff` and
+  `CHANGELOG.md` against the version in `pyproject.toml`, so CI fails before a tag is pushed
 * NIST ASD levels with energies in brackets (theoretical or derived) stay in the store but are left out of the database; a level
   selection with `estimated: true` keeps them; `build` warns when most bound levels are theoretical (He I, H-like ions)
 * Own data holds levels: `ElectronicLevel` (`[[degeneracy, K], ...]`) and `VibrationalLevel` (`[K, ...]`), checked on import and
