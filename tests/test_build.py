@@ -222,13 +222,13 @@ def test_build_xsec_layout(store: Store, tmp_path: pathlib.Path, capsys: pytest.
 
 def test_levels_with_the_ionization_limit_last(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
     """PICLas convention: bound levels, then the ionization limit with degeneracy 1 as last level; autoionizing levels left out;
-    bracketed (theoretical) energies only with estimated: true"""
+    bracketed (theoretical) energies included by default, left out with estimated: false"""
     from tests.test_import import NIST_CSV_FORM  # noqa: PLC0415
 
     (tmp_path / 'NIST-Tx-I-CSV.csv').write_text(NIST_CSV_FORM)
     assert main(['import', str(tmp_path / 'NIST-Tx-I-CSV.csv'), '--store', str(tmp_path / 'store'), '--retrieved', '2026-11-19']) == 0
     for estimated, degeneracies in ((False, [1.0, 5.0, 3.0, 1.0]), (True, [1.0, 5.0, 3.0, 7.0, 1.0])):
-        recipe = write_recipe(tmp_path, 'levels:\n  - source: nist-asd/levels/tx\n    species: Tx\n' + ('    estimated: true\n' if estimated else ''))
+        recipe = write_recipe(tmp_path, 'levels:\n  - source: nist-asd/levels/tx\n    species: Tx\n' + ('' if estimated else '    estimated: false\n'))
         output = tmp_path / f'db-{estimated}.h5'
         capsys.readouterr()
         assert main(['build', str(recipe), '-o', str(output), '--store', str(tmp_path / 'store'), '--offline']) == 0
@@ -238,17 +238,18 @@ def test_levels_with_the_ionization_limit_last(tmp_path: pathlib.Path, capsys: p
         assert levels[-1, 1] == pytest.approx(100000.0 * CM_TO_K)
         assert '1 levels at or above the ionization limit (100000 cm-1) left out' in out and 'the last one the ionization limit' in out
         assert ('1 levels with energies in brackets (theoretical or derived) left out' in out) is not estimated
+        assert ('1 levels with energies in brackets (theoretical or derived values in NIST ASD) included' in out) is estimated
         assert not [finding for finding in run_checks(read_database(output)) if finding.rule.startswith('levels-')]
 
 
 def test_mostly_theoretical_levels_warning(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """He I or H-like ions: NIST ASD gives theoretical values for most levels; leaving them out is reported as a warning"""
+    """He I or H-like ions: NIST ASD gives theoretical values for most levels; leaving them out (estimated: false) is a warning"""
     from tests.test_import import NIST_CSV_FORM  # noqa: PLC0415
 
     text = NIST_CSV_FORM.replace('"=""""","=""90000.0000"""', '"=""[""","=""90000.0000"""').replace('"=""""","=""91000.0000"""', '"=""[""","=""91000.0000"""')
     (tmp_path / 'NIST-Tx-I-CSV.csv').write_text(text)
     assert main(['import', str(tmp_path / 'NIST-Tx-I-CSV.csv'), '--store', str(tmp_path / 'store'), '--retrieved', '2026-11-19']) == 0
-    recipe = write_recipe(tmp_path, 'levels:\n  - source: nist-asd/levels/tx\n    species: Tx\n')
+    recipe = write_recipe(tmp_path, 'levels:\n  - source: nist-asd/levels/tx\n    species: Tx\n    estimated: false\n')
     capsys.readouterr()
     assert main(['build', str(recipe), '-o', str(tmp_path / 'db.h5'), '--store', str(tmp_path / 'store'), '--offline']) == 0
     out = capsys.readouterr().out

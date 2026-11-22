@@ -175,7 +175,7 @@ def recipe_yaml(recipe: Recipe, unresolved: list[str]) -> dict[str, object]:
     if recipe.cross_sections:
         data['cross_sections'] = [{'source': str(selection.source), 'database': selection.database, 'species': selection.species, 'pair': selection.pair} for selection in recipe.cross_sections]
     if recipe.levels:
-        data['levels'] = [{'source': str(selection.source), 'species': selection.species} | ({'estimated': True} if selection.estimated else {}) for selection in recipe.levels]
+        data['levels'] = [{'source': str(selection.source), 'species': selection.species} | ({} if selection.estimated else {'estimated': False}) for selection in recipe.levels]
     if recipe.masses != 'record':
         data['masses'] = recipe.masses
     if recipe.charges != 'data':

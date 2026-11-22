@@ -110,7 +110,7 @@ class LiteratureSelection:
 class LevelSelection:
     source: Requirement
     species: str  # PICLas name
-    estimated: bool = False  # also levels with energies in brackets (theoretical or derived values in NIST ASD)
+    estimated: bool = True  # levels with energies in brackets (theoretical or derived values in NIST ASD); false leaves them out
 
 
 @dataclass
@@ -206,7 +206,7 @@ def parse_recipe(text: str, path: str) -> Recipe:
         problems = name_problems([entry['species']], context)
         if problems:
             raise RecipeError('; '.join(problems))
-        recipe.levels.append(LevelSelection(source=requirement(entry, context), species=str(entry['species']), estimated=bool(entry.get('estimated', False))))
+        recipe.levels.append(LevelSelection(source=requirement(entry, context), species=str(entry['species']), estimated=bool(entry.get('estimated', True))))
     for number, entry in enumerate(data.get('literature') or [], start=1):
         context = f'literature #{number}'
         if not isinstance(entry, dict) or not entry.get('pair') or entry.get('kind') not in KINDS:

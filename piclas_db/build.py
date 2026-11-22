@@ -330,10 +330,10 @@ def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry,
         bound = parsed.levels[:, 1] < parsed.limit if parsed.limit is not None else np.ones(len(parsed.levels), dtype=bool)
         theoretical = int((parsed.estimated_mask & bound).sum())
         levels = levels[~parsed.estimated_mask]
-        report.notes.append(f'{label}: {parsed.estimated} levels with energies in brackets (theoretical or derived) left out (estimated: true keeps them)')
+        report.notes.append(f'{label}: {parsed.estimated} levels with energies in brackets (theoretical or derived) left out (estimated: false)')
         if theoretical > 0.5 * int(bound.sum()):
             # e.g. He I, H-like ions: NIST ASD gives (accurate) theoretical values for most levels
-            report.notes.append(f'WARNING {label}: {theoretical} of {int(bound.sum())} bound levels are theoretical; without them {int(bound.sum()) - theoretical} remain (estimated: true keeps them)')
+            report.notes.append(f'WARNING {label}: {theoretical} of {int(bound.sum())} bound levels are theoretical; without them {int(bound.sum()) - theoretical} remain (estimated: false)')
     if parsed.limit is None:
         report.notes.append(f'{label}: no ionization limit in the file, all {len(levels)} levels kept and no limit level added')
     else:
@@ -346,7 +346,7 @@ def add_levels(database: Database, selection: LevelSelection, entry: StoreEntry,
     if parsed.doubtful:
         report.notes.append(f'{label}: {parsed.doubtful} levels with relative (+x) or doubtful (?) energies left out')
     if parsed.estimated and selection.estimated:
-        report.notes.append(f'{label}: {parsed.estimated} levels with energies in brackets (theoretical or derived values in NIST ASD) kept')
+        report.notes.append(f'{label}: {parsed.estimated} levels with energies in brackets (theoretical or derived values in NIST ASD) included')
     levels[:, 1] *= factor
     levels = levels[np.argsort(levels[:, 1], kind='stable')]
     species = database.species.setdefault(selection.species, Species(name=selection.species))

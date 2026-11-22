@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.41.0
+
+Decisions of the PICLas maintainers (2026-11-20): NIST ASD levels in brackets are used by default; the degeneracy 2S+1 of the
+molecular levels in `SpeciesDatabase.h5` is a mistake, g = (2S+1)(2 − δ₀,Λ) is correct.
+
+* NIST ASD levels with energies in brackets (theoretical or derived) are included by default; `estimated: false` in a level
+  selection leaves them out (with the warning when most bound levels are theoretical); `rebuild` writes `estimated: false` only
+  where it was set
+* `docs/build.md`: degeneracy of molecular levels for the planned Huber and Herzberg extraction; energy reference (Tₑ or T₀) open
+
 ## 0.40.0
 
 * `CITATION.cff`: version 0.40.0 (was still 0.30.2, the release workflow stopped); a test now checks `CITATION.cff` and
