@@ -21,6 +21,7 @@ from typing import Optional
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db.sources.doi import Citation, paper_citation
 from piclas_db.sources.identify import IdentifyError, identify
 from piclas_db import config
 from piclas_db.git import GitError
@@ -65,6 +66,16 @@ def lxcat_news(store: Store, entry: StoreEntry) -> str:
     return f'{new} new process(es), {updated_count} with a newer or other update time, {present} already in the store'
 
 
+def print_citation(cited: Citation) -> None:
+    """DOI with the link to check it, citation and warnings"""
+    if cited.doi:
+        print(f'           DOI    {cited.doi} ({cited.doi_found_in})  check: {cited.link}')
+    if cited.reference:
+        print(f'           cite   {cited.reference}' + (' (Crossref)' if cited.reference_from == 'crossref' else ''))
+    for note in cited.notes:
+        print(f'           NOTE   {note}')
+
+
 def run(args: argparse.Namespace) -> int:
     """Identify downloaded files by their content, validate them and copy them into the local store"""
     store = Store(args.store)
@@ -86,8 +97,20 @@ def run(args: argparse.Namespace) -> int:
             print(f'  ERROR    {path}: file not found')
             failed += 1
             continue
+        doi, reference, cited = args.doi, args.reference, None
+        if args.literature and path.suffix.lower() == '.pdf' and store.find(sha256(path)) is None:  # duplicates: reported below, no lookup
+            cited = paper_citation(path, args.doi, args.reference, lookup=not args.no_lookup)
+            doi, reference = cited.doi, cited.reference
+            if not (doi or reference):
+                print(f'  ERROR    {path}: DOI and citation not found; give --doi or --reference')
+                for note in cited.notes:
+                    print(f'           {note}')
+                failed += 1
+                continue
         try:
-            identified = identify(path, species=args.species, custom=args.custom, literature=args.literature, doi=args.doi, reference=args.reference)
+            identified = identify(path, species=args.species, custom=args.custom, literature=args.literature, doi=doi, reference=reference)
+            if cited is not None:
+                identified.details.update({'doi_found_in': cited.doi_found_in, 'reference_from': cited.reference_from})
         except IdentifyError as e:
             if explicit:
                 print(f'  ERROR    {path}: {e}')
@@ -107,6 +130,8 @@ def run(args: argparse.Namespace) -> int:
             label += ' (retrieval date unknown, use --retrieved YYYY-MM-DD)'
         if args.dry_run:
             print(f'  would import {path} ({label})')
+            if cited is not None:
+                print_citation(cited)
         else:
             try:
                 entry = store.add(path, identified, retrieved=retrieved, by=by)
@@ -115,6 +140,8 @@ def run(args: argparse.Namespace) -> int:
                 failed += 1
                 continue
             print(f'  imported {path} -> {entry.relative} ({label})')
+            if cited is not None:
+                print_citation(cited)
             if identified.provider == 'lxcat' and identified.kind == 'cross-sections':
                 print(f'           {lxcat_news(store, entry)}')
         imported += 1

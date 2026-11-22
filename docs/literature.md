@@ -8,9 +8,8 @@ obtained, with which version of piclas-db, how accurate it is and whether it has
 ## Workflow
 
 ```bash
-# 1. the paper (PDF) into the store
-piclas-db import Yoon2008.pdf --literature yoon-2008 --doi 10.1063/1.2838023 \
-    --reference "J.-S. Yoon et al., J. Phys. Chem. Ref. Data 37, 913 (2008)"
+# 1. the paper (PDF) into the store; DOI and citation are found automatically (see "DOI and citation" below)
+piclas-db import Yoon2008.pdf --literature yoon-2008
 
 # 2. read the data automatically: tables, vector figures, scanned figures (see extract.md)
 piclas-db extract yoon-2008 --page 15 --table 13 --by "Name" -o work/
@@ -39,6 +38,33 @@ piclas-db literature template yoon-2008 ionization-h2plus --page "15 (927)" --ta
 
 The values are stored as printed (e.g. in 10⁻¹⁷ cm²); the units in the record convert them to eV and m² when they are used. This
 keeps the comparison with the paper simple and makes unit errors visible in the record instead of hiding them in the numbers.
+
+## DOI and citation
+
+`import --literature` finds the DOI and the citation itself; `--doi` and `--reference` are only needed where that fails or to
+override it.
+
+1. **DOI** from, in this order: the PDF metadata (document info, XMP), the text of the first two pages (journals print the
+   article's own DOI there; the reference list comes later), the file name of the download (IOP `0953-4075_2F21_2F6_2F014`, APS
+   `PhysRevA_6_1507`, AIAA `6_2007-4543` and `1_22095`, AIP `1_872535`, Academic Press `adnd_1997_0732`, URL-encoded DOIs).
+2. **Check at Crossref**: a DOI is taken when Crossref knows it and its title is on the first pages of the PDF. This catches a
+   download that contains another article than its name says (a wrong file from the publisher). Scans without text are not
+   compared.
+3. **Search**: without an accepted DOI, the first lines of the PDF (or the file name of a scan) are searched at Crossref; the best
+   match is taken if its title is in the PDF.
+4. **Citation** from the Crossref record: authors (initials), title, journal volume(issue):pages, year.
+
+The import prints the DOI with where it was found, the link to check it, the citation and any warning:
+
+```
+  imported paper.pdf -> literature/author-2001/undated_1a2b3c4d.pdf (literature paper: author-2001)
+           DOI    10.9999/test.2001.42 (first pages)  check: https://doi.org/10.9999/test.2001.42
+           cite   A. Author, B. J. Other, Rate parameters for imaginary plasmas, J. Invent. Res. 12(3):100-110, 2001 (Crossref)
+```
+
+Offline (or with `--no-lookup`) the DOI from the PDF, or from a file name that allows only one DOI, is taken unchecked, without
+citation from Crossref. The paper's record keeps where the DOI and the citation came from (`doi_found_in`, `reference_from`).
+Books and old papers without DOI need `--reference`.
 
 ## Extraction record
 

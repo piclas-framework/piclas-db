@@ -1,0 +1,116 @@
+# ==================================================================================================================================
+# Copyright (c) 2026 Stephen Copplestone and the piclas-db contributors (see CONTRIBUTORS.md)
+#
+# This file is part of piclas-db (github.com/piclas-framework/piclas-db). piclas-db is free software: you can redistribute it and/or
+# modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3
+# of the License, or (at your option) any later version.
+#
+# piclas-db is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+# of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License v3.0 for more details.
+#
+# You should have received a copy of the GNU General Public License along with piclas-db. If not, see <https://www.gnu.org/licenses/>.
+# ==================================================================================================================================
+"""DOI and citation of papers for import --literature (Crossref replaced by invented records; no network)"""
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Standard libraries
+# ----------------------------------------------------------------------------------------------------------------------------------
+import pathlib
+from typing import Optional
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Third-party libraries
+# ----------------------------------------------------------------------------------------------------------------------------------
+import pytest
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Local imports
+# ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db.piclas_db import main
+from piclas_db.sources import doi as doi_module
+from piclas_db.store import Store
+# ==================================================================================================================================
+
+PDF = b'%PDF-1.4\n1 0 obj << /Type /Catalog /Metadata 2 0 R >> endobj\n2 0 obj << /Type /Metadata >>\nstream\n<x:xmpmeta><prism:doi>10.9999/test.2001.42</prism:doi></x:xmpmeta>\nendstream\nendobj\ntrailer << /Root 1 0 R >>\n%%EOF\n'
+PLAIN = b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n'
+TEXT = 'Journal of Invented Results 12 (2001)\nRate Parameters for Imaginary Plasmas\nA. Author and B. Other\n'
+RECORDS = {
+    '10.9999/test.2001.42': {
+        'DOI': '10.9999/test.2001.42',
+        'title': ['Rate parameters for imaginary plasmas'],
+        'author': [{'given': 'Anna', 'family': 'Author'}, {'given': 'Bert J.', 'family': 'Other'}],
+        'short-container-title': ['J. Invent. Res.'],
+        'volume': '12',
+        'issue': '3',
+        'page': '100-110',
+        'issued': {'date-parts': [[2001, 5]]},
+    },
+    '10.8888/0000-0000/1/2/3': {'DOI': '10.8888/0000-0000/1/2/3', 'title': ['Something entirely different about optics'], 'issued': {'date-parts': [[1925]]}},
+}
+
+
+def fake_get_json(url: str, timeout: float) -> Optional[dict]:
+    if 'query.bibliographic' in url:
+        return {'items': [RECORDS['10.9999/test.2001.42']]}
+    return RECORDS.get(url.removeprefix(doi_module.CROSSREF))
+
+
+def offline(url: str, timeout: float) -> Optional[dict]:
+    raise doi_module.Unreachable('Crossref not reachable: test')
+
+
+def test_file_names() -> None:
+    names = {
+        '0953-4075_2F21_2F6_2F014.pdf': ['10.1088/0953-4075/21/6/014'],
+        'PhysRevA_6_1507.pdf': ['10.1103/PhysRevA.6.1507'],
+        '6_2007-4543.pdf': ['10.2514/6.2007-4543'],
+        '1_872535.pdf': ['10.2514/1.872535', '10.1063/1.872535'],
+        'adnd_1997_0732.pdf': ['10.1006/adnd.1997.0732'],
+        '10.9999%2Fabc.pdf': ['10.9999/abc'],
+        'Johnston2014.pdf': [],
+    }
+    assert {name: doi_module.from_file_name(name) for name in names} == names
+    assert doi_module.clean('https://doi.org/10.1016/j.x.2014.08.025.') == '10.1016/j.x.2014.08.025'
+
+
+def test_citation_from_metadata(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / 'paper.pdf').write_bytes(PDF)
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: TEXT)
+    monkeypatch.setattr(doi_module, 'get_json', fake_get_json)
+    cited = doi_module.paper_citation(tmp_path / 'paper.pdf', None, None)
+    assert (cited.doi, cited.doi_found_in, cited.reference_from) == ('10.9999/test.2001.42', 'metadata', 'crossref')
+    assert cited.reference == 'A. Author, B. J. Other, Rate parameters for imaginary plasmas, J. Invent. Res. 12(3):100-110, 2001'
+    assert cited.link == 'https://doi.org/10.9999/test.2001.42' and not cited.notes
+    monkeypatch.setattr(doi_module, 'get_json', offline)  # offline: the DOI of the PDF is taken unchecked
+    cited = doi_module.paper_citation(tmp_path / 'paper.pdf', None, None)
+    assert cited.doi == '10.9999/test.2001.42' and cited.reference is None and 'check the DOI at the link' in cited.notes
+
+
+def test_wrong_article_in_download(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The file name gives a DOI whose title is not in the PDF: rejected, the PDF's first lines are searched instead"""
+    path = tmp_path / '0000-0000_2F1_2F2_2F3.pdf'
+    path.write_bytes(PLAIN)
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: TEXT)
+    monkeypatch.setattr(doi_module, 'get_json', lambda url, timeout: fake_get_json(url.replace('10.1088', '10.8888'), timeout))
+    cited = doi_module.paper_citation(path, None, None)
+    assert (cited.doi, cited.doi_found_in) == ('10.9999/test.2001.42', 'Crossref search')
+    assert any('not on the first pages' in note for note in cited.notes)
+    given = doi_module.paper_citation(path, '10.8888/0000-0000/1/2/3', 'given citation')  # a given DOI is kept, with a warning
+    assert given.doi == '10.8888/0000-0000/1/2/3' and given.reference == 'given citation' and 'another article' in given.notes[0]
+
+
+def test_import_literature(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: TEXT)
+    monkeypatch.setattr(doi_module, 'get_json', fake_get_json)
+    (tmp_path / 'paper.pdf').write_bytes(PDF)
+    assert main(['import', str(tmp_path / 'paper.pdf'), '--literature', 'author-2001']) == 0
+    out = capsys.readouterr().out
+    assert 'check: https://doi.org/10.9999/test.2001.42' in out and 'cite   A. Author' in out
+    paper = next(e for e in Store(tmp_path / 'store').entries() if e.meta.get('provider') == 'literature')
+    assert paper.meta['doi'] == '10.9999/test.2001.42' and paper.meta['doi_found_in'] == 'metadata' and paper.meta['reference_from'] == 'crossref'
+    (tmp_path / 'other.pdf').write_bytes(PLAIN)
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: '')
+    monkeypatch.setattr(doi_module, 'get_json', offline)
+    assert main(['import', str(tmp_path / 'other.pdf'), '--literature', 'other']) == 1
+    assert 'DOI and citation not found; give --doi or --reference' in capsys.readouterr().out

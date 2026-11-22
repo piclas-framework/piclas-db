@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.43.0
+
+* `import --literature` finds DOI and citation itself (`piclas_db/sources/doi.py`): DOI from the PDF metadata, the first two pages
+  or the file name of the download (IOP, APS, AIAA, AIP, Academic Press patterns, URL-encoded DOIs); checked at Crossref (title on the
+  first pages, which catches a download with another article); otherwise a Crossref search for the first lines; citation formatted
+  from the Crossref record. The import prints the DOI, where it was found, the link https://doi.org/... to check it, the citation
+  and warnings; `--doi` and `--reference` override, `--no-lookup` (or no network) takes the DOI unchecked
+* The paper's record keeps `doi_found_in` and `reference_from`
+
 ## 0.42.0
 
 * Reaction rate tables from papers (`piclas_db/rates.py`): `literature template --rates` and `literature add` for Arrhenius tables
