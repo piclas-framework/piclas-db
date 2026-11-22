@@ -26,7 +26,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db import provenance
+from piclas_db import provenance, rates
 from piclas_db.build import BuildError, build
 from piclas_db.compare import compare
 from piclas_db.git import GitError
@@ -72,6 +72,21 @@ def copy_not_rebuilt(old: Database, new: Database) -> list[str]:
     return copied
 
 
+def explain_reactions(database: Database, store: Store) -> list:
+    """Reactions compared with the rate tables in the store (printed; empty without reactions or tables)"""
+    tables = rates.stored_tables(store)
+    if not database.reactions or not tables:
+        if database.reactions:
+            print(f'{len(database.reactions)} reactions: no rate tables in the store (literature template --rates)')
+        return []
+    results = rates.explain_reactions(database, tables)
+    print(f'{len(database.reactions)} reactions compared with {len(tables)} rate tables')
+    for result in results:
+        print('\n'.join(rates.describe(result)))
+    print(rates.summary(results))
+    return results
+
+
 def explain(args: argparse.Namespace) -> int:
     """Where the cross-sections of an existing database come from (numbers compared with everything in the store)"""
     from piclas_db import explain as explaining  # noqa: PLC0415
@@ -88,8 +103,12 @@ def explain(args: argparse.Namespace) -> int:
     for result in results:
         print('\n'.join(explaining.describe(result)))
     print(explaining.summary(results))
+    reactions = explain_reactions(old, store)
     if args.report:
-        pathlib.Path(args.report).write_text(explaining.report(args.source, results), encoding='utf-8')
+        text = explaining.report(args.source, results)
+        if reactions:
+            text += '\n## Reactions\n\n```\n' + '\n'.join(line for result in reactions for line in rates.describe(result)) + '\n```\n\n' + rates.summary(reactions) + '\n'
+        pathlib.Path(args.report).write_text(text, encoding='utf-8')
         print(f'Report: {args.report}')
     if args.recipe_out:
         pathlib.Path(args.recipe_out).write_text(explaining.recipe_draft(args.source, results), encoding='utf-8')

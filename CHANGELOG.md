@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.42.0
+
+* Reaction rate tables from papers (`piclas_db/rates.py`): `literature template --rates` and `literature add` for Arrhenius tables
+  (one CSV row per reaction and third body, as printed; species as printed, third bodies as species, lists, `molecules`, `atoms`,
+  `others`, `all`; unit of C generalized to the reaction order; the chemistry models that cite the paper in the record)
+* `rebuild --explain` also compares every Arrhenius reaction with the rate tables in the store: per chemistry model and third body
+  match, differs (with the differing values and the table row), missing or no table, plus every table row with the same values;
+  plain rounding of the converted prefactor is not reported; in the Markdown report as section "Reactions"
+* The overview of the sources of `SpeciesDatabase.h5` and the comparison results are kept in the private source repository for now
+
 ## 0.41.0
 
 Decisions of the PICLas maintainers (2026-11-20): NIST ASD levels in brackets are used by default; the degeneracy 2S+1 of the

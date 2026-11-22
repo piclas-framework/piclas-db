@@ -100,7 +100,7 @@ def default_by() -> Optional[str]:
     return f'{found[0]} <{found[1]}>' if found else None
 
 
-def template(paper: StoreEntry, name: str, page: Optional[str], table: Optional[str], figure: Optional[str], method: str, equation: Optional[str] = None, formula: bool = False) -> dict:
+def template(paper: StoreEntry, name: str, page: Optional[str], table: Optional[str], figure: Optional[str], method: str, equation: Optional[str] = None, formula: bool = False, rates: bool = False) -> dict:
     """Extraction record with everything known in advance; the person entering the data completes it"""
     meta = paper.meta
     common = Common()
@@ -137,6 +137,15 @@ def template(paper: StoreEntry, name: str, page: Optional[str], table: Optional[
         'review': {'status': 'pending', 'reviewer': None, 'date': None, 'notes': None},
         'notes': [],
         **({'formula': True} if formula else {}),
+    } | (rate_record() if rates else {})
+
+
+def rate_record() -> dict:
+    """Parts of a record for a reaction rate table (Arrhenius parameters, see rates.py)"""
+    return {
+        'rate_table': True,
+        'columns': {'rate': {'unit': 'cm^3/(mol s)'}, 'temperature': {'unit': 'K'}},
+        'quantity': {'description': 'Arrhenius parameters k = C T^n exp(-T_d/T_x)', 'assignment': {'chemistry_model': None}},
     }
 
 
@@ -342,7 +351,17 @@ def add_extraction(store: Store, record_path: pathlib.Path, by: Optional[str] = 
     data_path = record_path.parent / str(record.get('data', ''))
     if not data_path.is_file():
         raise LiteratureError(f'data file not found: {data_path}')
-    if record.get('parameter_table'):
+    if record.get('rate_table'):
+        from piclas_db.rates import RateError, read_rate_table, validate_rate_table  # noqa: PLC0415
+
+        try:
+            rate_rows = read_rate_table(data_path.read_text(encoding='utf-8'))
+        except RateError as e:
+            raise LiteratureError(f'{data_path}: {e}') from e
+        problems = validate_source(record) + validate_rate_table(record, rate_rows)
+        table = Table(np.zeros(0), np.zeros(0), None)
+        record.setdefault('result', {}).update({'rows': len(rate_rows), 'reactions': len({str(row.key) for row in rate_rows})})
+    elif record.get('parameter_table'):
         header, rows = read_parameter_table(data_path.read_text(encoding='utf-8'))
         problems = validate_source(record)
         table = Table(np.zeros(0), np.zeros(0), None)
@@ -364,7 +383,7 @@ def add_extraction(store: Store, record_path: pathlib.Path, by: Optional[str] = 
         problems.append(f'file_sha256 does not match the paper {paper_name} in the store')
     if problems:
         raise LiteratureError('; '.join(problems))
-    if not record.get('parameter_table'):
+    if not record.get('parameter_table') and not record.get('rate_table'):
         record.setdefault('result', {})['rows'] = len(table.energy)
     zeroed = int(np.sum(table.cross_section < 0.0))
     if zeroed:

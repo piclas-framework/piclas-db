@@ -175,6 +175,39 @@ This reproduces `H2-electron/REACTION/H2Ion1-electron-electron` of `SpeciesDatab
 column H₂⁺ (30–1000 eV) give the same 58 values (to the float32 precision of the database); the database starts with σ = 0 at
 **15.4 eV**, while the paper gives 15.426 eV as ionization potential.
 
+## Reaction rate tables
+
+Arrhenius parameters k = C T^n exp(−T_d/T_x) of a paper's reaction table are stored as a rate table: one CSV row per reaction and
+third body, as printed, with a record that says the unit of C and which chemistry models of a database come from this paper.
+
+```bash
+piclas-db literature template author-2001 table2 --page "5 (389)" --table 2 --rates -o work/
+# enter the rows in work/table2.csv, set columns.rate.unit and quantity.assignment.chemistry_model (e.g. Author2001)
+piclas-db literature add work/table2.extraction.yaml
+```
+
+Invented species and values:
+
+```
+row,reaction,third_body,C,n,Td,Tx
+1,Tx2 + M -> Tx + Tx + M,"Tx, Qq",3.0e22,-1.6,100000,Ta
+1,Tx2 + M -> Tx + Tx + M,molecules,7.0e21,-1.6,100000,Ta
+2,Tx2 + Qq -> TxQq + Tx,,6.4e17,-1.0,38000,T
+3,Tx + e- -> Tx+ + e- + e-,,3.9e33,-3.78,150000,Te
+```
+
+* **Species** as printed (N2+, NO+, C+6, e-); third bodies as M or A, with the species of the row in `third_body`: one species, a
+  list, `molecules` or `atoms` (ions by their composition, as in DSMC where ions take the properties of their neutral), `others`
+  or `all`. A species on both sides (N2 + Ar → N + N + Ar) is the third body too.
+* **C** as printed (`3.0e22` or `3.0^22`) in `columns.rate.unit`: `cm^3/(mol s)`, `m^3/(molecule s)`, `cm^3/(molecule s)`,
+  `cm^3/s`; the unit applies to the order of the reaction, so termolecular recombinations in such a table are in cm⁶/(mol² s).
+  Converted to the PICLas prefactor (m³/s per molecule) when compared.
+* **Tx**: T, Ta (√(T T_v)), Tv, Te, Tve, Ttr. T_d may be negative where the paper prints it so.
+* `quantity.assignment.chemistry_model`: the suffix of the chemistry models in `AvailableChemistryModels` that cite this paper
+  (`Author2001` for `Air_7Spec_9Reac_Author2001`).
+
+`rebuild --explain` compares every Arrhenius reaction of a database with all rate tables in the store ([rebuild.md](rebuild.md)).
+
 ## Use in recipes
 
 ```yaml

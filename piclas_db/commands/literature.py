@@ -47,6 +47,13 @@ points: 200   # logarithmic grid over the range
 """
 
 
+RATES_TEMPLATE = """# Reaction rate table exactly as printed: one row per reaction and third body; C in the unit of the record (columns.rate.unit)
+# reaction: species as printed (N2+, NO+, e-), third bodies as M or A; third_body: species of the row, a list "N2, O2", others or all
+# C: 3.0e22 or as printed 3.0^22; Tx: T, Ta (sqrt(T Tv)), Tv, Te
+row,reaction,third_body,C,n,Td,Tx
+"""
+
+
 def run(args: argparse.Namespace) -> int:
     """Data from papers: create entry templates, store extractions with their record, review them, list them"""
     store = Store(args.store)
@@ -63,7 +70,7 @@ def run(args: argparse.Namespace) -> int:
             record_file, data_file = directory / f'{name}.extraction.yaml', directory / f'{name}.csv'
             if record_file.exists() or data_file.exists():
                 raise LiteratureError(f'{record_file} or {data_file} exists already')
-            record = template(known[paper_name], name, args.page, args.table, args.figure, args.method, args.equation, args.formula)
+            record = template(known[paper_name], name, args.page, args.table, args.figure, args.method, args.equation, args.formula, rates=args.rates)
             if args.formula:
                 data_file = directory / f'{name}.formula.yaml'
                 if data_file.exists():
@@ -78,6 +85,8 @@ def run(args: argparse.Namespace) -> int:
                         + '# rows: parameter name -> row label of the table, only where they differ (labels compared without spaces)\n',
                     )
                 data_file.write_text(text)
+            elif args.rates:
+                data_file.write_text(RATES_TEMPLATE)
             else:
                 data_file.write_text(CSV_TEMPLATE)
             record_file.write_text(yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=1000))

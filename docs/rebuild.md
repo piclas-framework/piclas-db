@@ -87,3 +87,20 @@ Example, `SpeciesDatabase.h5` against a store with the GEC LXCat downloads, Yoon
 
 The 74 unknown datasets are the downloads still missing (LXCat Phelps for H₂, N₂, CO₂, He; Hayashi for Xe; NIFS; Phelps 1990):
 with every download, the report shows what it covers.
+
+### Reactions
+
+With rate tables in the store ([literature.md](literature.md)), `rebuild --explain` also compares every Arrhenius reaction: per
+chemistry model of the reaction and per third body of that model, whether the paper of the model has the same C (within 0.6 %;
+the usual rounding of a converted prefactor to 3–5 digits is not reported), n and T_d, and which tables have the same values at all
+(invented species and values):
+
+```
+Tx2+M_Tx+M+Tx#2                    C=3.32e-09 n=-1.500 T_d=59000
+    differs   Air_7Spec_9Reac_Author2001: Tx2, Qq2: T_d 59000 vs. 59500 (row 2)
+    match     Air_7Spec_12Reac_Other2010
+    same values in: literature/other-2010/table4 row 7 (others)
+```
+
+Status per reaction and model: `match`, `differs`, `missing` (reaction or third body not in the table), `no table` (paper not
+extracted yet).
