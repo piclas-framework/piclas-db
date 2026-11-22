@@ -72,6 +72,22 @@ Books and old papers without DOI need `--reference` and a key (`--literature KEY
 letters without accents), with `b`, `c`, ... if the key is taken. The paper is stored as `literature/<key>/<key>_<sha256[:8]>.pdf`
 (papers imported before 0.44.0 keep their names `undated_<sha>.pdf`).
 
+## Wanted papers
+
+Papers that are needed but not yet in the store go on a wanted list, `literature/wanted.yaml` in the private store (it shows
+which papers the store holds and lacks, so it is not part of the public repository):
+
+```bash
+piclas-db literature want author-1990 --reference "A. Author, A Book, Publisher, 1990" --needed-for "rate table p. 326"
+piclas-db literature want other-1987 --reference "B. Other, J. Test 20:1, 1987" --doi 10.0000/other --note "publisher gave the wrong file"
+piclas-db literature wanted        # the list, with doi.org links, what each paper is needed for and the notes
+piclas-db literature unwant author-1990
+```
+
+`want` on an existing key updates the entry and adds the note. `piclas-db store` ends with `2 paper(s) wanted: …`. Importing a paper
+whose key or DOI matches an entry removes it (`WANTED other-1987: no longer wanted`). In a store that is a git repository, every
+change of the list is committed.
+
 ## Extraction record
 
 | Section | Content |

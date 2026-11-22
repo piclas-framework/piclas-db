@@ -24,7 +24,7 @@ from typing import Optional
 from piclas_db.literature import papers
 from piclas_db.sources.doi import Citation, paper_citation
 from piclas_db.sources.identify import IdentifyError, identify
-from piclas_db import config
+from piclas_db import config, wanted
 from piclas_db.git import GitError
 from piclas_db.resolve import store_status
 from piclas_db.build import lxcat_index
@@ -154,6 +154,10 @@ def run(args: argparse.Namespace) -> int:
             print(f'  imported {path} -> {entry.relative} ({label})')
             if cited is not None:
                 print_citation(cited)
+            if identified.provider == 'literature':
+                found_doi = identified.details.get('doi')
+                for name in wanted.fulfilled(store, identified.dataset, str(found_doi) if found_doi else None):
+                    print(f'           WANTED {name}: no longer wanted')
             if identified.provider == 'lxcat' and identified.kind == 'cross-sections':
                 print(f'           {lxcat_news(store, entry)}')
         imported += 1

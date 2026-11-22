@@ -24,7 +24,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db import config
+from piclas_db import config, wanted
 from piclas_db.git import GitError
 from piclas_db.literature import LiteratureError, add_extraction, extractions, find_extraction, papers, review, template
 from piclas_db.sources.identify import slug
@@ -106,6 +106,21 @@ def run(args: argparse.Namespace) -> int:
             status = 'approved' if args.approve else 'rejected'
             review(store, entry, status, args.reviewer, args.notes)
             print(f'{entry.meta["dataset"]}: {status} by {args.reviewer}')
+        elif args.action == 'want':
+            if len(args.arguments) != 1 or not args.reference:
+                raise LiteratureError('usage: piclas-db literature want KEY --reference TEXT [--doi DOI] [--needed-for TEXT] [--note TEXT]')
+            if args.arguments[0] in papers(store):
+                raise LiteratureError(f'{args.arguments[0]} is already in the store')
+            name = wanted.add(store, args.arguments[0], args.reference, args.needed_for, args.doi, args.note, by=config.require_identity())
+            print(f'{name}: on the wanted list ({len(wanted.load(store))} paper(s) wanted)')
+        elif args.action == 'unwant':
+            if len(args.arguments) != 1:
+                raise LiteratureError('usage: piclas-db literature unwant KEY')
+            wanted.drop(store, args.arguments[0])
+            print(f'{args.arguments[0]}: removed from the wanted list')
+        elif args.action == 'wanted':
+            entries = wanted.load(store)
+            print('\n'.join(wanted.describe(entries)) if entries else 'No papers wanted')
         else:
             for name, paper in sorted(papers(store).items()):
                 print(f'{name:24s} {paper.meta.get("doi") or ""}  {paper.meta.get("reference") or ""}')
@@ -116,7 +131,7 @@ def run(args: argparse.Namespace) -> int:
                         where = ', '.join(f'{label} {source[label]}' for label in ('table', 'figure', 'page') if source.get(label))
                         status = (record.get('review') or {}).get('status')
                         print(f'  {entry.meta["dataset"]}@{str(entry.meta["sha256"])[:8]}  {record.get("method")}, {where}, review {status}')
-    except (LiteratureError, GitError, config.ConfigError) as e:
+    except (LiteratureError, GitError, config.ConfigError, wanted.WantedError) as e:
         print(f'ERROR: {e}')
         return 1
     return 0

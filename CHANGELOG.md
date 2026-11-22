@@ -3,6 +3,12 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.46.0
+
+* Wanted papers (`piclas_db/wanted.py`): `literature want KEY --reference ... [--doi] [--needed-for] [--note]`, `literature wanted`,
+  `literature unwant KEY`; kept as `literature/wanted.yaml` in the private store (committed in a git store); `piclas-db store`
+  reports the wanted papers; importing a paper with a matching key or DOI removes its entry
+
 ## 0.45.0
 
 * Reactions in recipes from rate tables: an entry with `rates` (rate table in the store, optional `row` and `third_body`) takes C, n

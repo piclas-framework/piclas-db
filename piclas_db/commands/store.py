@@ -19,7 +19,7 @@ import pathlib
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db import git
+from piclas_db import git, wanted
 from piclas_db.store import META_SUFFIX, Store
 # ==================================================================================================================================
 
@@ -80,4 +80,11 @@ def run(args: argparse.Namespace) -> int:
         meta = entry.meta
         species = ', '.join(meta.get('species') or [])
         print(f'  {meta.get("provider", "?"):9s} {meta.get("kind", "?"):15s} {meta.get("retrieved") or "undated":10s} {species:12s} {entry.relative}')
+    try:
+        missing = wanted.load(store)
+    except wanted.WantedError as e:
+        print(f'  ERROR {e}')
+        return 1
+    if missing:
+        print(f'{len(missing)} paper(s) wanted: {", ".join(sorted(missing))} (piclas-db literature wanted)')
     return 0

@@ -85,8 +85,16 @@ def build_parser() -> argparse.ArgumentParser:
                 help='species-database (Particles-Species-Database, default) or xsec (cross-sections only, for Particles-CollXSec-Database)',
             )
         elif name == 'literature':
-            sub.add_argument('action', choices=['template', 'add', 'review', 'list'], help='template: files to enter data; add: store an extraction; review: approve or reject; list')
-            sub.add_argument('arguments', nargs='*', help='template: PAPER NAME; add: RECORD.yaml; review: PAPER/NAME[@SHA]')
+            sub.add_argument(
+                'action',
+                choices=['template', 'add', 'review', 'list', 'want', 'wanted', 'unwant'],
+                help='template: files to enter data; add: store an extraction; review: approve or reject; list; want: put a paper on the wanted list; wanted: show it; unwant: remove an entry',
+            )
+            sub.add_argument('arguments', nargs='*', help='template: PAPER NAME; add: RECORD.yaml; review: PAPER/NAME[@SHA]; want, unwant: KEY')
+            sub.add_argument('--reference', help='want: citation of the wanted paper')
+            sub.add_argument('--doi', help='want: DOI of the wanted paper (its import then removes the entry)')
+            sub.add_argument('--needed-for', help='want: what the paper is needed for')
+            sub.add_argument('--note', help='want: a note, e.g. a failed download attempt (added to earlier notes)')
             sub.add_argument('--page', help='template: page in the PDF (and the printed page label, e.g. "14 (926)")')
             sub.add_argument('--table', help='template: table number')
             sub.add_argument('--figure', help='template: figure number')
