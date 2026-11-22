@@ -83,8 +83,15 @@ Next steps
 ```
 
 A paper is marked ! when its DOI was found by a search or in the file name only, Crossref could not be asked, it has no DOI, its
-key got a suffix (`park-1993b`: another paper has that key), or a note applies (e.g. the title is not on the first pages). Colors
-only on a terminal and not with `NO_COLOR`.
+key got a suffix (`park-1993b`: another paper has that key), or a note applies (e.g. the title is not on the first pages).
+
+While the papers are looked up at Crossref, a bar with counter and spinner shows the progress on the terminal
+(`⠋ [█████░░░░░░░░░░░░░░░] 4/18  22% 1995-Laux-….pdf: DOI and citation (Crossref)`); it is drawn on stderr and disappears when
+the output is redirected.
+
+Colors: `--color auto` (default: on a terminal), `--color always` (also through a pipe, e.g. `| tee import.txt` or `| less -R`),
+`--color never`; the environment variables `NO_COLOR` (no colors) and `FORCE_COLOR` or `CLICOLOR_FORCE` (colors also into a pipe)
+work too. `--color` is also an option of `diff`.
 
 Offline (or with `--no-lookup`) the DOI from the PDF, or from a file name that allows only one DOI, is taken unchecked, without
 citation from Crossref. The paper's record keeps where the DOI and the citation came from (`doi_found_in`, `reference_from`).

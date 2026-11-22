@@ -59,6 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--offline', action='store_true', help='do not update the store from the private repository')
             sub.add_argument('--force', action='store_true', help='overwrite an existing output file')
         elif name == 'import':
+            sub.add_argument('--color', choices=['auto', 'always', 'never'], default=None, help='colors: auto (on a terminal, default), always (also into a pipe, e.g. tee), never')
             sub.add_argument('files', nargs='*', help='downloaded files (LXCat, NIST ASD, ...)')
             sub.add_argument('--source-dir', help='directory to search for downloaded files (e.g. ~/Downloads); unknown files are skipped')
             sub.add_argument('--store', help='local store (default: $PICLAS_DB_STORE or ~/.local/share/piclas-db/store)')
@@ -210,6 +211,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--regressioncheck', nargs='+', metavar='DIRECTORY', help='compare the reference results of PICLas reservoir regression checks with DATABASE (default: the database of each check)')
             sub.add_argument('--tolerance', type=float, default=0.05, help='relative tolerance for the evaluation (default 0.05)')
         elif name == 'diff':
+            sub.add_argument('--color', choices=['auto', 'always', 'never'], default=None, help='colors: auto (on a terminal, default), always (also into a pipe, e.g. tee), never')
             sub.add_argument('a', help='first database (A): file of any layout, table directory or original LXCat/NIST ASD download')
             sub.add_argument('b', help='second database (B), as A')
             sub.add_argument('--rtol', type=float, default=1.0e-6, help='relative tolerance for identical values (default: 1e-6, covers float32)')

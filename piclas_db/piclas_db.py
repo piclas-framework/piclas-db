@@ -24,6 +24,7 @@ from typing import Optional
 from piclas_db.args_parser import build_parser
 from piclas_db import config
 from piclas_db.commands import COMMANDS
+from piclas_db.common import table
 from piclas_db.store import missing_store, store_location
 # ==================================================================================================================================
 
@@ -45,6 +46,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     except config.ConfigError as e:
         print(f'ERROR: {e}')
         return 1
+
+    if getattr(args, 'color', None):
+        table.COLOR_MODE['mode'] = args.color
 
     # A store that was set explicitly but does not exist (deleted, moved, unmounted, or new): commands that only read it stop with
     # instructions; commands that add data create it with a warning; fetch may clone into it

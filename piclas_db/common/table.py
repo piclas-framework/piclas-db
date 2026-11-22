@@ -33,9 +33,20 @@ def interactive() -> bool:
     return sys.stdout.isatty()
 
 
+COLOR_MODE = {'mode': 'auto'}  # set by --color (auto, always, never)
+
+
 def use_color() -> bool:
-    """Colors only on a terminal, and not if NO_COLOR is set (https://no-color.org)"""
-    return interactive() and 'NO_COLOR' not in os.environ and os.environ.get('TERM') != 'dumb'
+    """--color always/never; auto: on a terminal, not with NO_COLOR (https://no-color.org) or TERM=dumb; FORCE_COLOR or
+    CLICOLOR_FORCE force colors also into a pipe (e.g. through tee or less -R)"""
+    mode = COLOR_MODE['mode']
+    if mode in ('always', 'never'):
+        return mode == 'always'
+    if 'NO_COLOR' in os.environ:
+        return False
+    if os.environ.get('FORCE_COLOR') or os.environ.get('CLICOLOR_FORCE', '0') != '0':
+        return True
+    return interactive() and os.environ.get('TERM') != 'dumb'
 
 
 def paint(text: str, color: Optional[str], enabled: bool) -> str:

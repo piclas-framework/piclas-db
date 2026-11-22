@@ -3,6 +3,13 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.49.0
+
+* `import --literature`: progress bar with counter, percentage and spinner on the terminal while the papers are looked up at
+  Crossref (stderr, cleared before each paper's block; nothing when redirected) (`piclas_db/common/spinner.py`)
+* `--color auto|always|never` for `import` and `diff`; `FORCE_COLOR`/`CLICOLOR_FORCE` force colors into a pipe (e.g. `tee`),
+  `NO_COLOR` switches them off
+
 ## 0.48.0
 
 * `import --literature` output: one block per paper with a status mark (green ✓ fine, yellow ! to check, red ✗ failed, = already in

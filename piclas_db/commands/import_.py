@@ -23,6 +23,7 @@ from typing import Optional
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.literature import papers
 from piclas_db.commands.paper_report import Paper, Reporter, classify
+from piclas_db.common.spinner import Progress
 from piclas_db.sources.doi import paper_citation
 from piclas_db.sources.identify import IdentifyError, identify
 from piclas_db import config, wanted
@@ -93,7 +94,8 @@ def run(args: argparse.Namespace) -> int:
     reporter = Reporter() if papers_mode else None
     imported = existing = skipped = failed = 0
     taken: set[str] = set()  # keys given to papers of this run
-    for path, explicit in files:
+    progress = Progress(len(files)) if papers_mode else None
+    for number, (path, explicit) in enumerate(files):
         if not path.is_file():
             if reporter:
                 reporter.add(Paper(file=str(path), status='error', message='file not found'))
@@ -103,7 +105,9 @@ def run(args: argparse.Namespace) -> int:
             continue
         doi, reference, cited, key = args.doi, args.reference, None, args.literature
         if args.literature is not None and path.suffix.lower() == '.pdf' and store.find(sha256(path)) is None:  # duplicates: reported below, no lookup
-            cited = paper_citation(path, args.doi, args.reference, lookup=not args.no_lookup)
+            assert progress is not None
+            with progress.step(number, f'{path.name}: DOI and citation (Crossref)'):
+                cited = paper_citation(path, args.doi, args.reference, lookup=not args.no_lookup)
             doi, reference = cited.doi, cited.reference
             if not (doi or reference):
                 assert reporter is not None
