@@ -54,7 +54,7 @@ def test_wanted_list(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, ca
     # importing the paper with its DOI (under another key) removes its entry
     (tmp_path / 'paper.pdf').write_bytes(PDF)
     assert main(['import', str(tmp_path / 'paper.pdf'), '--literature', 'other-1987b', '--doi', '10.0000/other', '--reference', 'B. Other 1987']) == 0
-    assert 'WANTED other-1987: no longer wanted' in capsys.readouterr().out
+    assert 'wanted list: other-1987 no longer wanted' in capsys.readouterr().out
     assert list(wanted.load(store)) == ['author-1990']
     assert main(['literature', 'want', 'other-1987b', '--reference', 'x']) == 1  # already in the store
     assert 'already in the store' in capsys.readouterr().out

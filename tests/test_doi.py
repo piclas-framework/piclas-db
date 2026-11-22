@@ -108,14 +108,17 @@ def test_import_literature(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPat
     (tmp_path / 'paper.pdf').write_bytes(PDF)
     assert main(['import', str(tmp_path / 'paper.pdf'), '--literature', 'author-2001']) == 0
     out = capsys.readouterr().out
-    assert 'check: https://doi.org/10.9999/test.2001.42' in out and 'cite   A. Author' in out
+    assert '✓ author-2001' in out and 'https://doi.org/10.9999/test.2001.42' in out and 'cite  A. Author' in out
+    assert '1 paper(s): 1 fine, 0 to check, 0 failed' in out and 'piclas-db literature list' in out
     paper = next(e for e in Store(tmp_path / 'store').entries() if e.meta.get('provider') == 'literature')
     assert paper.meta['doi'] == '10.9999/test.2001.42' and paper.meta['doi_found_in'] == 'metadata' and paper.meta['reference_from'] == 'crossref'
     (tmp_path / 'other.pdf').write_bytes(PLAIN)
     monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: '')
     monkeypatch.setattr(doi_module, 'get_json', offline)
     assert main(['import', str(tmp_path / 'other.pdf'), '--literature', 'other']) == 1
-    assert 'DOI and citation not found; give --doi or --reference' in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert '✗ —' in out and 'DOI and citation not found: give --doi or --reference' in out
+    assert 'piclas-db import' in out and '--literature KEY --doi DOI' in out  # next step for the failed paper
 
 
 def test_import_key_from_citation(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -127,7 +130,8 @@ def test_import_key_from_citation(tmp_path: pathlib.Path, monkeypatch: pytest.Mo
     (tmp_path / 'b.pdf').write_bytes(PDF + b'% another copy\n')
     assert main(['import', str(tmp_path / 'a.pdf'), str(tmp_path / 'b.pdf'), '--literature']) == 0
     out = capsys.readouterr().out
-    assert 'key      author-2001 ' in out and 'key      author-2001b ' in out
+    assert '✓ author-2001 ' in out and '! author-2001b ' in out and 'key author-2001 is taken' in out  # the suffix is to be checked
+    assert '2 paper(s): 1 fine, 1 to check, 0 failed' in out
     names = sorted(e.path.name for e in Store(tmp_path / 'store').entries())
     assert names[0].startswith('author-2001_') and names[1].startswith('author-2001b_')
     assert doi_module.Citation(first_author='Gökçen', year=2007).key(set()) == 'gokcen-2007'
@@ -142,3 +146,32 @@ def test_tidy_title() -> None:
     assert doi_module.tidy_title('Emission in CO 2 –N 2 gases') == 'Emission in CO2–N2 gases'
     assert doi_module.tidy_title('Diffusion in CO<sub>2</sub>/N<sub>2</sub> Mixtures') == 'Diffusion in CO2/N2 Mixtures'
     assert doi_module.tidy_title('Part 2: results of Table 3') == 'Part 2: results of Table 3'
+
+
+def test_several_papers_need_automatic_keys(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    (tmp_path / 'a.pdf').write_bytes(PDF)
+    (tmp_path / 'b.pdf').write_bytes(PLAIN)
+    assert main(['import', str(tmp_path / 'a.pdf'), str(tmp_path / 'b.pdf'), '--literature', 'one-2001']) == 1
+    assert main(['import', str(tmp_path / 'a.pdf'), str(tmp_path / 'b.pdf'), '--literature', '--doi', '10.1/x']) == 1
+    assert capsys.readouterr().out.count('are for one paper') == 2
+
+
+def test_dry_run_report_and_next_steps(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """dry run of several papers: a block per paper, the summary and the commands of the next steps"""
+    from piclas_db.commands.paper_report import suggested_key  # noqa: PLC0415
+
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: TEXT if path.name.startswith('2001') else '')
+    monkeypatch.setattr(doi_module, 'get_json', fake_get_json)
+    (tmp_path / '2001-Author-Rate-Parameters.pdf').write_bytes(PDF)
+    (tmp_path / '1995-Laux-Direkte-Simulation.pdf').write_bytes(PLAIN)
+    monkeypatch.chdir(tmp_path)
+    assert main(['import', '2001-Author-Rate-Parameters.pdf', '1995-Laux-Direkte-Simulation.pdf', '--literature', '--dry-run']) == 1
+    out = capsys.readouterr().out
+    assert '✓ author-2001' in out and '✗ —                    1995-Laux-Direkte-Simulation.pdf' in out
+    assert '2 paper(s): 1 fine, 0 to check, 1 failed (dry run: nothing copied)' in out
+    assert 'piclas-db import 1995-Laux-Direkte-Simulation.pdf --literature laux-1995 --doi DOI' in out
+    assert 'Import the 1 paper(s) found' in out and '2001-Author-Rate-Parameters.pdf' in out.split('Import the 1 paper(s) found')[1]
+    assert not (tmp_path / 'store').exists()
+    assert suggested_key('1997-Bourdon-Study.pdf') == 'bourdon-1997' and suggested_key('cr500501m.pdf') == 'KEY'

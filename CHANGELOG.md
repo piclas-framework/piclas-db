@@ -3,6 +3,18 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.48.0
+
+* `import --literature` output: one block per paper with a status mark (green ✓ fine, yellow ! to check, red ✗ failed, = already in
+  the store; colors only on a terminal and without `NO_COLOR`), key, DOI with its origin and link, citation and the reasons to
+  check; a summary and numbered next steps with commands to copy (check, import failed papers one by one with a suggested key and the
+  DOI found, import the rest); keys that got a suffix are marked for checking
+
+## 0.47.1
+
+* `import` of several PDFs with `--literature KEY`, `--doi` or `--reference` is refused (it would store them as one paper); several
+  papers are imported with `--literature` alone (keys from Crossref)
+
 ## 0.47.0
 
 * A store set explicitly (`--store`, `$PICLAS_DB_STORE`, configuration) that does not exist is no longer treated as empty: commands

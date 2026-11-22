@@ -55,14 +55,36 @@ override it.
    match is taken if its title is in the PDF.
 4. **Citation** from the Crossref record: authors (initials), title, journal volume(issue):pages, year.
 
-The import prints the DOI with where it was found, the link to check it, the citation and any warning:
+The import prints one block per paper with a mark (on a terminal in color: green ✓ fine, yellow ! to check, red ✗ failed,
+= already in the store), the key, the DOI with where it was found and the link to check it, the citation and the reasons to check;
+at the end a summary and the next steps as commands to copy (`--dry-run` first is a good idea for many papers):
 
 ```
-  key      author-2001 (first author and year; give --literature KEY to choose another)
-  imported paper.pdf -> literature/author-2001/author-2001_1a2b3c4d.pdf (literature paper: author-2001)
-           DOI    10.9999/test.2001.42 (first pages)  check: https://doi.org/10.9999/test.2001.42
-           cite   A. Author, B. J. Other, Rate parameters for imaginary plasmas, J. Invent. Res. 12(3):100-110, 2001 (Crossref)
+✓ author-2001          2001-Author-Rate-Parameters.pdf
+      DOI   10.9999/test.2001.42 (first pages)   https://doi.org/10.9999/test.2001.42
+      cite  A. Author, B. J. Other, Rate parameters for imaginary plasmas, J. Invent. Res. 12(3):100-110, 2001 (Crossref)
+! other-1994           1994-Other-Book.pdf
+      DOI   10.9999/book (Crossref search)   https://doi.org/10.9999/book
+      check DOI found by searching Crossref for the first lines of the PDF: open the link and compare title and authors
+✗ —                    1995-Laux-Direkte-Simulation.pdf
+      DOI and citation not found: give --doi or --reference
+
+3 paper(s): 1 fine, 1 to check, 1 failed (dry run: nothing copied)
+
+Next steps
+1. Check the 1 paper(s) marked ! (open the DOI link, compare title, authors and key). A wrong DOI or key: import that file alone, e.g.
+    piclas-db import 1994-Other-Book.pdf --literature other-1994 --doi DOI
+2. Import the 1 failed paper(s) one by one, with the DOI or the citation (books, theses and reports have no DOI):
+    piclas-db import 1995-Laux-Direkte-Simulation.pdf --literature laux-1995 --doi DOI   # or --reference "AUTHORS, TITLE, ..., YEAR"
+3. Import the 2 paper(s) found (move the ones you import alone out of the way first):
+    piclas-db import 2001-Author-Rate-Parameters.pdf \
+        1994-Other-Book.pdf \
+        --literature
 ```
+
+A paper is marked ! when its DOI was found by a search or in the file name only, Crossref could not be asked, it has no DOI, its
+key got a suffix (`park-1993b`: another paper has that key), or a note applies (e.g. the title is not on the first pages). Colors
+only on a terminal and not with `NO_COLOR`.
 
 Offline (or with `--no-lookup`) the DOI from the PDF, or from a file name that allows only one DOI, is taken unchecked, without
 citation from Crossref. The paper's record keeps where the DOI and the citation came from (`doi_found_in`, `reference_from`).
