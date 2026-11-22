@@ -85,6 +85,24 @@ Next steps
 A paper is marked ! when its DOI was found by a search or in the file name only, Crossref could not be asked, it has no DOI, its
 key got a suffix (`park-1993b`: another paper has that key), or a note applies (e.g. the title is not on the first pages).
 
+**Overview, checklist and review.** Each block is numbered (`[7/18]`) and separated by a line; after the last block a table lists
+every paper in one line (number, mark, key, DOI with where it was found or the reason of a failure, file). `--checklist FILE` writes
+the same as a Markdown checklist with the DOI links, to tick off in an editor.
+
+`--review` goes one step further: after the overview it walks through the papers still to decide, one at a time, and keeps the position
+itself:
+
+```
+[7/18] ! bird-1994            1994-Bird-Molecular-Gas-Dynamics-….pdf
+      DOI   10.1093/… (Crossref search)   https://doi.org/10.1093/…
+      check DOI found by searching Crossref for the first lines of the PDF: open the link and compare title and authors
+  [2/9] o open, y import, k key, d doi, r citation, s skip, q quit >
+```
+
+`o` opens the DOI link in the browser, `y` imports the paper, `k KEY` changes the key, `d DOI` or `r TEXT` give the DOI or the citation
+(looked up again), `s` skips, `q` stops. Skipped papers are remembered in `.piclas-db-review.yaml` of the current directory; the same
+command later continues with the papers not decided yet (imported ones are `=`). `--review` needs a terminal.
+
 While the papers are looked up at Crossref, a bar with counter and spinner shows the progress on the terminal
 (`⠋ [█████░░░░░░░░░░░░░░░] 4/18  22% 1995-Laux-….pdf: DOI and citation (Crossref)`); it is drawn on stderr and disappears when
 the output is redirected.

@@ -10,21 +10,25 @@
 #
 # You should have received a copy of the GNU General Public License along with piclas-db. If not, see <https://www.gnu.org/licenses/>.
 # ==================================================================================================================================
-"""Readable output of `import --literature`: one block per paper with a status mark (green ✓ fine, yellow ! to check, red ✗ failed,
-= already in the store), and at the end the next steps as commands to copy"""
+"""Readable output of `import --literature`: one numbered block per paper with a status mark (green ✓ fine, yellow ! to check, red ✗
+failed, ≈ same paper in another file, = already in the store), at the end a table with one line per paper, the next steps as commands
+to copy, and optionally a Markdown checklist"""
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import datetime
+import pathlib
 import re
 import shlex
+import shutil
 from dataclasses import dataclass, field
 from typing import Optional
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.common.table import paint, use_color
+from piclas_db.common.table import Row, paint, render, use_color
 from piclas_db.sources.doi import Citation, ascii_fold
 # ==================================================================================================================================
 
@@ -39,6 +43,16 @@ class Paper:
     cited: Optional[Citation] = None
     message: Optional[str] = None  # error text or the stored file
     checks: list[str] = field(default_factory=list)  # reasons to check
+    number: int = 0  # position in the run (1-based), set by the reporter
+    total: int = 0
+    doi: Optional[str] = None  # given or corrected in the review (else the DOI of cited)
+    reference: Optional[str] = None
+    key_given: bool = False  # key chosen by the user (kept when the DOI is corrected)
+
+    @property
+    def link(self) -> Optional[str]:
+        doi = self.doi or (self.cited.doi if self.cited else None)
+        return f'https://doi.org/{doi}' if doi else None
 
 
 def suggested_key(file_name: str) -> str:
@@ -67,8 +81,10 @@ def classify(file: str, key: str, cited: Citation, automatic_key: bool) -> Paper
 def block(paper: Paper, color: bool) -> list[str]:
     mark, tint = MARKS[paper.status]
     name = f'{paper.key or "—":20s}'
-    head = f'{paint(mark, tint, color)} {paint(name, "bold" if paper.status != "exists" else "dim", color)} {paper.file}'
-    lines = [head]
+    position = paint(f'[{paper.number}/{paper.total}]', 'dim', color) + ' ' if paper.total else ''
+    head = f'{position}{paint(mark, tint, color)} {paint(name, "bold" if paper.status != "exists" else "dim", color)} {paper.file}'
+    width = min(shutil.get_terminal_size((100, 20)).columns, 120)
+    lines = [paint('─' * width, 'dim', color), head]
     cited = paper.cited
     if paper.status == 'exists':
         lines.append(f'      {paint("already in the store: " + str(paper.message), "dim", color)}')
@@ -100,7 +116,34 @@ def quoted(name: str) -> str:
     return shlex.quote(name)
 
 
-def next_steps(papers: list[Paper], dry_run: bool, color: bool) -> list[str]:
+def overview(papers: list[Paper], color: bool) -> list[str]:
+    """One line per paper: number, mark, key, DOI and where it was found (or the reason of a failure), file"""
+    rows = []
+    for paper in papers:
+        mark, tint = MARKS[paper.status]
+        cited = paper.cited
+        if paper.status in ('error', 'same', 'exists'):
+            what = str(paper.message or '')
+        else:
+            doi = paper.doi or (cited.doi if cited else None)
+            what = f'{doi} ({cited.doi_found_in})' if doi and cited else 'no DOI: citation only'
+        rows.append(Row([str(paper.number), mark, paper.key or '—', what, paper.file], colors=[None, tint, 'bold', None, None]))
+    return render(['#', '', 'Key', 'DOI (found in) or reason', 'File'], rows, shrinkable=[3, 4], align_right=(0,), color=color)
+
+
+def checklist(papers: list[Paper], path: pathlib.Path) -> None:
+    """Markdown checklist to tick off while checking the papers (one line per paper with its link)"""
+    lines = [f'# Papers to import ({datetime.date.today().isoformat()})', '', 'Marks: ✓ fine, ! to check, ✗ failed, ≈ same paper in the store, = already stored.', '']
+    for paper in papers:
+        mark = MARKS[paper.status][0]
+        done = 'x' if paper.status in ('exists', 'same') else ' '
+        link = f' — {paper.link}' if paper.link and paper.status not in ('exists', 'same', 'error') else ''
+        reason = f' — {paper.message}' if paper.status in ('error', 'same') else ''
+        lines.append(f'- [{done}] {paper.number}. {mark} `{paper.key or "—"}` {paper.file}{link}{reason}')
+    path.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+
+def next_steps(papers: list[Paper], dry_run: bool | str, color: bool) -> list[str]:
     counts = {status: sum(p.status == status for p in papers) for status in MARKS}
     summary = (
         f'{len(papers)} paper(s): '
@@ -111,7 +154,7 @@ def next_steps(papers: list[Paper], dry_run: bool, color: bool) -> list[str]:
         + paint(f'{counts["error"]} failed', 'red', color)
         + (f', {counts["same"]} same paper in another file' if counts['same'] else '')
         + (f', {counts["exists"]} already in the store' if counts['exists'] else '')
-        + (' (dry run: nothing copied)' if dry_run else '')
+        + (' (dry run: nothing copied)' if dry_run is True else f' ({dry_run})' if dry_run else '')
     )
     lines = ['', summary]
     steps: list[list[str]] = []
@@ -161,15 +204,26 @@ def next_steps(papers: list[Paper], dry_run: bool, color: bool) -> list[str]:
 
 
 class Reporter:
-    """Collects the papers of one import run and prints a block per paper as it is processed"""
+    """Collects the papers of one import run and prints a numbered block per paper as it is processed"""
 
-    def __init__(self) -> None:
+    def __init__(self, total: int = 0) -> None:
         self.papers: list[Paper] = []
         self.color = use_color()
+        self.total = total
+        self.paths: list[Optional[pathlib.Path]] = []  # file of each paper (None: not found)
 
-    def add(self, paper: Paper) -> None:
+    def add(self, paper: Paper, path: Optional[pathlib.Path] = None) -> None:
+        paper.number, paper.total = len(self.papers) + 1, self.total
         self.papers.append(paper)
+        self.paths.append(path)
         print('\n'.join(block(paper, self.color)))
 
-    def finish(self, dry_run: bool) -> None:
-        print('\n'.join(next_steps(self.papers, dry_run, self.color)))
+    def finish(self, dry_run: bool, steps: bool = True, checklist_file: Optional[str] = None) -> None:
+        width = min(shutil.get_terminal_size((100, 20)).columns, 120)
+        print(paint('─' * width, 'dim', self.color))
+        print('\n'.join(overview(self.papers, self.color)))
+        lines = next_steps(self.papers, dry_run if steps else 'nothing copied yet: the review follows', self.color)
+        print('\n'.join(lines if steps else lines[:2]))
+        if checklist_file:
+            checklist(self.papers, pathlib.Path(checklist_file))
+            print(f'Checklist: {checklist_file}')

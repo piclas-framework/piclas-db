@@ -3,6 +3,14 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.51.0
+
+* `import --literature`: numbered blocks (`[7/18]`) with separator lines and, after the last one, an overview table with one line per
+  paper; `--checklist FILE` writes it as a Markdown checklist with the DOI links
+* `import --literature --review`: after the overview, the papers still to decide one at a time: open the DOI link, import, change
+  key, DOI or citation (looked up again), skip, stop; skipped papers are remembered in `.piclas-db-review.yaml` of the current
+  directory, so the same command continues later (`piclas_db/commands/paper_review.py`)
+
 ## 0.50.0
 
 * `import --literature` recognizes a paper that is in the store as another file (cover page added or removed, watermark, other

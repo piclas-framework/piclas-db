@@ -198,3 +198,38 @@ def test_same_paper_by_text(tmp_path: pathlib.Path) -> None:
     a, b, c = (same_paper.shingles(text) for text in (body, with_cover, other))
     assert same_paper.containment(a, b) > 0.95 and same_paper.containment(a, c) < 0.05
     assert len(a) >= same_paper.MINIMUM
+
+
+def test_review(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """--review: overview first, then paper by paper; skipped papers are remembered, quitting and continuing works"""
+    from piclas_db.commands import paper_review  # noqa: PLC0415
+
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: TEXT if path.name.startswith('2001') else '')
+    monkeypatch.setattr(doi_module, 'get_json', fake_get_json)
+    monkeypatch.setattr('sys.stdin.isatty', lambda: True)
+    opened: list[str] = []
+    monkeypatch.setattr(paper_review.webbrowser, 'open', opened.append)
+    (tmp_path / '2001-Author-Rate-Parameters.pdf').write_bytes(PDF)
+    (tmp_path / '1995-Laux-Direkte-Simulation.pdf').write_bytes(PLAIN)
+    (tmp_path / '1990-Other-Report.pdf').write_bytes(PLAIN + b'% other\n')
+    monkeypatch.chdir(tmp_path)
+    files = ['1990-Other-Report.pdf', '1995-Laux-Direkte-Simulation.pdf', '2001-Author-Rate-Parameters.pdf']
+
+    answers = iter(['s', 'y', 'r M. Laux, Direkte Simulation, dissertation, Stuttgart 1995', 'k laux-1995', 'y', 'q'])
+    monkeypatch.setattr('builtins.input', lambda prompt='': next(answers))
+    assert main(['import', *files, '--literature', '--review', '--checklist', 'check.md']) == 0
+    out = capsys.readouterr().out
+    assert out.index('[3/3]') < out.index('Review: 3 paper(s) to decide')  # the overview (numbered blocks, table) comes first
+    assert '# ' in out and 'DOI (found in) or reason' in out and 'Next steps' not in out
+    assert 'imported -> literature/laux-1995/' in out and 'not importable yet' in out and 'Stopped: 1 paper(s) left' in out
+    assert '- [ ] 3. ✓ `author-2001` 2001-Author-Rate-Parameters.pdf — https://doi.org/10.9999/test.2001.42' in (tmp_path / 'check.md').read_text()
+
+    answers = iter(['o', 'y'])  # the same command again: Laux is stored (=), the report was skipped, only author-2001 is left
+    assert main(['import', *files, '--literature', '--review']) == 0
+    out = capsys.readouterr().out
+    assert 'Review: 1 paper(s) to decide, 1 skipped in an earlier review' in out and opened == ['https://doi.org/10.9999/test.2001.42']
+    assert 'imported -> literature/author-2001/' in out and 'Review done: 1 imported, 0 skipped' in out
+    assert sorted(e.meta['dataset'] for e in Store(tmp_path / 'store').entries()) == ['author-2001', 'laux-1995']
+    monkeypatch.setattr('sys.stdin.isatty', lambda: False)
+    assert main(['import', *files, '--literature', '--review']) == 1  # not in a terminal

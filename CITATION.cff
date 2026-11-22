@@ -14,7 +14,7 @@ abstract: >
   through the download, stores the original files in a local store, converts between the original formats,
   ASCII tables and HDF5, checks existing (also legacy) database files for inconsistencies, and supports the
   validation of the data with PICLas reservoir simulations.
-version: "0.50.0"
+version: "0.51.0"
 doi: "10.5281/zenodo.24324389"
 url: "https://github.com/piclas-framework/piclas-db"
 repository-code: "https://github.com/piclas-framework/piclas-db"
@@ -38,7 +38,7 @@ preferred-citation:
     - name: "piclas-db Developers"
   url: "https://github.com/piclas-framework/piclas-db"
   repository-code: "https://github.com/piclas-framework/piclas-db"
-  version: "0.50.0"
+  version: "0.51.0"
   doi: "10.5281/zenodo.24324389"
 
 references:

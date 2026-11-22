@@ -16,6 +16,8 @@
 import argparse
 import datetime
 import pathlib
+import sys
+from collections.abc import Callable
 from typing import Optional
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -23,6 +25,7 @@ from typing import Optional
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.literature import papers
 from piclas_db.commands.paper_report import Paper, Reporter, classify
+from piclas_db.commands.paper_review import review
 from piclas_db.common.spinner import Progress
 from piclas_db.sources.doi import paper_citation
 from piclas_db.sources.same_paper import SamePaper, pages
@@ -70,13 +73,36 @@ def lxcat_news(store: Store, entry: StoreEntry) -> str:
     return f'{new} new process(es), {updated_count} with a newer or other update time, {present} already in the store'
 
 
+def importer(store: Store, by: Optional[str], same_papers: Optional[SamePaper]) -> Callable[[pathlib.Path, Paper], str]:
+    """Stores one paper of a review with the key, DOI and citation decided there"""
+
+    def store_paper(path: pathlib.Path, paper: Paper) -> str:
+        cited = paper.cited
+        doi = paper.doi or (cited.doi if cited else None)
+        reference = paper.reference or (cited.reference if cited else None)
+        try:
+            identified = identify(path, literature=paper.key, doi=doi, reference=reference)
+            if cited is not None:
+                identified.details.update({'doi_found_in': 'given' if paper.doi else cited.doi_found_in, 'reference_from': 'given' if paper.reference else cited.reference_from})
+            entry = store.add(path, identified, by=by)
+        except (IdentifyError, GitError) as e:
+            raise ValueError(str(e)) from e
+        if same_papers is not None:
+            same_papers.papers.append(entry)
+        for name in wanted.fulfilled(store, identified.dataset, doi):
+            print(f'      wanted list: {name} no longer wanted')
+        return str(entry.relative)
+
+    return store_paper
+
+
 def run(args: argparse.Namespace) -> int:
     """Identify downloaded files by their content, validate them and copy them into the local store"""
     store = Store(args.store)
     try:
         files = candidate_files(args)
         retrieved = parse_date(args.retrieved)
-        by = None if args.dry_run else config.require_identity()
+        by = None if args.dry_run and not args.review else config.require_identity()
     except (FileNotFoundError, ValueError, config.ConfigError) as e:
         print(f'ERROR: {e}')
         return 1
@@ -90,9 +116,16 @@ def run(args: argparse.Namespace) -> int:
         print('ERROR: --doi and --reference are for one paper; import several papers with --literature alone (keys from Crossref)')
         return 1
 
-    print(f'Store: {store.root}' + (' (dry run, nothing is copied)' if args.dry_run else ''))
     papers_mode = args.literature is not None
-    reporter = Reporter() if papers_mode else None
+    if (args.review or args.checklist) and not papers_mode:
+        print('ERROR: --review and --checklist are for papers (--literature)')
+        return 1
+    if args.review and not sys.stdin.isatty():
+        print('ERROR: --review asks questions: run it in a terminal (or use --dry-run and --checklist)')
+        return 1
+    dry_run = args.dry_run or args.review  # a review looks up all papers first and stores them one by one afterwards
+    print(f'Store: {store.root}' + (' (review: all papers are looked up first, then decided one by one)' if args.review else ' (dry run, nothing is copied)' if args.dry_run else ''))
+    reporter = Reporter(total=len(files)) if papers_mode else None
     imported = existing = skipped = failed = same = 0
     same_papers: Optional[SamePaper] = None  # stored papers with their texts, read once per run
     taken: set[str] = set()  # keys given to papers of this run
@@ -100,14 +133,14 @@ def run(args: argparse.Namespace) -> int:
     for number, (path, explicit) in enumerate(files):
         if not path.is_file():
             if reporter:
-                reporter.add(Paper(file=str(path), status='error', message='file not found'))
+                reporter.add(Paper(file=str(path), status='error', message='file not found'), None)
             else:
                 print(f'  ERROR    {path}: file not found')
             failed += 1
             continue
         stored = store.find(sha256(path)) if reporter else None
         if reporter and stored is not None:  # the same paper (same sha256) is in the store: no lookup, no key needed
-            reporter.add(Paper(file=str(path), status='exists', key=str(stored.meta.get('dataset')), message=str(stored.relative)))
+            reporter.add(Paper(file=str(path), status='exists', key=str(stored.meta.get('dataset')), message=str(stored.relative)), path)
             existing += 1
             continue
         doi, reference, cited, key = args.doi, args.reference, None, args.literature
@@ -123,7 +156,7 @@ def run(args: argparse.Namespace) -> int:
                 match = same_papers.find(path, doi)
             if match is not None and not args.new_version:
                 info = f'same paper as {match.key} ({match.reason}), other file: {pages(path)} instead of {pages(match.entry.path)} pages'
-                reporter.add(Paper(file=str(path), status='same', key=match.key, cited=cited, message=info))
+                reporter.add(Paper(file=str(path), status='same', key=match.key, cited=cited, message=info), path)
                 same += 1
                 continue
             if match is not None:  # --new-version: another file of a stored paper, under its key, with its citation if none was found
@@ -133,13 +166,13 @@ def run(args: argparse.Namespace) -> int:
                 doi = doi or match.entry.meta.get('doi')
                 reference = reference or match.entry.meta.get('reference')
             if not (doi or reference):
-                reporter.add(Paper(file=str(path), status='error', cited=cited, message='DOI and citation not found: give --doi or --reference'))
+                reporter.add(Paper(file=str(path), status='error', cited=cited, message='DOI and citation not found: give --doi or --reference'), path)
                 failed += 1
                 continue
             if not key:
                 key = cited.key(set(papers(store)) | taken)
                 if key is None:
-                    reporter.add(Paper(file=str(path), status='error', cited=cited, message='no key: first author and year unknown (no Crossref record); give --literature KEY'))
+                    reporter.add(Paper(file=str(path), status='error', cited=cited, message='no key: first author and year unknown (no Crossref record); give --literature KEY'), path)
                     failed += 1
                     continue
                 taken.add(key)
@@ -151,7 +184,7 @@ def run(args: argparse.Namespace) -> int:
                 identified.details.update({'doi_found_in': cited.doi_found_in, 'reference_from': cited.reference_from})
         except IdentifyError as e:
             if reporter:
-                reporter.add(Paper(file=str(path), status='error', key=key or None, cited=cited, message=str(e)))
+                reporter.add(Paper(file=str(path), status='error', key=key or None, cited=cited, message=str(e)), path)
                 failed += 1
             elif explicit:
                 print(f'  ERROR    {path}: {e}')
@@ -164,7 +197,7 @@ def run(args: argparse.Namespace) -> int:
         duplicate = store.find(sha256(path))
         if duplicate is not None:
             if reporter:
-                reporter.add(Paper(file=str(path), status='exists', key=str(duplicate.meta.get('dataset')), message=str(duplicate.relative)))
+                reporter.add(Paper(file=str(path), status='exists', key=str(duplicate.meta.get('dataset')), message=str(duplicate.relative)), path)
             else:
                 print(f'  exists   {path} -> {duplicate.relative}')
             existing += 1
@@ -172,9 +205,9 @@ def run(args: argparse.Namespace) -> int:
         label = f'{identified.provider}' + (f' {identified.kind}' if identified.kind != identified.provider else '') + f': {identified.dataset}'
         if identified.retrieved is None and retrieved is None and identified.provider != 'literature':  # papers: date means little
             label += ' (retrieval date unknown, use --retrieved YYYY-MM-DD)'
-        if args.dry_run:
+        if dry_run:
             if reporter and cited is not None:
-                reporter.add(classify(str(path), identified.dataset, cited, automatic_key=not args.literature))
+                reporter.add(classify(str(path), identified.dataset, cited, automatic_key=not args.literature), path)
             else:
                 print(f'  would import {path} ({label})')
         else:
@@ -185,7 +218,7 @@ def run(args: argparse.Namespace) -> int:
                 failed += 1
                 continue
             if reporter and cited is not None:
-                reporter.add(classify(str(path), identified.dataset, cited, automatic_key=not args.literature))
+                reporter.add(classify(str(path), identified.dataset, cited, automatic_key=not args.literature), path)
                 print(f'      stored {entry.relative}')
                 if same_papers is not None:
                     same_papers.papers.append(entry)  # later files of this run are compared with it too
@@ -200,7 +233,10 @@ def run(args: argparse.Namespace) -> int:
         imported += 1
 
     if reporter:
-        reporter.finish(args.dry_run)
+        reporter.finish(dry_run, steps=not args.review, checklist_file=args.checklist)
+        if args.review:
+            review(reporter.papers, reporter.paths, lambda path, doi, reference: paper_citation(path, doi, reference, lookup=not args.no_lookup), importer(store, by, same_papers), taken, reporter.color)
+            return 0
     else:
         print(f'{imported} {"would be imported" if args.dry_run else "imported"}, {existing} already in the store, {skipped} skipped, {failed} failed')
     if not args.dry_run and store.root.is_dir():
