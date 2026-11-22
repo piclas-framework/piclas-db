@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.53.2
+
+* `--review`: links and PDFs are opened with `xdg-open` (`open` on macOS) detached from the terminal and without its output, so browser
+  log lines no longer appear in the review
+
+## 0.53.1
+
+* `--review`: `o` on a paper without DOI opens a Google Scholar search for its file name instead of nothing; `p` opens the PDF
+
 ## 0.53.0
 
 * `import -n --review`: decide now, import later: nothing is stored, `y` approves a paper with its key, DOI and citation; the next

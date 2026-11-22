@@ -210,14 +210,14 @@ def test_review(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys:
     monkeypatch.setattr(doi_module, 'get_json', fake_get_json)
     monkeypatch.setattr('sys.stdin.isatty', lambda: True)
     opened: list[str] = []
-    monkeypatch.setattr(paper_review.webbrowser, 'open', opened.append)
+    monkeypatch.setattr(paper_review, 'open_link', opened.append)
     (tmp_path / '2001-Author-Rate-Parameters.pdf').write_bytes(PDF)
     (tmp_path / '1995-Laux-Direkte-Simulation.pdf').write_bytes(PLAIN)
     (tmp_path / '1990-Other-Report.pdf').write_bytes(PLAIN + b'% other\n')
     monkeypatch.chdir(tmp_path)
     files = ['1990-Other-Report.pdf', '1995-Laux-Direkte-Simulation.pdf', '2001-Author-Rate-Parameters.pdf']
 
-    answers = iter(['s', 'y', 'r M. Laux, Direkte Simulation, dissertation, Stuttgart 1995', 'k laux-1995', 'y', 'q'])
+    answers = iter(['s', 'o', 'p', 'y', 'r M. Laux, Direkte Simulation, dissertation, Stuttgart 1995', 'k laux-1995', 'y', 'q'])
     monkeypatch.setattr('builtins.input', lambda prompt='': next(answers))
     assert main(['import', *files, '--literature', '--review', '--checklist', 'check.md']) == 0
     out = capsys.readouterr().out
@@ -229,7 +229,9 @@ def test_review(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys:
     answers = iter(['o', 'y'])  # the same command again: Laux is stored (=), the report was skipped, only author-2001 is left
     assert main(['import', *files, '--literature', '--review']) == 0
     out = capsys.readouterr().out
-    assert 'Review: 1 paper(s) to decide, 1 skipped earlier' in out and opened == ['https://doi.org/10.9999/test.2001.42']
+    assert opened[0] == 'https://scholar.google.com/scholar?q=1995+Laux+Direkte+Simulation'  # no DOI: a search for the file name
+    assert opened[1].endswith('/1995-Laux-Direkte-Simulation.pdf')  # the PDF in the desktop's viewer
+    assert 'Review: 1 paper(s) to decide, 1 skipped earlier' in out and opened[2:] == ['https://doi.org/10.9999/test.2001.42']
     assert 'imported -> literature/author-2001/' in out and 'Review done: 1 imported, 0 skipped' in out
     assert sorted(e.meta['dataset'] for e in Store(tmp_path / 'store').entries()) == ['author-2001', 'laux-1995']
     monkeypatch.setattr('sys.stdin.isatty', lambda: False)
@@ -287,3 +289,16 @@ def test_review_dry_run(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
     assert 'Review: 0 paper(s) to decide' in out
     stored = {e.meta['dataset']: e.meta for e in Store(tmp_path / 'store').entries()}
     assert sorted(stored) == ['author-2001', 'laux-1995'] and stored['laux-1995']['reference'] == 'M. Laux, dissertation, Stuttgart 1995'
+
+
+def test_open_link_is_detached_and_silent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from piclas_db.commands import paper_review  # noqa: PLC0415
+
+    calls: list[tuple] = []
+    monkeypatch.setattr(paper_review.sys, 'platform', 'linux')
+    monkeypatch.setattr(paper_review.shutil, 'which', lambda name: '/usr/bin/xdg-open')
+    monkeypatch.setattr(paper_review.subprocess, 'Popen', lambda command, **options: calls.append((command, options)))
+    paper_review.open_link('https://doi.org/10.9999/x')
+    command, options = calls[0]
+    assert command == ['/usr/bin/xdg-open', 'https://doi.org/10.9999/x'] and options['start_new_session']
+    assert options['stdout'] == options['stderr'] == paper_review.subprocess.DEVNULL  # no browser log lines in the review

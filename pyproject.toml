@@ -3,7 +3,7 @@
 name = "piclas-db"
 # Versioning: start with 0.1.0, increment the minor version (0.x.0) with each development step and release 1.0.0 once the tool is
 # feature complete (see CHANGELOG.md)
-version = "0.53.0"
+version = "0.53.2"
 description = "Build, check and convert PICLas species and cross-section databases (database.h5) from original sources such as LXCat and NIST"
 license = "GPL-3.0-or-later"
 readme = "README.md"

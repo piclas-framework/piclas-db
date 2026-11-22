@@ -21,6 +21,11 @@ the approved papers first, without asking again ("decide now, import later")."""
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import urllib.parse
 import webbrowser
 from collections.abc import Callable
 from typing import Optional
@@ -40,7 +45,8 @@ from piclas_db.store import sha256
 # ==================================================================================================================================
 
 SESSION = '.piclas-db-review.yaml'
-HELP = """  o         open the DOI link in the browser
+HELP = """  o         open the DOI link in the browser (without DOI: a Google Scholar search for the file name)
+  p         open the PDF
   y         import this paper (key, DOI and citation as shown; with --dry-run: approve it for a later import)
   k KEY     use another key            d DOI      use this DOI (looked up again)
   r TEXT    use this citation          s          skip (remembered for the next review)
@@ -48,6 +54,25 @@ HELP = """  o         open the DOI link in the browser
 
 Lookup = Callable[[pathlib.Path, Optional[str], Optional[str]], Citation]
 Importer = Callable[[pathlib.Path, Paper], str]  # stores the paper, returns the stored file (raises ValueError with the reason)
+
+
+def open_link(target: str) -> None:
+    """Open a URL or file in the desktop's browser or viewer, detached and silent (browsers write log lines to the terminal)"""
+    opener = 'open' if sys.platform == 'darwin' else shutil.which('xdg-open')
+    if opener:
+        try:
+            subprocess.Popen([opener, target], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)  # noqa: S603 (fixed opener)
+            return
+        except OSError:
+            pass
+    webbrowser.open(target)
+
+
+def scholar(path: pathlib.Path) -> str:
+    """Google Scholar search for a paper without DOI: the words of its file name (year, author and title in names like
+    2008-Lofthouse-Nonequilibrium-Hypersonic-....pdf)"""
+    words = ' '.join(re.split(r'[_\-\s]+', path.stem))
+    return 'https://scholar.google.com/scholar?' + urllib.parse.urlencode({'q': words})
 
 
 def load_session(directory: pathlib.Path) -> dict[str, dict]:
@@ -113,7 +138,7 @@ def review(
     for index, (paper, path) in enumerate(pending):
         print('\n'.join(block(paper, color)))
         while True:
-            answer = ask(paint(f'  [{index + 1}/{len(pending)}] o open, y import, k key, d doi, r citation, s skip, q quit > ', 'bold', color)).strip()
+            answer = ask(paint(f'  [{index + 1}/{len(pending)}] o open link, p pdf, y import, k key, d doi, r citation, s skip, q quit > ', 'bold', color)).strip()
             command, _, value = answer.partition(' ')
             command, value = command.lower(), value.strip()
             if command == 'q':
@@ -124,11 +149,12 @@ def review(
             if command in ('?', 'h', 'help', ''):
                 print(HELP)
             elif command == 'o':
-                if paper.link:
-                    webbrowser.open(paper.link)
-                    print(f'  opened {paper.link}')
-                else:
-                    print('  no DOI: nothing to open')
+                link = paper.link or scholar(path)
+                open_link(link)
+                print(f'  opened {link}' + ('' if paper.link else ' (no DOI: search for the title; books and theses: give the citation with r)'))
+            elif command == 'p':
+                open_link(str(path.resolve()))
+                print(f'  opened {path.name}')
             elif command == 's':
                 session[sha256(path)] = {'decision': 'skipped', 'file': path.name}
                 counts['skipped'] += 1

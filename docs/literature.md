@@ -96,10 +96,10 @@ itself:
 [7/18] ! bird-1994            1994-Bird-Molecular-Gas-Dynamics-….pdf
       DOI   10.1093/… (Crossref search)   https://doi.org/10.1093/…
       check DOI found by searching Crossref for the first lines of the PDF: open the link and compare title and authors
-  [2/9] o open, y import, k key, d doi, r citation, s skip, q quit >
+  [2/9] o open link, p pdf, y import, k key, d doi, r citation, s skip, q quit >
 ```
 
-`o` opens the DOI link in the browser, `y` imports the paper, `k KEY` changes the key, `d DOI` or `r TEXT` give the DOI or the citation
+`o` opens the DOI link in the browser (for a paper without DOI a Google Scholar search for its file name), `p` opens the PDF, `y` imports the paper, `k KEY` changes the key, `d DOI` or `r TEXT` give the DOI or the citation
 (looked up again), `s` skips, `q` stops. Decisions are remembered in `.piclas-db-review.yaml` of the current directory; the same
 command later continues with the papers not decided yet (imported ones are `=`). `--review` needs a terminal.
 
