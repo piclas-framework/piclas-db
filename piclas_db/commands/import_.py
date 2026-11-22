@@ -102,7 +102,7 @@ def run(args: argparse.Namespace) -> int:
     try:
         files = candidate_files(args)
         retrieved = parse_date(args.retrieved)
-        by = None if args.dry_run and not args.review else config.require_identity()
+        by = None if args.dry_run else config.require_identity()
     except (FileNotFoundError, ValueError, config.ConfigError) as e:
         print(f'ERROR: {e}')
         return 1
@@ -124,7 +124,11 @@ def run(args: argparse.Namespace) -> int:
         print('ERROR: --review asks questions: run it in a terminal (or use --dry-run and --checklist)')
         return 1
     dry_run = args.dry_run or args.review  # a review looks up all papers first and stores them one by one afterwards
-    print(f'Store: {store.root}' + (' (review: all papers are looked up first, then decided one by one)' if args.review else ' (dry run, nothing is copied)' if args.dry_run else ''))
+    if args.review:
+        mode = ' (review, dry run: decide now, the next review without --dry-run imports the approved papers)' if args.dry_run else ' (review: all papers are looked up first, then decided one by one)'
+    else:
+        mode = ' (dry run, nothing is copied)' if args.dry_run else ''
+    print(f'Store: {store.root}{mode}')
     reporter = Reporter(total=len(files)) if papers_mode else None
     imported = existing = skipped = failed = same = 0
     same_papers: Optional[SamePaper] = None  # stored papers with their texts, read once per run
@@ -235,7 +239,15 @@ def run(args: argparse.Namespace) -> int:
     if reporter:
         reporter.finish(dry_run, steps=not args.review, checklist_file=args.checklist)
         if args.review:
-            review(reporter.papers, reporter.paths, lambda path, doi, reference: paper_citation(path, doi, reference, lookup=not args.no_lookup), importer(store, by, same_papers), taken, reporter.color)
+            review(
+                reporter.papers,
+                reporter.paths,
+                lambda path, doi, reference: paper_citation(path, doi, reference, lookup=not args.no_lookup),
+                importer(store, by, same_papers),
+                taken,
+                reporter.color,
+                dry_run=args.dry_run,
+            )
             return 0
     else:
         print(f'{imported} {"would be imported" if args.dry_run else "imported"}, {existing} already in the store, {skipped} skipped, {failed} failed')

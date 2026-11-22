@@ -57,7 +57,7 @@ override it.
 
 The import prints one block per paper with a mark (on a terminal in color: green ✓ fine, yellow ! to check, red ✗ failed,
 = already in the store), the key, the DOI with where it was found and the link to check it, the citation and the reasons to check;
-at the end a summary and the next steps as commands to copy (`--dry-run` first is a good idea for many papers):
+at the end a summary and the next steps as commands to copy (`-n`/`--dry-run` first is a good idea for many papers):
 
 ```
 ✓ author-2001          2001-Author-Rate-Parameters.pdf
@@ -100,8 +100,12 @@ itself:
 ```
 
 `o` opens the DOI link in the browser, `y` imports the paper, `k KEY` changes the key, `d DOI` or `r TEXT` give the DOI or the citation
-(looked up again), `s` skips, `q` stops. Skipped papers are remembered in `.piclas-db-review.yaml` of the current directory; the same
+(looked up again), `s` skips, `q` stops. Decisions are remembered in `.piclas-db-review.yaml` of the current directory; the same
 command later continues with the papers not decided yet (imported ones are `=`). `--review` needs a terminal.
+
+`-n --review` (dry run) decides now and imports later: nothing is stored, `y` approves a paper with its key, DOI and citation (also
+corrected ones), and the next `--review` without `-n` imports the approved papers first, without asking again, then continues with the
+rest.
 
 While the papers are looked up at Crossref, a bar with counter and spinner shows the progress on the terminal
 (`⠋ [█████░░░░░░░░░░░░░░░] 4/18  22% 1995-Laux-….pdf: DOI and citation (Crossref)`); it is drawn on stderr and disappears when

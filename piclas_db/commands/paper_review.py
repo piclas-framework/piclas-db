@@ -11,8 +11,11 @@
 # You should have received a copy of the GNU General Public License along with piclas-db. If not, see <https://www.gnu.org/licenses/>.
 # ==================================================================================================================================
 """Interactive review of the papers of `import --literature --review`, after the overview: one paper at a time, open its DOI link,
-import it, correct key, DOI or citation (looked up again), skip it or stop. Skipped papers are remembered in .piclas-db-review.yaml
-of the current directory, so a later review continues with the papers not decided yet; imported papers are in the store anyway."""
+import it, correct key, DOI or citation (looked up again), skip it or stop. Decisions are remembered in .piclas-db-review.yaml of the
+current directory, so a later review continues with the papers not decided yet; imported papers are in the store anyway.
+
+With --dry-run nothing is stored: `y` approves the paper with its key, DOI and citation, and the next review without --dry-run imports
+the approved papers first, without asking again ("decide now, import later")."""
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
@@ -38,7 +41,7 @@ from piclas_db.store import sha256
 
 SESSION = '.piclas-db-review.yaml'
 HELP = """  o         open the DOI link in the browser
-  y         import this paper (key, DOI and citation as shown)
+  y         import this paper (key, DOI and citation as shown; with --dry-run: approve it for a later import)
   k KEY     use another key            d DOI      use this DOI (looked up again)
   r TEXT    use this citation          s          skip (remembered for the next review)
   q         stop (continue later with the same command)       ?   this help"""
@@ -64,17 +67,49 @@ def save_session(directory: pathlib.Path, session: dict[str, dict]) -> None:
         path.unlink()
 
 
-def review(papers: list[Paper], paths: list[Optional[pathlib.Path]], lookup: Lookup, importer: Importer, taken: set[str], color: bool, ask: Optional[Callable[[str], str]] = None) -> dict[str, int]:
-    """Walk through the papers still to decide; returns the counts of imported, skipped and open papers"""
+def review(
+    papers: list[Paper],
+    paths: list[Optional[pathlib.Path]],
+    lookup: Lookup,
+    importer: Importer,
+    taken: set[str],
+    color: bool,
+    ask: Optional[Callable[[str], str]] = None,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Walk through the papers still to decide; returns the counts of imported, approved, skipped and open papers"""
     ask = ask or input  # looked up at call time (tests replace builtins.input)
     directory = pathlib.Path.cwd()
     session = load_session(directory)
-    counts = {'imported': 0, 'skipped': 0, 'open': 0}
-    pending = [(paper, path) for paper, path in zip(papers, paths, strict=True) if path is not None and paper.status in ('ok', 'check', 'error')]
-    earlier = [(paper, path) for paper, path in pending if session.get(sha256(path), {}).get('decision') == 'skipped']
-    pending = [item for item in pending if item not in earlier]
+    counts = {'imported': 0, 'approved': 0, 'skipped': 0, 'open': 0}
+    candidates = [(paper, path) for paper, path in zip(papers, paths, strict=True) if path is not None and paper.status in ('ok', 'check', 'error')]
+    imported_now: set[str] = set()
+    approved_earlier = [(paper, path) for paper, path in candidates if session.get(sha256(path), {}).get('decision') == 'approved']
+    if approved_earlier and not dry_run:  # approved in a dry-run review: imported now, without asking again
+        print()
+        print(paint(f'Importing {len(approved_earlier)} paper(s) approved in an earlier dry-run review', 'bold', color))
+        for paper, path in approved_earlier:
+            entry = session.pop(sha256(path))
+            paper.key, paper.doi, paper.reference, paper.key_given = entry.get('key') or paper.key, entry.get('doi'), entry.get('reference'), True
+            try:
+                stored = importer(path, paper)
+            except ValueError as e:
+                print(paint(f'  ERROR {paper.file}: {e} (asked again below)', 'red', color))
+                continue
+            print(paint(f'  {paper.key}: imported -> {stored}', 'green', color))
+            imported_now.add(sha256(path))
+            counts['imported'] += 1
+    decisions = {sha256(path): session.get(sha256(path), {}).get('decision') for _, path in candidates}
+    earlier = [item for item in candidates if decisions[sha256(item[1])] == 'skipped']
+    approved = [item for item in candidates if decisions[sha256(item[1])] == 'approved']  # only left in a dry run
+    pending = [item for item in candidates if decisions[sha256(item[1])] is None and sha256(item[1]) not in imported_now]
     print()
-    print(paint(f'Review: {len(pending)} paper(s) to decide', 'bold', color) + (f', {len(earlier)} skipped in an earlier review' if earlier else '') + '  (? for help)')
+    print(
+        paint(f'Review{" (dry run: y approves, nothing is stored)" if dry_run else ""}: {len(pending)} paper(s) to decide', 'bold', color)
+        + (f', {len(earlier)} skipped earlier' if earlier else '')
+        + (f', {len(approved)} approved earlier' if approved and dry_run else '')
+        + '  (? for help)'
+    )
     for index, (paper, path) in enumerate(pending):
         print('\n'.join(block(paper, color)))
         while True:
@@ -126,6 +161,18 @@ def review(papers: list[Paper], paths: list[Optional[pathlib.Path]], lookup: Loo
                 if paper.status == 'error' or not paper.key:
                     print(paint('  not importable yet: give a DOI (d) or a citation (r), and a key (k)', 'red', color))
                     continue
+                if dry_run:
+                    cited = paper.cited
+                    session[sha256(path)] = {
+                        'decision': 'approved',
+                        'file': path.name,
+                        'key': paper.key,
+                        'doi': paper.doi or (cited.doi if cited else None),
+                        'reference': paper.reference or (cited.reference if cited else None),
+                    }
+                    print(paint(f'  approved as {paper.key} (imported by the next review without --dry-run)', 'green', color))
+                    counts['approved'] += 1
+                    break
                 try:
                     stored = importer(path, paper)
                 except ValueError as e:
@@ -138,5 +185,6 @@ def review(papers: list[Paper], paths: list[Optional[pathlib.Path]], lookup: Loo
             else:
                 print('  unknown answer (? for help)')
     save_session(directory, session)
-    print(f'Review done: {counts["imported"]} imported, {counts["skipped"]} skipped' + (f', {len(earlier)} skipped earlier (delete {SESSION} to review them again)' if earlier else ''))
+    done = f'{counts["approved"]} approved (import them: the same command without --dry-run)' if dry_run else f'{counts["imported"]} imported'
+    print(f'Review done: {done}, {counts["skipped"]} skipped' + (f', {len(earlier)} skipped earlier (delete {SESSION} to review them again)' if earlier else ''))
     return counts

@@ -73,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--checklist', metavar='FILE', help='with --literature: write the overview as a Markdown checklist')
             sub.add_argument('--new-version', action='store_true', help='with --literature: keep a file of a paper that is already in the store (same DOI or text) as another version under its key')
             sub.add_argument('--no-lookup', action='store_true', help='with --literature: do not ask Crossref (DOI from the PDF or its name only, unchecked)')
-            sub.add_argument('--dry-run', action='store_true', help='only show what would be imported')
+            sub.add_argument('-n', '--dry-run', action='store_true', help='only show what would be imported (with --review: decide now, import later)')
         elif name == 'build':
             sub.add_argument('recipe', help='recipe (YAML): original files and their selection')
             sub.add_argument('-o', '--output', required=True, help='database file to write (.h5)')

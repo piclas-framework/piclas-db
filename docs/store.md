@@ -51,7 +51,7 @@ file is taken from a spectrum name above the table (e.g. `Ar II` → `ArIon1`), 
 from `--species`. Files already in the store (same sha256) are not imported twice; a changed download of the same dataset is stored
 next to the previous one.
 
-Options: `--store`, `--species`, `--custom NAME`, `--retrieved YYYY-MM-DD`, `--dry-run`.
+Options: `--store`, `--species`, `--custom NAME`, `--retrieved YYYY-MM-DD`, `-n`/`--dry-run`.
 
 Parsers for NIFS, ATcT and the IAEA databases follow once example downloads are available; until then such files can be stored with
 `--custom`.

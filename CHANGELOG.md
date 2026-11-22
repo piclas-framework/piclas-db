@@ -3,6 +3,12 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.53.0
+
+* `import -n --review`: decide now, import later: nothing is stored, `y` approves a paper with its key, DOI and citation; the next
+  `--review` without `-n` imports the approved papers first without asking, then asks for the rest
+* `-n` as short form of `--dry-run` (the only command with a dry run is `import`)
+
 ## 0.52.0
 
 * DOI by Crossref search (ported from rename-papers 0.5): a search hit needs at least 90 % of its title words in the text (was 60 %)
