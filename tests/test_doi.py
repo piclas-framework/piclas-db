@@ -97,6 +97,8 @@ def test_wrong_article_in_download(tmp_path: pathlib.Path, monkeypatch: pytest.M
     assert any('not on the first pages' in note for note in cited.notes)
     given = doi_module.paper_citation(path, '10.8888/0000-0000/1/2/3', 'given citation')  # a given DOI is kept, with a warning
     assert given.doi == '10.8888/0000-0000/1/2/3' and given.reference == 'given citation' and 'another article' in given.notes[0]
+    unknown = doi_module.paper_citation(path, '10.0000/unknown', 'given citation')  # also when Crossref does not know it
+    assert (unknown.doi, unknown.doi_found_in) == ('10.0000/unknown', 'given') and 'not known at Crossref' in unknown.notes[0]
 
 
 def test_import_literature(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:

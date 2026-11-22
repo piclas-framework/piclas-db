@@ -10,6 +10,8 @@ feature complete, which will be released as version 1.0.0. The version is define
   value; `model: QK`; `models` lists the chemistry models with their non-reactive species; `chemistry_models` writes
   `AvailableChemistryModels,Reference`. Each reaction's reference names paper, table, page and row. Unreviewed tables need
   `--allow-unreviewed`; third bodies whose rate in the model's own paper differs from the one used are noted
+* `import --literature`: a DOI given with `--doi` is kept when Crossref does not know it (note only); the tests never ask Crossref
+  (they behaved differently with and without network)
 * `rebuild` derives the reactions instead of copying them: per reaction the rate table row with the same values (closest C,
   preferably from the paper of one of its chemistry models), else `arrhenius` with "source unknown"; `rebuild --allow-unreviewed`
 

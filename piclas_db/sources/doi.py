@@ -271,6 +271,10 @@ def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result:
     rejected = []
     for candidate, where in found[:5]:
         record = crossref(candidate)
+        if record is None and where == 'given':  # a DOI given by the user is kept: Crossref does not know every DOI
+            result.doi, result.doi_found_in = candidate, where
+            result.notes.append(f'{candidate} is not known at Crossref: check the DOI at the link')
+            break
         if record is None:
             rejected.append(f'{candidate} ({where}): not at Crossref')
             continue

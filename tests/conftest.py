@@ -10,7 +10,7 @@
 #
 # You should have received a copy of the GNU General Public License along with piclas-db. If not, see <https://www.gnu.org/licenses/>.
 # ==================================================================================================================================
-"""Shared test setup: the configuration file of the person running the tests must not influence them"""
+"""Shared test setup: neither the configuration file of the person running the tests nor the network may influence them"""
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
@@ -31,3 +31,14 @@ def no_user_configuration(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.delenv('PICLAS_DB_MIRROR', raising=False)
     monkeypatch.setenv('PICLAS_DB_USER_NAME', 'piclas-db test')
     monkeypatch.setenv('PICLAS_DB_USER_EMAIL', 'test@example.com')
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Crossref is never asked: imports behave as offline (tests of the lookup replace get_json themselves)"""
+    from piclas_db.sources import doi  # noqa: PLC0415
+
+    def unreachable(url: str, timeout: float) -> None:
+        raise doi.Unreachable('Crossref not reachable: tests run offline')
+
+    monkeypatch.setattr(doi, 'get_json', unreachable)
