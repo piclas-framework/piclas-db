@@ -134,3 +134,9 @@ def test_import_key_from_citation(tmp_path: pathlib.Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: '')
     assert main(['import', str(tmp_path / 'c.pdf'), '--literature', '--doi', '10.1/x']) == 1
     assert 'no key: first author and year unknown' in capsys.readouterr().out
+
+
+def test_tidy_title() -> None:
+    assert doi_module.tidy_title('Emission in CO 2 –N 2 gases') == 'Emission in CO2–N2 gases'
+    assert doi_module.tidy_title('Diffusion in CO<sub>2</sub>/N<sub>2</sub> Mixtures') == 'Diffusion in CO2/N2 Mixtures'
+    assert doi_module.tidy_title('Part 2: results of Table 3') == 'Part 2: results of Table 3'

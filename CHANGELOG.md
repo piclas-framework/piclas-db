@@ -3,6 +3,12 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.44.1
+
+* Citations from Crossref: markup removed from titles and subscripts of formulas joined ("CO 2 –N 2" and CO<sub>2</sub> become
+  CO2–N2)
+* `import --dry-run` reports "would be imported"; no retrieval-date hint for papers
+
 ## 0.44.0
 
 * `import --literature` without KEY: the key is the first author's family name and the year from the Crossref record

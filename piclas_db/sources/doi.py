@@ -204,7 +204,7 @@ def format_citation(record: dict) -> str:
         authors.append(' '.join(x for x in (given, str(person.get('family', ''))) if x) or str(person.get('name', '')))
     if len(authors) > 6:
         authors = [*authors[:3], 'et al.']
-    title = ' '.join(str((record.get('title') or [''])[0]).split())
+    title = record_title(record)
     journal = str((record.get('short-container-title') or record.get('container-title') or [''])[0])
     volume, issue, page = record.get('volume'), record.get('issue'), record.get('page') or record.get('article-number')
     where = journal + (f' {volume}' if volume else '') + (f'({issue})' if issue else '') + (f':{page}' if page else '')
@@ -228,7 +228,14 @@ def search(query: str, timeout: float = 15.0) -> list[dict]:
 
 
 def record_title(record: dict) -> str:
-    return ' '.join(str((record.get('title') or [''])[0]).split())
+    """Title of a Crossref record as text: markup removed, subscripts of formulas joined (CO<sub>2</sub>, 'CO 2 –N 2' -> CO2–N2)"""
+    return tidy_title(str((record.get('title') or [''])[0]))
+
+
+def tidy_title(title: str) -> str:
+    title = ' '.join(re.sub(r'<[^>]+>', '', title).split())
+    title = re.sub(r'\b((?:[A-Z][a-z]?)+) (\d{1,2})(?=[\s–\-+,:;)]|$)', r'\1\2', title)  # 'CO 2' -> 'CO2', not 'Part 2' or 'Table 2'
+    return re.sub(r'(\w) ([–\-])(?=\w)', r'\1\2', title)  # 'CO2 –N2' -> 'CO2–N2' (dash attached on one side only)
 
 
 def paper_citation(path: pathlib.Path, doi: Optional[str], reference: Optional[str], lookup: bool = True) -> Citation:

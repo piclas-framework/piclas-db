@@ -138,7 +138,7 @@ def run(args: argparse.Namespace) -> int:
             existing += 1
             continue
         label = f'{identified.provider}' + (f' {identified.kind}' if identified.kind != identified.provider else '') + f': {identified.dataset}'
-        if identified.retrieved is None and retrieved is None:
+        if identified.retrieved is None and retrieved is None and identified.provider != 'literature':  # papers: date means little
             label += ' (retrieval date unknown, use --retrieved YYYY-MM-DD)'
         if args.dry_run:
             print(f'  would import {path} ({label})')
@@ -158,7 +158,7 @@ def run(args: argparse.Namespace) -> int:
                 print(f'           {lxcat_news(store, entry)}')
         imported += 1
 
-    print(f'{imported} imported, {existing} already in the store, {skipped} skipped, {failed} failed')
+    print(f'{imported} {"would be imported" if args.dry_run else "imported"}, {existing} already in the store, {skipped} skipped, {failed} failed')
     if not args.dry_run and store.root.is_dir():
         print(f'Store: {store_status(store)}')
     return 1 if failed else 0
