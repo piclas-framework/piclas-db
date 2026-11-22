@@ -59,7 +59,7 @@ def run(args: argparse.Namespace) -> int:
     entries = store.entries()
     if store.is_repository and entries:
         store.write_index()  # also stops tracking an index.yaml that was committed by hand
-    print(f'Store: {store.root} ({len(entries)} file(s))')
+    print(f'Store: {store.root} ({len(entries)} file(s))' + ('' if store.root.is_dir() else ': does not exist yet (created by the first import)'))
     if args.commit:
         return commit_pending(store)
     if store.is_repository:

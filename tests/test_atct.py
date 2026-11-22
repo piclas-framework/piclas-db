@@ -141,6 +141,7 @@ def test_build_with_atct(api: list[str], tmp_path: pathlib.Path, monkeypatch: py
     )
     output = tmp_path / 'database.h5'
     assert main(['build', str(recipe), '-o', str(output), '--store', str(store), '--offline']) == 1  # offline: no download
+    pathlib.Path(store).mkdir(parents=True, exist_ok=True)  # a store given explicitly must exist
     assert main(['build', str(recipe), '-o', str(output), '--store', str(store)]) == 0  # downloaded automatically
     out = capsys.readouterr().out
     assert 'automatic download' in out and 'has charge 1, the name suggests 2' in out

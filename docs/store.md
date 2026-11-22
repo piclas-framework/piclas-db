@@ -13,8 +13,14 @@ database, and it is never published (see [Where the data comes from](../README.m
 
 Example: `lxcat/biagi-v7.1+phelps/ar/2026-06-01_95a5d06a.txt` for an LXCat download with the Biagi-v7.1 and Phelps data of argon.
 
-The location is `--store`, otherwise `$PICLAS_DB_STORE`, otherwise `$XDG_DATA_HOME/piclas-db/store`
-(`~/.local/share/piclas-db/store`).
+The location is `--store`, otherwise `$PICLAS_DB_STORE`, otherwise `store` in the configuration file, otherwise
+`$XDG_DATA_HOME/piclas-db/store` (`~/.local/share/piclas-db/store`).
+
+A store that is set explicitly (`--store`, `$PICLAS_DB_STORE`, configuration) but does not exist, e.g. deleted, moved or on an
+unmounted disk, is not treated as empty: commands that only read it (`store`, `build`, `rebuild`, `guide`, `plot`, `literature list`,
+...) stop with instructions (restore it with `fetch --mirror`, create it with `mkdir -p`, or set another store). Commands that add data
+(`import`, `extract`, `atct`, `literature add`/`want`) create it with a warning that it is a new, empty store, not connected to a
+private repository; dry runs create nothing. The default location is created by the first import.
 
 `meta.yaml` records the provider, kind, dataset, species, retrieval date and where it came from (file content or command line),
 the original file name, sha256, size, import time and tool version, and the provider details: for LXCat the databases with their

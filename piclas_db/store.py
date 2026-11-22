@@ -51,6 +51,33 @@ from piclas_db.sources.identify import Identified
 META_SUFFIX = '.meta.yaml'
 
 
+def store_location(argument: Optional[Union[str, pathlib.Path]] = None) -> tuple[pathlib.Path, str]:
+    """Store path and where it is set: --store, $PICLAS_DB_STORE, the configuration file, or the built-in default"""
+    from piclas_db import config  # noqa: PLC0415
+
+    if argument:
+        return pathlib.Path(argument).expanduser(), 'command line (--store)'
+    if os.environ.get('PICLAS_DB_STORE'):
+        return pathlib.Path(os.environ['PICLAS_DB_STORE']).expanduser(), '$PICLAS_DB_STORE'
+    if config.value('store'):
+        return pathlib.Path(str(config.value('store'))).expanduser(), f'configuration file {config.config_path()} (store)'
+    return default_store(), 'default'
+
+
+def missing_store(argument: Optional[Union[str, pathlib.Path]] = None) -> Optional[str]:
+    """Error message if a store that was set explicitly does not exist (a deleted or moved store must not be recreated silently);
+    None if it exists or is the default location (created by the first import)"""
+    path, origin = store_location(argument)
+    if origin == 'default' or path.is_dir():
+        return None
+    return (
+        f'the store {path} does not exist (set by {origin}).\n'
+        f'  Restore it:   piclas-db fetch --mirror <private repository>   (clones into {path})\n'
+        f'  New store:    mkdir -p {path}\n'
+        '  Other store:  piclas-db config --set store PATH   (or --store PATH, $PICLAS_DB_STORE)'
+    )
+
+
 def default_store() -> pathlib.Path:
     """$PICLAS_DB_STORE, then 'store' in the configuration file, then $XDG_DATA_HOME/piclas-db/store"""
     from piclas_db import config  # noqa: PLC0415

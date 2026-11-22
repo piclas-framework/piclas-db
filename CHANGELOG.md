@@ -3,6 +3,13 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.47.0
+
+* A store set explicitly (`--store`, `$PICLAS_DB_STORE`, configuration) that does not exist is no longer treated as empty: commands
+  that only read it stop with instructions (restore with `fetch --mirror`, `mkdir -p`, or another store); commands that add data
+  (`import`, `extract`, `atct`, `literature add`/`want`) create it with a warning; dry runs create nothing. `piclas-db store` notes a
+  default store that does not exist yet
+
 ## 0.46.1
 
 * Configuration examples use placeholders for the private repository (`git@github.com:<org>/<private-repo>.git`) and the user

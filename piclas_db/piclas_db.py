@@ -24,6 +24,7 @@ from typing import Optional
 from piclas_db.args_parser import build_parser
 from piclas_db import config
 from piclas_db.commands import COMMANDS
+from piclas_db.store import missing_store, store_location
 # ==================================================================================================================================
 
 
@@ -44,7 +45,26 @@ def main(argv: Optional[list[str]] = None) -> int:
     except config.ConfigError as e:
         print(f'ERROR: {e}')
         return 1
+
+    # A store that was set explicitly but does not exist (deleted, moved, unmounted, or new): commands that only read it stop with
+    # instructions; commands that add data create it with a warning; fetch may clone into it
+    if hasattr(args, 'store') and args.command != 'fetch':
+        problem = missing_store(args.store)
+        if problem and getattr(args, 'dry_run', False):
+            pass  # a dry run changes nothing, also not the store
+        elif problem and adds_data(args):
+            path, origin = store_location(args.store)
+            print(f'WARNING: the store {path} (set by {origin}) did not exist: created as a new, empty store, not connected to a private repository', file=sys.stderr)
+            path.mkdir(parents=True)
+        elif problem:
+            print(f'ERROR: {problem}')
+            return 1
     return COMMANDS[args.command].run(args)
+
+
+def adds_data(args: argparse.Namespace) -> bool:
+    """Commands that put files into the store (and may create it)"""
+    return args.command in ('import', 'extract', 'atct') or (args.command == 'literature' and getattr(args, 'action', None) in ('add', 'want'))
 
 
 def subparsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:

@@ -197,6 +197,7 @@ def test_combined_parts(store: Store, tmp_path: pathlib.Path, capsys: pytest.Cap
     capsys.readouterr()
     assert main(['plot', str(output), '--parts', '-o', str(tmp_path / 'parts.png')]) == 0
     assert '2 parts' in capsys.readouterr().out and (tmp_path / 'parts.png').is_file()
+    pathlib.Path(tmp_path / 'empty-store').mkdir(parents=True, exist_ok=True)  # a store given explicitly must exist
     assert main(['plot', str(output), '--parts', '--store', str(tmp_path / 'empty-store'), '-o', str(tmp_path / 'ranges.png')]) == 0
     assert 'ranges only' in capsys.readouterr().out
     arguments = ['plot', str(output), '--pair', 'H2-electron', '--key', 'H2Ion1', '-o', str(tmp_path / 'explained.png')]

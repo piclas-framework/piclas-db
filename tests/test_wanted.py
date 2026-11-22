@@ -36,6 +36,7 @@ PDF = b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>
 def test_wanted_list(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
     store = Store(tmp_path / 'store')
+    (tmp_path / 'store').mkdir()
     assert main(['literature', 'wanted']) == 0
     assert 'No papers wanted' in capsys.readouterr().out
     assert main(['literature', 'want', 'author-1990', '--reference', 'A. Author, A Book, Publisher, 1990', '--needed-for', 'rate table p. 3']) == 0

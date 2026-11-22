@@ -145,5 +145,18 @@ def test_identity(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsy
 
 def test_store_command_with_store_setting(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     write_config(tmp_path, monkeypatch, {'store': str(tmp_path / 'store')})
+    assert main(['store']) == 1  # configured but missing: an error with instructions, not an empty listing
+    out = capsys.readouterr().out
+    assert 'does not exist (set by configuration file' in out and 'mkdir -p' in out
+    (tmp_path / 'store').mkdir()
     assert main(['store']) == 0  # 'store' is a global setting, not the options of the store command
     assert 'must be a mapping' not in capsys.readouterr().err
+    assert (
+        main(
+            ['literature', 'want', 'x-2000', '--reference', 'X'],
+        )
+        == 0
+    )  # adding data works in the existing store
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'new-store'))
+    assert main(['literature', 'want', 'y-2000', '--reference', 'Y']) == 0  # a command that adds data creates a missing store
+    assert (tmp_path / 'new-store').is_dir() and 'created as a new, empty store' in capsys.readouterr().err

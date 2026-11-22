@@ -78,6 +78,7 @@ def test_guide(capsys: pytest.CaptureFixture[str], tmp_path: pathlib.Path) -> No
     assert main(['guide', 'nonsense']) == 1
     recipe = tmp_path / 'recipe.yaml'
     recipe.write_text('levels:\n  - source: nist-asd/levels/ar\n    species: Ar\n')
+    pathlib.Path(tmp_path / 'store').mkdir(parents=True, exist_ok=True)  # a store given explicitly must exist
     assert main(['guide', '--recipe', str(recipe), '--store', str(tmp_path / 'store')]) == 0
     assert 'Ar I' in capsys.readouterr().out
     (tmp_path / 'Ar_I_levels.csv').write_text(NIST_CSV)
@@ -128,6 +129,7 @@ def test_rebuild_missing_and_nothing(tmp_path: pathlib.Path, capsys: pytest.Capt
         elastic = h5.create_dataset('Xe-electron/ELASTIC', data=np.array([[0.0, 1.0e-19], [1.0, 2.0e-19]]))
         elastic.attrs['Reference'] = 'Biagi-v7.1 database, www.lxcat.net, retrieved on July 14, 2025.'
         elastic.attrs['Info'] = "{'SPECIES': 'e / Xe'}"
+    (tmp_path / 'store').mkdir()  # a store given explicitly must exist
     assert main(['rebuild', str(old), '-o', str(tmp_path / 'x.h5'), '--store', str(tmp_path / 'store'), '--offline']) == 1
     out = capsys.readouterr().out
     assert 'lxcat/biagi-v7.1/xe' in out and 'Deselect all databases' in out

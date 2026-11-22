@@ -275,6 +275,7 @@ def test_nist_automatic_download(tmp_path: pathlib.Path, monkeypatch: pytest.Mon
     recipe = tmp_path / 'recipe.yaml'
     recipe.write_text('levels:\n  - source: nist-asd/levels/txion1\n    species: TxIon1\n')
     store = tmp_path / 'store'
+    pathlib.Path(store).mkdir(parents=True, exist_ok=True)  # a store given explicitly must exist
     assert main(['build', str(recipe), '-o', str(tmp_path / 'db.h5'), '--store', str(store)]) == 0
     assert asked == ['Tx II'] and 'TxIon1' in read_database(tmp_path / 'db.h5').species
     entries = [entry for entry in Store(store).entries() if entry.relative.startswith('nist-asd/levels/txion1/')]
