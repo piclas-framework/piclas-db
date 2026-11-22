@@ -25,6 +25,7 @@ from piclas_db.literature import papers
 from piclas_db.commands.paper_report import Paper, Reporter, classify
 from piclas_db.common.spinner import Progress
 from piclas_db.sources.doi import paper_citation
+from piclas_db.sources.same_paper import SamePaper, pages
 from piclas_db.sources.identify import IdentifyError, identify
 from piclas_db import config, wanted
 from piclas_db.git import GitError
@@ -92,7 +93,8 @@ def run(args: argparse.Namespace) -> int:
     print(f'Store: {store.root}' + (' (dry run, nothing is copied)' if args.dry_run else ''))
     papers_mode = args.literature is not None
     reporter = Reporter() if papers_mode else None
-    imported = existing = skipped = failed = 0
+    imported = existing = skipped = failed = same = 0
+    same_papers: Optional[SamePaper] = None  # stored papers with their texts, read once per run
     taken: set[str] = set()  # keys given to papers of this run
     progress = Progress(len(files)) if papers_mode else None
     for number, (path, explicit) in enumerate(files):
@@ -114,15 +116,29 @@ def run(args: argparse.Namespace) -> int:
             with progress.step(number, f'{path.name}: DOI and citation (Crossref)'):
                 cited = paper_citation(path, args.doi, args.reference, lookup=not args.no_lookup)
             doi, reference = cited.doi, cited.reference
+            assert reporter is not None
+            if same_papers is None:
+                same_papers = SamePaper(store)
+            with progress.step(number, f'{path.name}: compared with the papers in the store'):
+                match = same_papers.find(path, doi)
+            if match is not None and not args.new_version:
+                info = f'same paper as {match.key} ({match.reason}), other file: {pages(path)} instead of {pages(match.entry.path)} pages'
+                reporter.add(Paper(file=str(path), status='same', key=match.key, cited=cited, message=info))
+                same += 1
+                continue
+            if match is not None:  # --new-version: another file of a stored paper, under its key, with its citation if none was found
+                if args.literature and args.literature != match.key:
+                    print(f'WARNING: {path} is the same paper as {match.key}: stored under {match.key}, not {args.literature}')
+                key = match.key
+                doi = doi or match.entry.meta.get('doi')
+                reference = reference or match.entry.meta.get('reference')
             if not (doi or reference):
-                assert reporter is not None
                 reporter.add(Paper(file=str(path), status='error', cited=cited, message='DOI and citation not found: give --doi or --reference'))
                 failed += 1
                 continue
             if not key:
                 key = cited.key(set(papers(store)) | taken)
                 if key is None:
-                    assert reporter is not None
                     reporter.add(Paper(file=str(path), status='error', cited=cited, message='no key: first author and year unknown (no Crossref record); give --literature KEY'))
                     failed += 1
                     continue
@@ -171,6 +187,8 @@ def run(args: argparse.Namespace) -> int:
             if reporter and cited is not None:
                 reporter.add(classify(str(path), identified.dataset, cited, automatic_key=not args.literature))
                 print(f'      stored {entry.relative}')
+                if same_papers is not None:
+                    same_papers.papers.append(entry)  # later files of this run are compared with it too
             else:
                 print(f'  imported {path} -> {entry.relative} ({label})')
             if identified.provider == 'literature':

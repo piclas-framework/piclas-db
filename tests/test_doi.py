@@ -130,14 +130,21 @@ def test_import_key_from_citation(tmp_path: pathlib.Path, monkeypatch: pytest.Mo
     monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
     monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: TEXT)
     monkeypatch.setattr(doi_module, 'get_json', fake_get_json)
+    second = {**RECORDS['10.9999/test.2001.42'], 'DOI': '10.9999/test.2001.43'}  # another paper of the same author and year
+    monkeypatch.setitem(RECORDS, '10.9999/test.2001.43', second)
     (tmp_path / 'a.pdf').write_bytes(PDF)
-    (tmp_path / 'b.pdf').write_bytes(PDF + b'% another copy\n')
-    assert main(['import', str(tmp_path / 'a.pdf'), str(tmp_path / 'b.pdf'), '--literature']) == 0
+    (tmp_path / 'b.pdf').write_bytes(PDF.replace(b'2001.42', b'2001.43'))
+    (tmp_path / 'c.pdf').write_bytes(PDF + b'% the first paper again, another download\n')
+    assert main(['import', str(tmp_path / 'a.pdf'), str(tmp_path / 'b.pdf'), str(tmp_path / 'c.pdf'), '--literature']) == 0
     out = capsys.readouterr().out
     assert '✓ author-2001 ' in out and '! author-2001b ' in out and 'key author-2001 is taken' in out  # the suffix is to be checked
-    assert '2 paper(s): 1 fine, 1 to check, 0 failed' in out
+    assert '≈ author-2001 ' in out and 'same paper as author-2001 (DOI 10.9999/test.2001.42)' in out  # same DOI: not imported
+    assert '3 paper(s): 1 fine, 1 to check, 0 failed, 1 same paper in another file' in out and '--literature author-2001 --new-version' in out
+    assert main(['import', str(tmp_path / 'c.pdf'), '--literature', '--new-version']) == 0  # kept as a second file of author-2001
+    assert len([e for e in Store(tmp_path / 'store').entries() if e.meta.get('dataset') == 'author-2001']) == 2
+    capsys.readouterr()
     names = sorted(e.path.name for e in Store(tmp_path / 'store').entries())
-    assert names[0].startswith('author-2001_') and names[1].startswith('author-2001b_')
+    assert names[0].startswith('author-2001_') and names[1].startswith('author-2001_') and names[2].startswith('author-2001b_')
     assert doi_module.Citation(first_author='Gökçen', year=2007).key(set()) == 'gokcen-2007'
     (tmp_path / 'c.pdf').write_bytes(PLAIN)
     monkeypatch.setattr(doi_module, 'get_json', offline)
@@ -179,3 +186,15 @@ def test_dry_run_report_and_next_steps(tmp_path: pathlib.Path, monkeypatch: pyte
     assert 'Import the 1 paper(s) found' in out and '2001-Author-Rate-Parameters.pdf' in out.split('Import the 1 paper(s) found')[1]
     assert not (tmp_path / 'store').exists()
     assert suggested_key('1997-Bourdon-Study.pdf') == 'bourdon-1997' and suggested_key('cr500501m.pdf') == 'KEY'
+
+
+def test_same_paper_by_text(tmp_path: pathlib.Path) -> None:
+    """Without DOI: the text of the first pages, with tolerance for a cover page and watermarks"""
+    from piclas_db.sources import same_paper  # noqa: PLC0415
+
+    body = ' '.join(f'word{i} sentence about collision cross sections number {i}' for i in range(120))
+    with_cover = 'Downloaded by SOME LIBRARY on 2 February 2015 terms and conditions apply ' * 5 + body
+    other = ' '.join(f'unrelated{i} text on rate coefficients of reactions {i}' for i in range(120))
+    a, b, c = (same_paper.shingles(text) for text in (body, with_cover, other))
+    assert same_paper.containment(a, b) > 0.95 and same_paper.containment(a, c) < 0.05
+    assert len(a) >= same_paper.MINIMUM

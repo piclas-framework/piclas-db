@@ -97,6 +97,20 @@ Offline (or with `--no-lookup`) the DOI from the PDF, or from a file name that a
 citation from Crossref. The paper's record keeps where the DOI and the citation came from (`doi_found_in`, `reference_from`).
 Books and old papers without DOI need `--reference` and a key (`--literature KEY`).
 
+**The same paper in another file:** a cover page added or removed by the journal, a watermark with the download date, or another
+download give another sha256. A new PDF is therefore also compared with the papers in the store: by its DOI (reliable), and for
+papers without DOI by the text of the first 8 pages (word sequences compared with tolerance; at least 70 % of the shorter text must
+be in the other; scans without text layer cannot be compared). A match is marked `≈` and not imported:
+
+```
+≈ laux-1995            laux-cut.pdf
+      same paper as laux-1995 (81% of the text of the first 8 pages), other file: 11 instead of 12 pages
+      not imported; to keep this file as another version: --literature laux-1995 --new-version
+```
+
+`--new-version` keeps the file as a further version under the paper's key (its own sha256; extraction records name the exact file,
+so page numbers stay valid). A suffixed key (`park-1993b`) is only given to a different paper of the same first author and year.
+
 **Key and file name:** `--literature` without a key takes the first author's family name and the year from Crossref (`gokcen-2007`,
 letters without accents), with `b`, `c`, ... if the key is taken. The paper is stored as `literature/<key>/<key>_<sha256[:8]>.pdf`
 (papers imported before 0.44.0 keep their names `undated_<sha>.pdf`).

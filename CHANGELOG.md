@@ -3,6 +3,13 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.50.0
+
+* `import --literature` recognizes a paper that is in the store as another file (cover page added or removed, watermark, other
+  download): same DOI, or for papers without DOI at least 70 % of the word sequences of the first 8 pages
+  (`piclas_db/sources/same_paper.py`); marked `≈` with the reason and the page counts, not imported; `--new-version` keeps the file as a
+  further version under the paper's key; suffixed keys are only given to different papers
+
 ## 0.49.1
 
 * `import --literature`: a paper already in the store (same sha256) is reported as such (`= key`) before any lookup; before, it

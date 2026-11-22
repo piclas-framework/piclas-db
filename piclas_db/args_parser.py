@@ -69,6 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--literature', nargs='?', const='', metavar='KEY', help='store a paper (PDF) under literature/KEY, e.g. yoon-2008 (without KEY: first author and year from Crossref)')
             sub.add_argument('--doi', help='with --literature: DOI of the paper (default: found in the PDF, its name or at Crossref)')
             sub.add_argument('--reference', help='with --literature: citation of the paper (default: from Crossref for the DOI)')
+            sub.add_argument('--new-version', action='store_true', help='with --literature: keep a file of a paper that is already in the store (same DOI or text) as another version under its key')
             sub.add_argument('--no-lookup', action='store_true', help='with --literature: do not ask Crossref (DOI from the PDF or its name only, unchecked)')
             sub.add_argument('--dry-run', action='store_true', help='only show what would be imported')
         elif name == 'build':

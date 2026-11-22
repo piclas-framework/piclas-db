@@ -28,13 +28,13 @@ from piclas_db.common.table import paint, use_color
 from piclas_db.sources.doi import Citation, ascii_fold
 # ==================================================================================================================================
 
-MARKS = {'ok': ('✓', 'green'), 'check': ('!', 'yellow'), 'error': ('✗', 'red'), 'exists': ('=', 'dim')}
+MARKS = {'ok': ('✓', 'green'), 'check': ('!', 'yellow'), 'error': ('✗', 'red'), 'same': ('≈', 'yellow'), 'exists': ('=', 'dim')}
 
 
 @dataclass
 class Paper:
     file: str
-    status: str  # ok, check, error, exists
+    status: str  # ok, check, error, same (the paper is in the store as another file), exists (this file is in the store)
     key: Optional[str] = None
     cited: Optional[Citation] = None
     message: Optional[str] = None  # error text or the stored file
@@ -73,6 +73,10 @@ def block(paper: Paper, color: bool) -> list[str]:
     if paper.status == 'exists':
         lines.append(f'      {paint("already in the store: " + str(paper.message), "dim", color)}')
         return lines
+    if paper.status == 'same':
+        hint = f'not imported; to keep this file as another version: --literature {paper.key} --new-version'
+        lines.extend([f'      {paint(str(paper.message), "yellow", color)}', f'      {paint(hint, "dim", color)}'])
+        return lines
     if paper.status == 'error':
         lines.append(f'      {paint(str(paper.message), "red", color)}')
         lines.extend(f'      {paint(note, "dim", color)}' for note in (cited.notes if cited else []))
@@ -105,6 +109,7 @@ def next_steps(papers: list[Paper], dry_run: bool, color: bool) -> list[str]:
         + paint(f'{counts["check"]} to check', 'yellow', color)
         + ', '
         + paint(f'{counts["error"]} failed', 'red', color)
+        + (f', {counts["same"]} same paper in another file' if counts['same'] else '')
         + (f', {counts["exists"]} already in the store' if counts['exists'] else '')
         + (' (dry run: nothing copied)' if dry_run else '')
     )
@@ -124,6 +129,17 @@ def next_steps(papers: list[Paper], dry_run: bool, color: bool) -> list[str]:
             [
                 f'Import the {len(failed)} failed paper(s) one by one, with the DOI or the citation (books, theses and reports have no DOI):',
                 *[f'    piclas-db import {quoted(p.file)} --literature {suggested_key(p.file)} ' + failed_hint(p) for p in failed],
+            ]
+        )
+    same = [p for p in papers if p.status == 'same']
+    if same:
+        steps.append(
+            [
+                (
+                    f'{len(same)} file(s) marked ≈ are papers already in the store (other download, cover page added or removed). Nothing to do,'
+                    ' unless a file is needed as well (e.g. its page numbers match an extraction): keep it as another version with'
+                ),
+                *[f'    piclas-db import {quoted(p.file)} --literature {p.key} --new-version' for p in same],
             ]
         )
     good = [p for p in papers if p.status in ('ok', 'check')]
