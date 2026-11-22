@@ -3,6 +3,11 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.49.1
+
+* `import --literature`: a paper already in the store (same sha256) is reported as such (`= key`) before any lookup; before, it
+  failed with "needs --doi or --reference" when imported again without them
+
 ## 0.49.0
 
 * `import --literature`: progress bar with counter, percentage and spinner on the terminal while the papers are looked up at

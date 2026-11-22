@@ -138,7 +138,9 @@ def test_add_errors(store: Store, tmp_path: pathlib.Path, capsys: pytest.Capture
     assert main(['literature', 'add']) == 1
     (tmp_path / 'notes.txt').write_text('x')
     assert main(['import', str(tmp_path / 'notes.txt'), '--literature', 'x', '--doi', '1']) == 1  # not a PDF
-    assert main(['import', str(tmp_path / 'paper.pdf'), '--literature', 'x']) == 1  # citation missing
+    assert main(['import', str(tmp_path / 'paper.pdf'), '--literature', 'x']) == 0  # already in the store (as test-2008): nothing to do
+    (tmp_path / 'other.pdf').write_bytes((tmp_path / 'paper.pdf').read_bytes() + b'% other\n')
+    assert main(['import', str(tmp_path / 'other.pdf'), '--literature', 'x']) == 1  # citation missing
 
 
 def test_recipe_errors(tmp_path: pathlib.Path) -> None:

@@ -103,8 +103,13 @@ def run(args: argparse.Namespace) -> int:
                 print(f'  ERROR    {path}: file not found')
             failed += 1
             continue
+        stored = store.find(sha256(path)) if reporter else None
+        if reporter and stored is not None:  # the same paper (same sha256) is in the store: no lookup, no key needed
+            reporter.add(Paper(file=str(path), status='exists', key=str(stored.meta.get('dataset')), message=str(stored.relative)))
+            existing += 1
+            continue
         doi, reference, cited, key = args.doi, args.reference, None, args.literature
-        if args.literature is not None and path.suffix.lower() == '.pdf' and store.find(sha256(path)) is None:  # duplicates: reported below, no lookup
+        if args.literature is not None and path.suffix.lower() == '.pdf':
             assert progress is not None
             with progress.step(number, f'{path.name}: DOI and citation (Crossref)'):
                 cited = paper_citation(path, args.doi, args.reference, lookup=not args.no_lookup)
@@ -123,7 +128,7 @@ def run(args: argparse.Namespace) -> int:
                     continue
                 taken.add(key)
         elif args.literature == '':
-            key = 'paper'  # not a PDF (or already stored): identify and the duplicate check report it
+            key = 'paper'  # not a PDF: identify reports it
         try:
             identified = identify(path, species=args.species, custom=args.custom, literature=key if args.literature is not None else None, doi=doi, reference=reference)
             if cited is not None:

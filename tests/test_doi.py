@@ -112,6 +112,10 @@ def test_import_literature(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPat
     assert '1 paper(s): 1 fine, 0 to check, 0 failed' in out and 'piclas-db literature list' in out
     paper = next(e for e in Store(tmp_path / 'store').entries() if e.meta.get('provider') == 'literature')
     assert paper.meta['doi'] == '10.9999/test.2001.42' and paper.meta['doi_found_in'] == 'metadata' and paper.meta['reference_from'] == 'crossref'
+    for extra in ([], ['--dry-run']):  # the same file again, without key: recognized as already stored (no lookup, no error)
+        assert main(['import', str(tmp_path / 'paper.pdf'), '--literature', *extra]) == 0
+        out = capsys.readouterr().out
+        assert '= author-2001' in out and 'already in the store: literature/author-2001/' in out and '0 failed, 1 already in the store' in out
     (tmp_path / 'other.pdf').write_bytes(PLAIN)
     monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: '')
     monkeypatch.setattr(doi_module, 'get_json', offline)
