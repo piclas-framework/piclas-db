@@ -38,6 +38,37 @@ reactions:                                 # own data, written as /Reactions/<na
 
 `@sha256` (or a prefix of it) pins the exact original file; without it the newest file of the dataset is used.
 
+### Reactions from rate tables
+
+A reaction entry with `rates` takes C, n and T_d from a rate table in the store ([literature.md](literature.md), invented
+species and values below); one entry is one `/Reactions/<name>`, shared by all chemistry models listed under `models`:
+
+```yaml
+chemistry_models:                          # written as /Reactions@AvailableChemistryModels,Reference
+  Air_7Spec_9Reac_Author2001: A. Author, J. Test 1(2):3-4, 2001. doi:10.0000/test
+reactions:
+  Tx2+M_Tx+M+Tx#1:
+    reaction: Tx2 + M -> Tx + Tx + M       # or reactants: [Tx2] and products: [Tx, Tx] (PICLas order, M/A left out)
+    rates: literature/author-2001/table2   # rate table in the store; C converted to m^3/s per molecule
+    row: '1'                               # optional: table row label
+    third_body: molecules                  # optional: row of this third body (species or molecules/atoms/others/all)
+    models:                                # chemistry model: non-reactive species (third bodies), null for none
+      Air_7Spec_9Reac_Author2001: Tx2,TxQq
+  Qq+electron_QqIon1+electron+electron#1:
+    reaction: Qq + e- -> Qq+ + e- + e-
+    arrhenius: {C: 1.0e-14, n: 0.0, Td: 1.0e5}   # PICLas units, where no table has the value
+    reference: own estimate
+    models: {Air_7Spec_9Reac_Author2001: null}
+  Tx+electron_TxIon1+electron+electron#1:
+    reaction: Tx + e- -> Tx+ + e- + e-
+    model: QK                              # ReactionModel (default TCE); QK carries no Arrhenius parameters
+    models: {Air_7Spec_9Reac_Author2001: null}
+```
+
+The reference of each reaction names the paper, table, page and row. Rate tables must be reviewed (or `--allow-unreviewed`).
+Where a model lists third bodies for which its own paper's table gives another rate than the one used, the build adds a note.
+Entries without these keys stay raw PICLas attributes, as before.
+
 ### Derived attributes: `masses` and `charges`
 
 ```yaml

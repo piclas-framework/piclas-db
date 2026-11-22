@@ -44,7 +44,8 @@ from typing import Optional
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.model import Database
-from piclas_db.store import Store
+from piclas_db.resolve import Requirement
+from piclas_db.store import Store, StoreEntry
 # ==================================================================================================================================
 
 AVOGADRO = 6.02214076e23
@@ -349,14 +350,185 @@ def stored_tables(store: Store) -> list[Table]:
         record = entry.meta.get('extraction') or {}
         if not record.get('rate_table'):
             continue
-        assignment = (record.get('quantity') or {}).get('assignment') or {}
-        tables.append(
-            Table(
-                name=f'literature/{entry.meta.get("dataset")}',
-                chemistry_model=assignment.get('chemistry_model'),
-                unit=str(((record.get('columns') or {}).get('rate') or {}).get('unit')),
-                rows=read_rate_table(entry.path.read_text(encoding='utf-8')),
-                approved=(record.get('review') or {}).get('status') == 'approved',
-            )
-        )
+        tables.append(table_from_entry(entry))
     return tables
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Reactions in recipes: built from rate tables
+# ----------------------------------------------------------------------------------------------------------------------------------
+@dataclass
+class ReactionSpec:
+    """One reaction of the database (one HDF5 entry), shared by one or more chemistry models.
+
+    TCE reactions take C, n and T_d from a rate table in the store (`rates`, the table row `row` and, where the table has a row per
+    third body, `third_body`) or from `arrhenius` (PICLas units, with `reference`); QK reactions need neither.
+    """
+
+    name: str
+    reactants: list[str]
+    products: list[str]
+    models: list[tuple[str, Optional[str]]]  # chemistry model and its non-reactive species (third bodies), None without
+    model: str = 'TCE'
+    rates: Optional[Requirement] = None
+    row: Optional[str] = None
+    third_body: Optional[str] = None
+    arrhenius: Optional[dict[str, float]] = None  # C (m^3/s per molecule), n, Td (K)
+    reference: Optional[str] = None
+
+
+REACTION_KEYS = {'reaction', 'reactants', 'products', 'model', 'rates', 'row', 'third_body', 'arrhenius', 'reference', 'models'}
+
+
+def is_reaction_spec(attributes: dict) -> bool:
+    """New-style recipe entry (from a rate table or with arrhenius), as opposed to raw PICLas attributes"""
+    return bool(set(attributes) & {'reaction', 'reactants', 'rates', 'arrhenius', 'models'})
+
+
+def parse_reaction_spec(name: str, data: dict) -> ReactionSpec:
+    unknown = set(data) - REACTION_KEYS
+    if unknown:
+        raise RateError(f'reactions/{name}: unknown keys {", ".join(sorted(unknown))} ({", ".join(sorted(REACTION_KEYS))})')
+    if data.get('reaction'):
+        reactants, products = split_reaction(str(data['reaction']))
+        reactants, products = [s for s in reactants if s not in THIRD_BODY], [s for s in products if s not in THIRD_BODY]
+    else:
+        reactants, products = [str(s) for s in data.get('reactants') or []], [str(s) for s in data.get('products') or []]
+    if not reactants or not products:
+        raise RateError(f'reactions/{name}: "reaction" (N2 + M -> N + N + M) or "reactants" and "products" required')
+    models_data = data.get('models') or {}
+    if not isinstance(models_data, dict) or not models_data:
+        raise RateError(f'reactions/{name}: "models" (chemistry model: non-reactive species or null) required')
+    models = [(str(model), None if bodies is None else (','.join(map(str, bodies)) if isinstance(bodies, list) else str(bodies))) for model, bodies in models_data.items()]
+    spec = ReactionSpec(name=name, reactants=reactants, products=products, models=models, model=str(data.get('model', 'TCE')))
+    if data.get('rates'):
+        try:
+            spec.rates = Requirement.parse(str(data['rates']))
+        except ValueError as e:
+            raise RateError(f'reactions/{name}: rates: {e}') from e
+    spec.row = None if data.get('row') is None else str(data['row'])
+    spec.third_body = None if data.get('third_body') is None else str(data['third_body'])
+    spec.reference = None if data.get('reference') is None else str(data['reference'])
+    if data.get('arrhenius') is not None:
+        values = data['arrhenius']
+        if not isinstance(values, dict) or not {'C', 'n', 'Td'} <= set(values):
+            raise RateError(f'reactions/{name}: arrhenius needs C (m^3/s), n and Td (K)')
+        spec.arrhenius = {key: float(values[key]) for key in ('C', 'n', 'Td')}
+    if spec.model == 'TCE' and (spec.rates is None) == (spec.arrhenius is None):
+        raise RateError(f'reactions/{name}: a TCE reaction needs either "rates" (a rate table) or "arrhenius" (with "reference")')
+    if spec.model != 'TCE' and (spec.rates or spec.arrhenius):
+        raise RateError(f'reactions/{name}: {spec.model} reactions carry no Arrhenius parameters')
+    return spec
+
+
+def spec_row(spec: ReactionSpec, table: Table) -> RateRow:
+    """The table row of a reaction: same reactants and products, the given row label and third body"""
+    key, explicit = canonical(spec.reactants, spec.products)
+    generic = any(bodies for _, bodies in spec.models)
+    body = spec.third_body or (str(spec.models[0][1]).split(',')[0] if generic else explicit)
+    if spec.third_body:
+        body = species_name(spec.third_body) if spec.third_body.lower() not in CLASSES else spec.third_body.lower()
+    rows = [row for row in table.rows if row.key == key and (spec.row is None or row.row == spec.row)]
+    if body in CLASSES:
+        rows = [row for row in rows if body in row.third_bodies]
+    elif body is not None and any(row.third_bodies for row in rows):
+        selected = Table(table.name, table.chemistry_model, table.unit, rows)
+        rows = rows_for(selected, key, body)
+    if not rows:
+        raise RateError(f'reactions/{spec.name}: no row in {table.name} for {key}' + (f' (row {spec.row})' if spec.row else '') + (f' with third body {body}' if body else ''))
+    return rows[0]
+
+
+def build_reaction(spec: ReactionSpec, table: Optional[Table], citation: Optional[str], notes: list[str]) -> tuple[dict[str, object], str]:
+    """PICLas attributes of a reaction and its reference; notes for third bodies whose table rate differs from the one used"""
+    attributes: dict[str, object] = {'Reactants': list(spec.reactants), 'Products': list(spec.products), 'ReactionModel': [spec.model]}
+    with_bodies = any(bodies is not None for _, bodies in spec.models)
+    attributes['ChemistryModel'] = [[model, bodies or ''] if with_bodies else [model] for model, bodies in spec.models]
+    reference = spec.reference or ''
+    if spec.model == 'TCE':
+        if table is not None:
+            row = spec_row(spec, table)
+            C, n, Td = row.prefactor(table.unit), row.n, row.Td
+            reference = f'{citation}, row {row.row}' + (' (' + ', '.join(row.third_bodies) + ')' if row.third_bodies else '')
+            key = row.key
+            for model, bodies in spec.models:
+                if not (table.chemistry_model and model.endswith('_' + table.chemistry_model)):
+                    continue  # third bodies are checked against the paper of their own model only (rebuild --explain does the rest)
+                others = []
+                for body in (bodies or '').split(','):
+                    if body and body not in row.third_bodies:
+                        candidates = rows_for(table, key, body)
+                        differences = same(candidates[0], table.unit, C, n, Td) if candidates else []
+                        if differences:
+                            others.append(f'{body} (row {candidates[0].row}: ' + '; '.join(differences) + ')')
+                if others:
+                    notes.append(f'{spec.name} ({model}): the table gives another rate for ' + ', '.join(others))
+        else:
+            assert spec.arrhenius is not None
+            C, n, Td = spec.arrhenius['C'], spec.arrhenius['n'], spec.arrhenius['Td']
+            reference = reference or 'source unknown'
+        attributes.update({'Arrhenius-Prefactor': C, 'Arrhenius-Powerfactor': n, 'Activation-Energy_K': Td})
+    return attributes, reference
+
+
+def table_from_entry(entry: StoreEntry) -> Table:
+    record = entry.meta.get('extraction') or {}
+    assignment = (record.get('quantity') or {}).get('assignment') or {}
+    return Table(
+        name=f'literature/{entry.meta.get("dataset")}',
+        chemistry_model=assignment.get('chemistry_model'),
+        unit=str(((record.get('columns') or {}).get('rate') or {}).get('unit')),
+        rows=read_rate_table(entry.path.read_text(encoding='utf-8')),
+        approved=(record.get('review') or {}).get('status') == 'approved',
+    )
+
+
+def specs_from_database(database: Database, tables: list[Table]) -> tuple[dict[str, ReactionSpec], dict[str, str], list[str]]:
+    """Reaction specs for every reaction of an existing database (rebuild): a rate table row with the same C, n and T_d (preferably
+    from the paper of one of the reaction's chemistry models), else the database's own values with 'source unknown'"""
+    specs: dict[str, ReactionSpec] = {}
+    notes: list[str] = []
+    for name, reaction in database.reactions.items():
+        attributes = reaction.attributes
+        reactants, products = [str(s) for s in as_list(attributes.get('Reactants'))], [str(s) for s in as_list(attributes.get('Products'))]
+        models = []
+        for model in as_list(attributes.get('ChemistryModel')):
+            columns = [str(value) for value in model] if isinstance(model, (list, tuple)) else [str(model)]
+            models.append((columns[0], columns[1] if len(columns) > 1 else None))
+        value = attributes.get('ReactionModel')
+        kind = str(value) if isinstance(value, str) else str((as_list(value) or ['TCE'])[0])
+        spec = ReactionSpec(name=name, reactants=reactants, products=products, models=models, model=kind)
+        if kind == 'TCE':
+            C, n, Td = (as_float(attributes.get(key)) for key in ('Arrhenius-Prefactor', 'Arrhenius-Powerfactor', 'Activation-Energy_K'))
+            key, explicit = canonical(reactants, products)
+            found = [(table, row) for table in tables for row in table.rows if row.key == key and not same(row, table.unit, C, n, Td)]
+            own_paper = [(table, row) for table, row in found if table.chemistry_model and any(model.endswith('_' + table.chemistry_model) for model, _ in models)]
+            if own_paper or found:
+                table, row = min(own_paper or found, key=lambda item: abs(item[1].prefactor(item[0].unit) / C - 1.0))  # the closest C
+                spec.rates, spec.row = Requirement.parse(table.name), row.row
+                if row.third_bodies:
+                    bodies = [b for _, listed in models for b in (listed or '').split(',') if b]
+                    spec.third_body = explicit if explicit in row.third_bodies else next((b for b in bodies if b in row.third_bodies), row.third_bodies[0])
+                if not own_paper:
+                    notes.append(f'{name}: values from {table.name} row {row.row}, not from the paper of its chemistry models')
+            else:
+                spec.arrhenius = {'C': C, 'n': n, 'Td': Td}
+                spec.reference = 'source unknown (in no rate table of the store)'
+        specs[name] = spec
+    references = as_list(database.attributes.get('Reactions@AvailableChemistryModels,Reference'))
+    models_references = {str(item[0]): str(item[1]) for item in references if isinstance(item, (list, tuple)) and len(item) > 1}
+    return specs, models_references, notes
+
+
+def spec_yaml(spec: ReactionSpec) -> dict[str, object]:
+    """Recipe entry of a reaction (inverse of parse_reaction_spec)"""
+    data: dict[str, object] = {'reactants': spec.reactants, 'products': spec.products}
+    if spec.model != 'TCE':
+        data['model'] = spec.model
+    if spec.rates is not None:
+        data['rates'] = str(spec.rates)
+    for key in ('row', 'third_body', 'arrhenius', 'reference'):
+        if getattr(spec, key) is not None:
+            data[key] = getattr(spec, key)
+    data['models'] = dict(spec.models)
+    return data

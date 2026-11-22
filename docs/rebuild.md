@@ -30,8 +30,12 @@ If the old file was built by piclas-db, its embedded recipe is used (see the pro
    * if a matching file is in the store, the recipe pins it with its sha256
 2. **Locate the original files**: local store, private repository; missing files are listed with the download guide, and
    rebuild stops (import them and run rebuild again).
+   * reactions: the rate table row with the same C, n and T_d (the table closest in C, preferably the paper of one of the
+     reaction's chemistry models); reactions in no table keep their values as `arrhenius` with "source unknown"; QK reactions
+     and the references of the chemistry models are taken over
 3. **Build** the database from the recipe. Everything that cannot be rebuilt (no usable provenance), and species attributes,
-   reactions, diffusion and surface data, is copied from the old file and listed as `copied (not rebuilt)`.
+   diffusion and surface data, is copied from the old file and listed as `copied (not rebuilt)`. `--allow-unreviewed` uses rate
+   tables and extractions that are not reviewed yet.
 4. **Compare** old and new file as `piclas-db diff` does.
 
 The derived recipe can be edited (e.g. to add the provenance an old file is missing) and built again with `piclas-db build`.

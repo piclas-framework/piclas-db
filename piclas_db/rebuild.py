@@ -20,8 +20,11 @@ The provenance stored in an old file is used to find out which original data it 
   downloads of the store (the update time is unique per LXCat process)
 * electronic levels with a NIST reference, or all levels with --levels-from-nist -> NIST ASD levels of the species
 
-Everything else cannot be rebuilt automatically and is listed. Species attributes, reactions, diffusion and surface data are not
-derived from original files yet; rebuild copies them from the old file.
+* reactions -> the rate table row (literature extraction) with the same C, n and T_d, preferably from the paper of one of the
+  reaction's chemistry models; reactions in no table keep their values as 'arrhenius' with 'source unknown'
+
+Everything else cannot be rebuilt automatically and is listed. Species attributes, diffusion and surface data are not derived from
+original files yet; rebuild copies them from the old file.
 """
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -180,6 +183,12 @@ def recipe_yaml(recipe: Recipe, unresolved: list[str]) -> dict[str, object]:
         data['masses'] = recipe.masses
     if recipe.charges != 'data':
         data['charges'] = recipe.charges
+    if recipe.chemistry_models:
+        data['chemistry_models'] = dict(recipe.chemistry_models)
+    if recipe.reaction_specs:
+        from piclas_db.rates import spec_yaml  # noqa: PLC0415
+
+        data['reactions'] = {name: spec_yaml(spec) for name, spec in recipe.reaction_specs.items()}
     if unresolved:
         data['notes'] = ['No usable provenance in the old file (rebuilt only if the selected original data contain them):', *unresolved]
     return data

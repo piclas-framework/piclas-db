@@ -61,12 +61,15 @@ def copy_not_rebuilt(old: Database, new: Database) -> list[str]:
             if (xsec.group, xsec.key) not in present and not (xsec.group is None and xsec.kind in kinds):
                 target_pair.cross_sections.append(copy.deepcopy(xsec))
                 copied.append(f'/Cross-Sections/{name}/' + (f'{xsec.group}/' if xsec.group else '') + xsec.key)
-    for attribute in ('reactions', 'surface'):
-        getattr(new, attribute).update(copy.deepcopy(getattr(old, attribute)))
+    missing_reactions = [name for name in old.reactions if name not in new.reactions]
+    for name in missing_reactions:
+        new.reactions[name] = copy.deepcopy(old.reactions[name])
+    new.surface.update(copy.deepcopy(old.surface))
     new.diffusion = copy.deepcopy(old.diffusion)
-    new.attributes = copy.deepcopy(old.attributes)
-    if old.reactions:
-        copied.append(f'{len(old.reactions)} reaction(s)')
+    for key, value in old.attributes.items():
+        new.attributes.setdefault(key, copy.deepcopy(value))
+    if missing_reactions:
+        copied.append(f'{len(missing_reactions)} reaction(s)')
     if old.diffusion or old.surface:
         copied.append('diffusion and surface data')
     return copied
@@ -140,6 +143,10 @@ def run(args: argparse.Namespace) -> int:
             origin = f'Recipe embedded in {args.source} (piclas-db {embedded.version}, {embedded.created})'
         else:
             derivation = derive(old, store, levels_from_nist=args.levels_from_nist)
+            if old.reactions:
+                specs, models, notes = rates.specs_from_database(old, rates.stored_tables(store))
+                derivation.recipe.reaction_specs, derivation.recipe.chemistry_models = specs, models
+                derivation.unresolved.extend(notes)
             recipe_text = yaml.safe_dump(recipe_yaml(derivation.recipe, derivation.unresolved), sort_keys=False, allow_unicode=True, width=1000)
             origin = f'Recipe derived from {args.source}'
         recipe_file.write_text(recipe_text)
@@ -159,14 +166,14 @@ def run(args: argparse.Namespace) -> int:
             print()
         print(f'piclas-db import --source-dir ~/Downloads && piclas-db rebuild {args.source} -o {output}')
         return 1
-    if not derivation.recipe.requirements:
+    if not derivation.recipe.requirements and not derivation.recipe.reaction_specs:
         print('Nothing in the file can be rebuilt from original files (no usable provenance):')
         for line in derivation.unresolved:
             print(f'  {line}')
         return 1
 
     try:
-        new, report = build(derivation.recipe, resolutions)
+        new, report = build(derivation.recipe, resolutions, allow_unreviewed=args.allow_unreviewed, store=store)
     except BuildError as e:
         print(f'ERROR: {e}')
         return 1

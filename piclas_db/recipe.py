@@ -63,6 +63,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.common.names import name_problems
 from piclas_db.model import XSecKind
+from piclas_db.rates import RateError, ReactionSpec, is_reaction_spec, parse_reaction_spec
 from piclas_db.resolve import Requirement
 # ==================================================================================================================================
 
@@ -122,6 +123,8 @@ class Recipe:
     own_data: list[Requirement] = field(default_factory=list)  # own/<name>: PICLas parameters of species, from the store
     species: dict[str, dict[str, object]] = field(default_factory=dict)  # own data: species attributes
     reactions: dict[str, dict[str, object]] = field(default_factory=dict)  # own data: reaction attributes
+    reaction_specs: dict[str, ReactionSpec] = field(default_factory=dict)  # reactions from rate tables or with arrhenius (rates.py)
+    chemistry_models: dict[str, str] = field(default_factory=dict)  # name -> reference (AvailableChemistryModels)
     masses: str = 'record'  # 'composition': MassIC of molecules and ions from their atoms (piclas_db/derive.py)
     charges: str = 'data'  # 'name': ChargeIC from the name
 
@@ -137,6 +140,9 @@ class Recipe:
                 unique.setdefault(str(part), part)
         for requirement in self.own_data:
             unique.setdefault(str(requirement), requirement)
+        for spec in self.reaction_specs.values():
+            if spec.rates is not None:
+                unique.setdefault(str(spec.rates), spec.rates)
         for attributes in self.species.values():
             if attributes.get('atct'):
                 requirement = atct_requirement(str(attributes['atct']))
@@ -168,7 +174,7 @@ def parse_recipe(text: str, path: str) -> Recipe:
         raise RecipeError(f'cannot read recipe {path}: {e}') from e
     if not isinstance(data, dict):
         raise RecipeError(f'{path}: a recipe is a mapping with cross_sections, levels, species and reactions')
-    unknown = set(data) - {'cross_sections', 'levels', 'literature', 'species', 'reactions', 'own_data', 'masses', 'charges', 'description', 'notes'}
+    unknown = set(data) - {'cross_sections', 'levels', 'literature', 'species', 'reactions', 'chemistry_models', 'own_data', 'masses', 'charges', 'description', 'notes'}
     if unknown:
         raise RecipeError(f'{path}: unknown sections {", ".join(sorted(unknown))}')
 
@@ -257,5 +263,17 @@ def parse_recipe(text: str, path: str) -> Recipe:
         problems = name_problems(values, section)
         if problems:
             raise RecipeError('; '.join(problems))
+        if section == 'reactions':
+            for name, attributes in list(values.items()):
+                if is_reaction_spec(attributes):
+                    try:
+                        recipe.reaction_specs[name] = parse_reaction_spec(name, attributes)
+                    except RateError as e:
+                        raise RecipeError(str(e)) from e
+                    del values[name]
         setattr(recipe, section, values)
+    models = data.get('chemistry_models') or {}
+    if not isinstance(models, dict):
+        raise RecipeError('chemistry_models: mapping of model names to references required')
+    recipe.chemistry_models = {str(name): str(reference) for name, reference in models.items()}
     return recipe

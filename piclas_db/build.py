@@ -514,4 +514,39 @@ def build(recipe: Recipe, resolutions: list[Resolution], allow_unreviewed: bool 
     for name, attributes in recipe.reactions.items():
         database.reactions[name] = Reaction(name=name, attributes=dict(attributes), provenance=Provenance(reference=f'recipe {recipe.path}'))
         report.added.append(f'/Reactions/{name} (from the recipe)')
+    add_reactions(database, recipe, entries, report, allow_unreviewed)
     return database, report
+
+
+def add_reactions(database: Database, recipe: Recipe, entries: dict[str, Optional[StoreEntry]], report: BuildReport, allow_unreviewed: bool) -> None:
+    """Reactions of the recipe from rate tables (or with own Arrhenius parameters) and the references of the chemistry models"""
+    from piclas_db import rates  # noqa: PLC0415
+
+    tables: dict[str, tuple[rates.Table, str]] = {}
+    for name, spec in recipe.reaction_specs.items():
+        table, cited = None, None
+        if spec.rates is not None:
+            label = str(spec.rates)
+            if label not in tables:
+                entry = entries[label]
+                assert entry is not None
+                record = entry.meta.get('extraction') or {}
+                if not record.get('rate_table'):
+                    raise BuildError(f'reactions/{name}: {label} is no rate table')
+                status = (record.get('review') or {}).get('status', 'pending')
+                if status == 'rejected' or (status != 'approved' and not allow_unreviewed):
+                    raise BuildError(f'{label}: rate table is {status} (review it with piclas-db literature review, or build with --allow-unreviewed)')
+                tables[label] = (rates.table_from_entry(entry), citation(record))
+            table, cited = tables[label]
+        try:
+            attributes, reference = rates.build_reaction(spec, table, cited, report.notes)
+        except rates.RateError as e:
+            raise BuildError(str(e)) from e
+        database.reactions[name] = Reaction(name=name, attributes=attributes, provenance=Provenance(reference=reference))
+        report.added.append(f'/Reactions/{name} ({spec.rates or ("QK" if spec.model != "TCE" else "arrhenius in the recipe")})')
+    if recipe.chemistry_models:
+        database.attributes['Reactions@AvailableChemistryModels,Reference'] = [[name, reference] for name, reference in recipe.chemistry_models.items()]
+    used = {model for spec in recipe.reaction_specs.values() for model, _ in spec.models}
+    missing = sorted(used - set(recipe.chemistry_models))
+    if missing and recipe.reaction_specs:
+        report.notes.append('chemistry models without reference (recipe chemistry_models): ' + ', '.join(missing))

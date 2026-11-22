@@ -108,3 +108,56 @@ def test_literature_add_and_rebuild_explain(tmp_path: pathlib.Path, monkeypatch:
     record_file.write_text(yaml.safe_dump({**record, 'name': 'rates-bad'}))
     assert main(['literature', 'add', str(record_file)]) == 1
     assert 'C must be positive' in capsys.readouterr().out
+
+
+def test_build_reactions_from_rate_tables(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """recipe reactions: from a rate table (third body by row), with own Arrhenius parameters, QK; then derived back (rebuild)"""
+    from piclas_db.readers import read_database  # noqa: PLC0415
+
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    (tmp_path / 'paper.pdf').write_bytes(PDF)
+    assert main(['import', str(tmp_path / 'paper.pdf'), '--literature', 'test-2008', '--doi', '10.0000/test', '--reference', 'A. Author, J. Test 1, 1 (2008)']) == 0
+    assert main(['literature', 'template', 'test-2008', 'rates', '--page', '3', '--table', '2', '--rates', '-o', str(tmp_path / 'work')]) == 0
+    record_file = tmp_path / 'work' / 'rates.extraction.yaml'
+    record = yaml.safe_load(record_file.read_text())
+    record['quantity']['assignment']['chemistry_model'] = 'Test2008'
+    record['created']['by'] = 'tester'
+    record_file.write_text(yaml.safe_dump(record))
+    (tmp_path / 'work' / 'rates.csv').write_text((tmp_path / 'work' / 'rates.csv').read_text() + ROWS)
+    assert main(['literature', 'add', str(record_file)]) == 0
+    recipe = {
+        'chemistry_models': {'Set_7Spec_3Reac_Test2008': 'A. Author, J. Test 1, 1 (2008)'},
+        'reactions': {
+            'Tx2+M_Tx+M+Tx#1': {'reaction': 'Tx2 + M -> Tx + Tx + M', 'rates': 'literature/test-2008/rates', 'row': '1', 'third_body': 'molecules', 'models': {'Set_7Spec_3Reac_Test2008': 'Tx2,TxQq'}},
+            'Tx2+Qq_TxQq+Tx#1': {'reactants': ['Tx2', 'Qq'], 'products': ['TxQq', 'Tx'], 'rates': 'literature/test-2008/rates', 'models': {'Set_7Spec_3Reac_Test2008': None}},
+            'Qq+electron_QqIon1+electron+electron#1': {
+                'reaction': 'Qq + e- -> Qq+ + e- + e-',
+                'arrhenius': {'C': 1.0e-14, 'n': 0.0, 'Td': 1.0e5},
+                'reference': 'own estimate',
+                'models': {'Set_7Spec_3Reac_Test2008': None},
+            },
+            'Tx+electron_TxIon1+electron+electron#1': {'reaction': 'Tx + e- -> Tx+ + e- + e-', 'model': 'QK', 'models': {'Set_7Spec_3Reac_Test2008': None}},
+        },
+    }
+    (tmp_path / 'recipe.yaml').write_text(yaml.safe_dump(recipe))
+    assert main(['build', str(tmp_path / 'recipe.yaml'), '-o', str(tmp_path / 'out.h5')]) == 1  # the table is not reviewed
+    assert 'rate table is pending' in capsys.readouterr().out
+    assert main(['build', str(tmp_path / 'recipe.yaml'), '-o', str(tmp_path / 'out.h5'), '--allow-unreviewed']) == 0
+    db = read_database(tmp_path / 'out.h5')
+    dissociation = db.reactions['Tx2+M_Tx+M+Tx#1']
+    assert dissociation.attributes['Arrhenius-Prefactor'] == pytest.approx(7.0e21 * TO_SI)
+    assert dissociation.attributes['Reactants'] == ['Tx2'] and dissociation.attributes['ChemistryModel'] == [['Set_7Spec_3Reac_Test2008', 'Tx2,TxQq']]
+    assert 'row 1 (molecules)' in str(dissociation.provenance.reference)
+    assert db.reactions['Tx2+Qq_TxQq+Tx#1'].attributes['Activation-Energy_K'] == pytest.approx(38000.0)
+    assert db.reactions['Qq+electron_QqIon1+electron+electron#1'].provenance.reference == 'own estimate'
+    assert 'Arrhenius-Prefactor' not in db.reactions['Tx+electron_TxIon1+electron+electron#1'].attributes
+    assert db.attributes['Reactions@AvailableChemistryModels,Reference'] == [['Set_7Spec_3Reac_Test2008', 'A. Author, J. Test 1, 1 (2008)']]
+
+    specs, models, notes = rates.specs_from_database(db, rates.stored_tables(Store(tmp_path / 'store')))
+    assert (specs['Tx2+M_Tx+M+Tx#1'].rates is not None, specs['Tx2+M_Tx+M+Tx#1'].row, specs['Tx2+M_Tx+M+Tx#1'].third_body) == (True, '1', 'molecules')
+    assert specs['Qq+electron_QqIon1+electron+electron#1'].arrhenius == {'C': 1.0e-14, 'n': 0.0, 'Td': 1.0e5}
+    assert specs['Tx+electron_TxIon1+electron+electron#1'].model == 'QK' and models == {'Set_7Spec_3Reac_Test2008': 'A. Author, J. Test 1, 1 (2008)'} and not notes
+    again = rates.parse_reaction_spec('Tx2+M_Tx+M+Tx#1', rates.spec_yaml(specs['Tx2+M_Tx+M+Tx#1']))
+    assert again == specs['Tx2+M_Tx+M+Tx#1']
+    with pytest.raises(rates.RateError, match='either "rates"'):
+        rates.parse_reaction_spec('X', {'reaction': 'Tx + Qq -> TxQq', 'models': {'M1': None}})

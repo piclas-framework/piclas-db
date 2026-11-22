@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.45.0
+
+* Reactions in recipes from rate tables: an entry with `rates` (rate table in the store, optional `row` and `third_body`) takes C, n
+  and T_d from the table (C converted to m³/s per molecule); `arrhenius` (PICLas units, with `reference`) where no table has the
+  value; `model: QK`; `models` lists the chemistry models with their non-reactive species; `chemistry_models` writes
+  `AvailableChemistryModels,Reference`. Each reaction's reference names paper, table, page and row. Unreviewed tables need
+  `--allow-unreviewed`; third bodies whose rate in the model's own paper differs from the one used are noted
+* `rebuild` derives the reactions instead of copying them: per reaction the rate table row with the same values (closest C,
+  preferably from the paper of one of its chemistry models), else `arrhenius` with "source unknown"; `rebuild --allow-unreviewed`
+
 ## 0.44.1
 
 * Citations from Crossref: markup removed from titles and subscripts of formulas joined ("CO 2 –N 2" and CO<sub>2</sub> become
