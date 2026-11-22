@@ -11,14 +11,14 @@ Location: `~/.config/piclas-db/config.yaml` (`$XDG_CONFIG_HOME/piclas-db/config.
 
 ```yaml
 user:                        # who adds data: required for import, extract and literature add/review (like git config user.*)
-  name: Stephen Copplestone
+  name: Your Name
   email: stephen@example.org
-store: ~/data/piclas-db-store                                   # local store of original files
-mirror: git@github.com:piclas-framework/piclas-db-sources.git   # private source repository
+store: ~/piclas-db-store                                        # local store of original files
+mirror: git@github.com:<org>/<private-repo>.git   # private source repository
 extract:                     # defaults for the options of a command: option names as on the command line ('-' or '_')
-  by: Stephen Copplestone
+  by: Your Name
 literature:
-  reviewer: Stephen Copplestone
+  reviewer: Your Name
 reservoir:
   collision-probability: 0.01
   tolerance: 0.05

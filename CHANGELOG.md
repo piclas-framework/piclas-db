@@ -3,6 +3,11 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.46.1
+
+* Configuration examples use placeholders for the private repository (`git@github.com:<org>/<private-repo>.git`) and the user
+  name (`Your Name`)
+
 ## 0.46.0
 
 * Wanted papers (`piclas_db/wanted.py`): `literature want KEY --reference ... [--doi] [--needed-for] [--note]`, `literature wanted`,

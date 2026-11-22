@@ -14,12 +14,12 @@
 
     ~/.config/piclas-db/config.yaml   ($XDG_CONFIG_HOME/piclas-db/config.yaml, or the file named by $PICLAS_DB_CONFIG)
 
-    store: ~/data/piclas-db-store
-    mirror: git@github.com:piclas-framework/piclas-db-sources.git
+    store: ~/piclas-db-store
+    mirror: git@github.com:<org>/<private-repo>.git
     extract:                # defaults for the options of a command (option names as on the command line, '-' or '_')
-      by: Stephen Copplestone
+      by: Your Name
     literature:
-      reviewer: Stephen Copplestone
+      reviewer: Your Name
     reservoir:
       collision-probability: 0.01
 
@@ -48,7 +48,7 @@ TEMPLATE = """# piclas-db configuration (see 'piclas-db config --help'); command
 # user:                                        # who adds data (imports, extractions, reviews), like git config user.*
 #   name: Your Name
 #   email: you@example.org
-# store: ~/data/piclas-db-store                 # local store of original files
+# store: ~/piclas-db-store                      # local store of original files
 # mirror: git@github.com:<org>/<private-repo>.git   # private source repository
 # extract:
 #   by: Your Name                              # who extracts data from papers (extraction records)
