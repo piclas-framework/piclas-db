@@ -27,6 +27,7 @@ import pathlib
 import re
 import shutil
 import subprocess
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -42,7 +43,8 @@ from piclas_db.common.common_vars import Common
 
 DOI_PATTERN = re.compile(r'\b(10\.\d{4,9}/[^\s"<>{}\[\]]+)', re.IGNORECASE)
 CROSSREF = 'https://api.crossref.org/works/'
-TITLE_MATCH = 0.6  # share of the title's words that must appear in the first pages
+TITLE_MATCH = 0.6  # share of the title's words that must appear in the first pages (DOI found in the PDF or its name)
+SEARCH_MATCH = 0.9  # the same for a Crossref search hit, which must also have its first author in the text
 
 
 @dataclass
@@ -71,11 +73,39 @@ class Citation:
         return f'https://doi.org/{self.doi}' if self.doi else None
 
 
-def ascii_fold(text: str) -> str:
-    """Gökçen -> Gokcen, Müller -> Muller (letters without accents)"""
-    import unicodedata  # noqa: PLC0415
+UMLAUTS = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss'}
 
-    return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+
+def ascii_fold(text: str) -> str:
+    """Letters without accents, umlauts spelled out: Müller -> Mueller, MÜLLER -> MUELLER, Gökçen -> Goekcen, Gonçalves -> Goncalves.
+    The text is NFC-normalized first, so a decomposed ü (u + combining diaeresis) is spelled out too."""
+
+    def spell(match: re.Match[str]) -> str:
+        word = match.group(0)
+        spelled = ''.join(UMLAUTS.get(char, char) for char in word)
+        return spelled.upper() if word.isupper() else spelled
+
+    composed = re.sub(r'\w+', spell, unicodedata.normalize('NFC', text))
+    return unicodedata.normalize('NFKD', composed).encode('ascii', 'ignore').decode('ascii')
+
+
+def ascii_words(text: str) -> list[str]:
+    """Words with umlauts spelled out (Müller -> Mueller)"""
+    return re.findall(r'[A-Za-z0-9]+', ascii_fold(text))
+
+
+def plain_words(text: str) -> list[str]:
+    """Words with all accents dropped (Müller -> Muller)"""
+    return re.findall(r'[A-Za-z0-9]+', unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii'))
+
+
+def author_found(record: dict, text: str) -> bool:
+    """The first author's family name (all its parts of 2+ letters) in the text, compared in both spellings (Mueller and Muller)"""
+    authors = record.get('author') or []
+    family = str(authors[0].get('family') or authors[0].get('name') or '') if authors else ''
+    haystack = {word.lower() for word in ascii_words(text) + plain_words(text)}
+    spellings = [[word.lower() for word in words(family) if len(word) > 1] for words in (ascii_words, plain_words)]
+    return any(names and all(name in haystack for name in names) for names in spellings)
 
 
 def record_year(record: dict) -> Optional[int]:
@@ -295,7 +325,8 @@ def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result:
         lines = [line.strip() for line in text.splitlines() if len(line.strip()) > 15][:6] if has_text else [haystack]
         for record in search(' '.join(lines)):
             title = record_title(record)
-            if title and title_found(title, haystack) >= TITLE_MATCH and record.get('DOI'):
+            needed = SEARCH_MATCH if has_text else TITLE_MATCH  # a scan: only the file name to compare with
+            if title and title_found(title, haystack) >= needed and author_found(record, haystack) and record.get('DOI'):
                 result.doi, result.doi_found_in, result.title = str(record['DOI']), 'Crossref search', title
                 result.first_author, result.year = record_author(record), record_year(record)
                 result.notes.append('DOI found by searching Crossref for the first lines of the PDF: check it at the link')

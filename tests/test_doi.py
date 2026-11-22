@@ -145,7 +145,8 @@ def test_import_key_from_citation(tmp_path: pathlib.Path, monkeypatch: pytest.Mo
     capsys.readouterr()
     names = sorted(e.path.name for e in Store(tmp_path / 'store').entries())
     assert names[0].startswith('author-2001_') and names[1].startswith('author-2001_') and names[2].startswith('author-2001b_')
-    assert doi_module.Citation(first_author='Gökçen', year=2007).key(set()) == 'gokcen-2007'
+    assert doi_module.Citation(first_author='Gökçen', year=2007).key(set()) == 'goekcen-2007'  # umlaut spelled out, cedilla dropped
+    assert doi_module.Citation(first_author='Müller', year=1990).key(set()) == 'mueller-1990'
     (tmp_path / 'c.pdf').write_bytes(PLAIN)
     monkeypatch.setattr(doi_module, 'get_json', offline)
     monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: '')
@@ -233,3 +234,31 @@ def test_review(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys:
     assert sorted(e.meta['dataset'] for e in Store(tmp_path / 'store').entries()) == ['author-2001', 'laux-1995']
     monkeypatch.setattr('sys.stdin.isatty', lambda: False)
     assert main(['import', *files, '--literature', '--review']) == 1  # not in a terminal
+
+
+LOFTHOUSE = """NONEQUILIBRIUM HYPERSONIC AEROTHERMODYNAMICS USING THE DIRECT SIMULATION MONTE CARLO AND NAVIER-STOKES MODELS
+by Andrew J. Lofthouse
+A dissertation submitted in partial fulfillment of the requirements for the degree of Doctor of Philosophy
+(Aerospace Engineering) in The University of Michigan 2008
+Doctoral Committee: Professor Iain D. Boyd, Chair
+"""
+BOYD = {
+    'DOI': '10.2514/5.9781624103292.0045.0102',
+    'title': ['Computation of Hypersonic Nonequilibrium Flows Using the Direct Simulation Monte Carlo Method'],
+    'author': [{'given': 'Iain D.', 'family': 'Boyd'}],
+    'issued': {'date-parts': [[2015]]},
+}
+
+
+def test_search_needs_whole_title_and_author(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Real false match: Lofthouse's dissertation and Boyd's chapter share 7 of 10 title words, and Boyd is on the page as chair"""
+    path = tmp_path / 'thesis.pdf'
+    path.write_bytes(PLAIN)
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: LOFTHOUSE)
+    monkeypatch.setattr(doi_module, 'get_json', lambda url, timeout: {'items': [BOYD]} if 'query.bibliographic' in url else None)
+    assert doi_module.title_found(doi_module.record_title(BOYD), LOFTHOUSE) >= doi_module.TITLE_MATCH  # the old rule would take it
+    cited = doi_module.paper_citation(path, None, None)
+    assert cited.doi is None and cited.reference is None
+    record = {'author': [{'family': 'Müller'}]}
+    assert doi_module.author_found(record, 'H. Muller') and doi_module.author_found(record, 'H. MUELLER') and not doi_module.author_found(record, 'H. Miller')
+    assert doi_module.ascii_fold('Mu\u0308ller MÜLLER Straße') == 'Mueller MUELLER Strasse'  # decomposed ü, all caps, ß

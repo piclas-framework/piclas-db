@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.52.0
+
+* DOI by Crossref search (ported from rename-papers 0.5): a search hit needs at least 90 % of its title words in the text (was 60 %)
+  and the first author's family name there, compared with umlauts spelled out and with accents dropped (`author_found`); DOIs found
+  in the PDF or its name keep 60 %; for scans the file name is compared (60 %, with the author). Fixes a real false match: a
+  dissertation whose title page names the author of a chapter with a similar title (7 of 10 title words)
+* Keys from authors: umlauts are spelled out (`ä ö ü ß` → `ae oe ue ss`, all-caps names stay all caps, decomposed umlauts included),
+  other accents dropped: Müller → `mueller-1990`, Gökçen → `goekcen-2007` (was `muller-1990`, `gokcen-2007`). Keys of papers already
+  in the store do not change; a new automatic key may differ from an older one of the same author
+
 ## 0.51.0
 
 * `import --literature`: numbered blocks (`[7/18]`) with separator lines and, after the last one, an overview table with one line per

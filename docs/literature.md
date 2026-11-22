@@ -129,8 +129,8 @@ be in the other; scans without text layer cannot be compared). A match is marked
 `--new-version` keeps the file as a further version under the paper's key (its own sha256; extraction records name the exact file,
 so page numbers stay valid). A suffixed key (`park-1993b`) is only given to a different paper of the same first author and year.
 
-**Key and file name:** `--literature` without a key takes the first author's family name and the year from Crossref (`gokcen-2007`,
-letters without accents), with `b`, `c`, ... if the key is taken. The paper is stored as `literature/<key>/<key>_<sha256[:8]>.pdf`
+**Key and file name:** `--literature` without a key takes the first author's family name and the year from Crossref (umlauts
+spelled out, other accents dropped: Müller → `mueller-1990`, Gökçen → `goekcen-2007`), with `b`, `c`, ... if the key is taken. The paper is stored as `literature/<key>/<key>_<sha256[:8]>.pdf`
 (papers imported before 0.44.0 keep their names `undated_<sha>.pdf`).
 
 ## Wanted papers
