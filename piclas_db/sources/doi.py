@@ -52,11 +52,43 @@ class Citation:
     reference: Optional[str] = None
     reference_from: Optional[str] = None  # crossref, given
     title: Optional[str] = None
+    first_author: Optional[str] = None  # family name of the first author (Crossref)
+    year: Optional[int] = None
     notes: list[str] = field(default_factory=list)  # warnings for the user
+
+    def key(self, taken: set[str]) -> Optional[str]:
+        """Literature key 'author-year' (ASCII, lower case), with b, c, ... if taken; None without author or year"""
+        if not (self.first_author and self.year):
+            return None
+        base = re.sub(r'[^a-z0-9]+', '-', ascii_fold(self.first_author).lower()).strip('-') + f'-{self.year}'
+        for suffix in ['', *'bcdefghijklmnopqrstuvwxyz']:
+            if base + suffix not in taken:
+                return base + suffix
+        return None
 
     @property
     def link(self) -> Optional[str]:
         return f'https://doi.org/{self.doi}' if self.doi else None
+
+
+def ascii_fold(text: str) -> str:
+    """Gökçen -> Gokcen, Müller -> Muller (letters without accents)"""
+    import unicodedata  # noqa: PLC0415
+
+    return unicodedata.normalize('NFKD', text).encode('ascii', 'ignore').decode('ascii')
+
+
+def record_year(record: dict) -> Optional[int]:
+    for key in ('issued', 'published-print', 'published-online', 'created'):
+        parts = (record.get(key) or {}).get('date-parts') or [[None]]
+        if parts and parts[0] and parts[0][0]:
+            return int(parts[0][0])
+    return None
+
+
+def record_author(record: dict) -> Optional[str]:
+    authors = record.get('author') or []
+    return str(authors[0].get('family') or authors[0].get('name') or '') or None if authors else None
 
 
 def clean(doi: str) -> str:
@@ -176,8 +208,7 @@ def format_citation(record: dict) -> str:
     journal = str((record.get('short-container-title') or record.get('container-title') or [''])[0])
     volume, issue, page = record.get('volume'), record.get('issue'), record.get('page') or record.get('article-number')
     where = journal + (f' {volume}' if volume else '') + (f'({issue})' if issue else '') + (f':{page}' if page else '')
-    issued = (record.get('issued') or record.get('published-print') or record.get('published-online') or {}).get('date-parts') or [[None]]
-    year = issued[0][0] if issued and issued[0] else None
+    year = record_year(record)
     return ', '.join(part for part in (', '.join(authors), title, where.strip(), str(year) if year else '') if part)
 
 
@@ -241,6 +272,7 @@ def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result:
             rejected.append(f'{candidate} ({where}): "{title}" is not on the first pages')
             continue
         result.doi, result.doi_found_in, result.title = candidate, where, title or None
+        result.first_author, result.year = record_author(record), record_year(record)
         if where == 'given' and has_text and title and title_found(title, text) < TITLE_MATCH:
             result.notes.append(f'the title "{title}" is not on the first pages of the PDF: the file may contain another article')
         if not has_text:
@@ -254,6 +286,7 @@ def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result:
             title = record_title(record)
             if title and title_found(title, haystack) >= TITLE_MATCH and record.get('DOI'):
                 result.doi, result.doi_found_in, result.title = str(record['DOI']), 'Crossref search', title
+                result.first_author, result.year = record_author(record), record_year(record)
                 result.notes.append('DOI found by searching Crossref for the first lines of the PDF: check it at the link')
                 if not result.reference:
                     result.reference, result.reference_from = format_citation(record), 'crossref'

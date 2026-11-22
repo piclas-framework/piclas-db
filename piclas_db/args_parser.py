@@ -64,7 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--species', help='species of a NIST ASD level file if not found in the file or its name (e.g. ArIon1)')
             sub.add_argument('--custom', metavar='NAME', help='store files that are not recognized (e.g. own data) under custom/NAME')
             sub.add_argument('--retrieved', metavar='YYYY-MM-DD', help='retrieval date if not contained in the file')
-            sub.add_argument('--literature', metavar='KEY', help='store a paper (PDF) under literature/KEY, e.g. yoon-2008')
+            sub.add_argument('--literature', nargs='?', const='', metavar='KEY', help='store a paper (PDF) under literature/KEY, e.g. yoon-2008 (without KEY: first author and year from Crossref)')
             sub.add_argument('--doi', help='with --literature: DOI of the paper (default: found in the PDF, its name or at Crossref)')
             sub.add_argument('--reference', help='with --literature: citation of the paper (default: from Crossref for the DOI)')
             sub.add_argument('--no-lookup', action='store_true', help='with --literature: do not ask Crossref (DOI from the PDF or its name only, unchecked)')

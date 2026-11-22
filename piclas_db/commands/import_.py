@@ -21,6 +21,7 @@ from typing import Optional
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
+from piclas_db.literature import papers
 from piclas_db.sources.doi import Citation, paper_citation
 from piclas_db.sources.identify import IdentifyError, identify
 from piclas_db import config
@@ -92,13 +93,14 @@ def run(args: argparse.Namespace) -> int:
 
     print(f'Store: {store.root}' + (' (dry run, nothing is copied)' if args.dry_run else ''))
     imported = existing = skipped = failed = 0
+    taken: set[str] = set()  # keys given to papers of this run
     for path, explicit in files:
         if not path.is_file():
             print(f'  ERROR    {path}: file not found')
             failed += 1
             continue
-        doi, reference, cited = args.doi, args.reference, None
-        if args.literature and path.suffix.lower() == '.pdf' and store.find(sha256(path)) is None:  # duplicates: reported below, no lookup
+        doi, reference, cited, key = args.doi, args.reference, None, args.literature
+        if args.literature is not None and path.suffix.lower() == '.pdf' and store.find(sha256(path)) is None:  # duplicates: reported below, no lookup
             cited = paper_citation(path, args.doi, args.reference, lookup=not args.no_lookup)
             doi, reference = cited.doi, cited.reference
             if not (doi or reference):
@@ -107,8 +109,18 @@ def run(args: argparse.Namespace) -> int:
                     print(f'           {note}')
                 failed += 1
                 continue
+            if not key:
+                key = cited.key(set(papers(store)) | taken)
+                if key is None:
+                    print(f'  ERROR    {path}: no key: first author and year unknown (no Crossref record); give --literature KEY')
+                    failed += 1
+                    continue
+                taken.add(key)
+                print(f'  key      {key} (first author and year; give --literature KEY to choose another)')
+        elif args.literature == '':
+            key = 'paper'  # not a PDF (or already stored): identify and the duplicate check report it
         try:
-            identified = identify(path, species=args.species, custom=args.custom, literature=args.literature, doi=doi, reference=reference)
+            identified = identify(path, species=args.species, custom=args.custom, literature=key if args.literature is not None else None, doi=doi, reference=reference)
             if cited is not None:
                 identified.details.update({'doi_found_in': cited.doi_found_in, 'reference_from': cited.reference_from})
         except IdentifyError as e:

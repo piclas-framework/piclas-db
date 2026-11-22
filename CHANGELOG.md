@@ -3,6 +3,12 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.44.0
+
+* `import --literature` without KEY: the key is the first author's family name and the year from the Crossref record
+  (`gokcen-2007`, accents removed), with `b`, `c`, ... if taken in the store or in the same run; printed with the import
+* Papers are stored as `literature/<key>/<key>_<sha256[:8]>.pdf` instead of `undated_<sha>.pdf` (existing files keep their names)
+
 ## 0.43.0
 
 * `import --literature` finds DOI and citation itself (`piclas_db/sources/doi.py`): DOI from the PDF metadata, the first two pages

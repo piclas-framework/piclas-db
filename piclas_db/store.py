@@ -105,8 +105,11 @@ class Store:
         return next((entry for entry in self.entries() if entry.meta.get('sha256') == checksum), None)
 
     def target(self, identified: Identified, checksum: str, suffix: str, retrieved: Optional[datetime.date]) -> pathlib.Path:
+        directory = self.root / identified.provider / identified.dataset
+        if identified.provider == 'literature' and identified.kind == 'paper':
+            return directory / f'{identified.dataset}_{checksum[:8]}{suffix}'  # papers by their key (retrieval dates mean little)
         stamp = retrieved.isoformat() if retrieved else 'undated'
-        return self.root / identified.provider / identified.dataset / f'{stamp}_{checksum[:8]}{suffix}'
+        return directory / f'{stamp}_{checksum[:8]}{suffix}'
 
     def add(self, source: pathlib.Path, identified: Identified, retrieved: Optional[datetime.date] = None, by: Optional[str] = None) -> StoreEntry:
         """Copy a file into the store and write its meta.yaml; the caller checks for duplicates first"""

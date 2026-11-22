@@ -114,3 +114,23 @@ def test_import_literature(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(doi_module, 'get_json', offline)
     assert main(['import', str(tmp_path / 'other.pdf'), '--literature', 'other']) == 1
     assert 'DOI and citation not found; give --doi or --reference' in capsys.readouterr().out
+
+
+def test_import_key_from_citation(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """--literature without KEY: first author and year; a taken key gets b; the stored file is named by the key"""
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: TEXT)
+    monkeypatch.setattr(doi_module, 'get_json', fake_get_json)
+    (tmp_path / 'a.pdf').write_bytes(PDF)
+    (tmp_path / 'b.pdf').write_bytes(PDF + b'% another copy\n')
+    assert main(['import', str(tmp_path / 'a.pdf'), str(tmp_path / 'b.pdf'), '--literature']) == 0
+    out = capsys.readouterr().out
+    assert 'key      author-2001 ' in out and 'key      author-2001b ' in out
+    names = sorted(e.path.name for e in Store(tmp_path / 'store').entries())
+    assert names[0].startswith('author-2001_') and names[1].startswith('author-2001b_')
+    assert doi_module.Citation(first_author='Gökçen', year=2007).key(set()) == 'gokcen-2007'
+    (tmp_path / 'c.pdf').write_bytes(PLAIN)
+    monkeypatch.setattr(doi_module, 'get_json', offline)
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: '')
+    assert main(['import', str(tmp_path / 'c.pdf'), '--literature', '--doi', '10.1/x']) == 1
+    assert 'no key: first author and year unknown' in capsys.readouterr().out

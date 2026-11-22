@@ -8,8 +8,9 @@ obtained, with which version of piclas-db, how accurate it is and whether it has
 ## Workflow
 
 ```bash
-# 1. the paper (PDF) into the store; DOI and citation are found automatically (see "DOI and citation" below)
-piclas-db import Yoon2008.pdf --literature yoon-2008
+# 1. the paper (PDF) into the store; DOI, citation and key (first author and year, here yoon-2008) are found automatically
+#    (see "DOI and citation" below); --literature KEY chooses the key
+piclas-db import 1_2838023.pdf --literature
 
 # 2. read the data automatically: tables, vector figures, scanned figures (see extract.md)
 piclas-db extract yoon-2008 --page 15 --table 13 --by "Name" -o work/
@@ -57,14 +58,19 @@ override it.
 The import prints the DOI with where it was found, the link to check it, the citation and any warning:
 
 ```
-  imported paper.pdf -> literature/author-2001/undated_1a2b3c4d.pdf (literature paper: author-2001)
+  key      author-2001 (first author and year; give --literature KEY to choose another)
+  imported paper.pdf -> literature/author-2001/author-2001_1a2b3c4d.pdf (literature paper: author-2001)
            DOI    10.9999/test.2001.42 (first pages)  check: https://doi.org/10.9999/test.2001.42
            cite   A. Author, B. J. Other, Rate parameters for imaginary plasmas, J. Invent. Res. 12(3):100-110, 2001 (Crossref)
 ```
 
 Offline (or with `--no-lookup`) the DOI from the PDF, or from a file name that allows only one DOI, is taken unchecked, without
 citation from Crossref. The paper's record keeps where the DOI and the citation came from (`doi_found_in`, `reference_from`).
-Books and old papers without DOI need `--reference`.
+Books and old papers without DOI need `--reference` and a key (`--literature KEY`).
+
+**Key and file name:** `--literature` without a key takes the first author's family name and the year from Crossref (`gokcen-2007`,
+letters without accents), with `b`, `c`, ... if the key is taken. The paper is stored as `literature/<key>/<key>_<sha256[:8]>.pdf`
+(papers imported before 0.44.0 keep their names `undated_<sha>.pdf`).
 
 ## Extraction record
 
