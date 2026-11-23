@@ -3,6 +3,11 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.54.2
+
+* Year of a paper (key, citation): the printed issue (`published-print`) before Crossref's `issued`, which is the earliest date
+  and often the online-first year (Park et al. 2001 got `park-2000`)
+
 ## 0.54.1
 
 * Warnings of pdfminer (under pdfplumber) about incomplete font descriptions of older PDFs ("Could not get FontBBox ...") are no

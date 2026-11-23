@@ -174,7 +174,7 @@ def openalex_search(text: str, timeout: float = 15.0) -> tuple[list[dict], str]:
 
 
 def record_year(record: dict) -> Optional[int]:
-    for key in ('issued', 'published-print', 'published-online', 'created'):
+    for key in ('published-print', 'issued', 'published-online', 'created'):  # the printed issue first: 'issued' is the earliest date (often online-first)
         parts = (record.get(key) or {}).get('date-parts') or [[None]]
         if parts and parts[0] and parts[0][0]:
             return int(parts[0][0])

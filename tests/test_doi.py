@@ -403,3 +403,10 @@ def test_pdfminer_warnings_are_silenced(tmp_path: pathlib.Path) -> None:
     (tmp_path / 'paper.pdf').write_bytes(PLAIN)
     doi_module.plumber_text(tmp_path / 'paper.pdf', 1)
     assert logging.getLogger('pdfminer').getEffectiveLevel() == logging.ERROR
+
+
+def test_year_of_the_printed_issue() -> None:
+    """Park et al. 2001 (J. Thermophys. Heat Transfer 15(1), January 2001) was online in 2000: the key must say 2001"""
+    record = {'issued': {'date-parts': [[2000, 12]]}, 'published-online': {'date-parts': [[2000, 12]]}, 'published-print': {'date-parts': [[2001, 1]]}}
+    assert doi_module.record_year(record) == 2001
+    assert doi_module.record_year({'issued': {'date-parts': [[2014, 9]]}}) == 2014
