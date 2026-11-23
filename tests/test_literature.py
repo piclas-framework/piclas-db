@@ -113,7 +113,7 @@ def test_import_template_add_review_build(store: Store, tmp_path: pathlib.Path, 
     capsys.readouterr()
     assert main(['literature', 'list']) == 0
     out = capsys.readouterr().out
-    assert 'test-2008/total-ionization@' in out and 'review approved' in out
+    assert 'total-ionization@' in out and 'review approved' in out
     assert main(['literature', 'review', 'test-2008/total-ionization', '--reject', '--reviewer', 'reviewer']) == 0
     assert main(['build', str(recipe), '-o', str(output), '--offline', '--force', '--allow-unreviewed']) == 1  # rejected: never used
 

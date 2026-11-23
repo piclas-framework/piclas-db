@@ -70,6 +70,7 @@ def pairs(text: Optional[str], separator: str) -> Optional[list[tuple[float, flo
 COMMAND_OPTIONS = (
     'page', 'frame', 'figure', 'name', 'table', 'ocr', 'raster', 'symbol_radius', 'frame_box', 'x_points', 'y_points', 'seeds',
     'x_labels', 'y_labels', 'x_scale', 'y_scale', 'x_unit', 'x_quantity', 'mass_amu', 'target_mass_amu', 'energy_frame', 'y_unit', 'by',
+    'rates', 'rate_unit', 'chemistry_model',
 )  # fmt: skip
 
 
@@ -87,21 +88,75 @@ def page_list(text: str) -> list[int]:
     return pages
 
 
+def write_reaction_table(args: argparse.Namespace, paper: StoreEntry, table: Table, output: pathlib.Path, name: str, raw_file: pathlib.Path) -> None:
+    """A reaction table: the raw copy with its record (<name>-raw), and with --rates [TOPIC] the rate table converted from it
+    (<name>-rates[-TOPIC]), whose record points to the raw copy"""
+    from piclas_db import rates  # noqa: PLC0415
+    from piclas_db.literature import rate_record  # noqa: PLC0415
+    from piclas_db.store import sha256  # noqa: PLC0415
+
+    paper_key = str(paper.meta.get('dataset'))
+    pages = ', '.join(str(p) for p in table.pages)
+    raw = template(paper, f'{name}-raw', pages, table.number, None, table.source)
+    raw['created']['by'] = args.by
+    raw['data'] = raw_file.name
+    raw['raw_table'] = True
+    raw['quantity'] = {'description': f'{table.caption} (raw copy as printed: cells of the reaction table, not used by builds)'}
+    raw['parameters'] = {'pages': table.pages, 'table': table.number, 'command': command_of(args)}
+    for key in ('columns', 'accuracy'):
+        raw.pop(key, None)
+    raw_record = output / f'{name}-raw.extraction.yaml'
+    raw_record.write_text(yaml.safe_dump(raw, sort_keys=False, allow_unicode=True, width=1000))
+    print(f'  raw copy: {raw_record}')
+    if args.rates is None:
+        print('  reaction table: convert it into a rate table with --rates [TOPIC] (e.g. --rates air), or enter one with')
+        print(f'    piclas-db literature template {paper_key} {name}-rates --rates --page {pages} --table {table.number} -o {output}')
+        print(f'  store the raw copy with: piclas-db literature add {raw_record}')
+        return
+    converted, problems = rates.convert_table(table.header, table.rows)
+    rates_name = f'{name}-rates' + (f'-{slug(args.rates)}' if args.rates else '')
+    (output / f'{rates_name}.csv').write_text(rates.rate_csv(converted, problems), encoding='utf-8')
+    unit = args.rate_unit or rates.printed_unit(' '.join([table.caption, *table.header]))
+    record = template(paper, rates_name, pages, table.number, None, table.source) | rate_record()
+    record['created']['by'] = args.by
+    record['data'] = f'{rates_name}.csv'
+    record['columns']['rate']['unit'] = unit
+    record['quantity']['assignment']['chemistry_model'] = args.chemistry_model
+    record['quantity']['mixture'] = args.rates or None
+    record['derived_from'] = f'literature/{paper_key}/{name}-raw@{sha256(raw_file)[:8]}'
+    record['parameters'] = {'command': command_of(args)}
+    notes = sorted({row.note for row in converted if row.note and 'taken as' in row.note})
+    notes += [f'row {row.row}: {row.note}' for row in converted if row.note and 'taken as' not in row.note]
+    notes += [f'not converted: {problem}' for problem in problems]
+    notes.append('controlling temperature not printed: entered as T (change Tx where the paper says otherwise)')
+    record['notes'] = notes
+    rates_record = output / f'{rates_name}.extraction.yaml'
+    rates_record.write_text(yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=1000))
+    print(f'  rate table: {len(converted)} row(s) converted -> {output / rates_name}.csv, record {rates_record}')
+    print(f'    unit of C: {unit or "NOT FOUND: set columns.rate.unit in the record (or --rate-unit)"}; chemistry model: {args.chemistry_model or "(none; --chemistry-model, e.g. Farbar2008)"}')
+    for note in notes[:-1]:
+        print(f'    check: {note}')
+    print('  next: check both against the page, then')
+    print(f'    piclas-db literature add -n {rates_record} --compare <database.h5>')
+    print(f'    piclas-db literature add {raw_record}')
+    print(f'    piclas-db literature add {rates_record}')
+
+
 def write_table(args: argparse.Namespace, paper: StoreEntry, table: Table, output: pathlib.Path) -> None:
     """Raw table as CSV; for tables with an energy column one series per further column (CSV as printed + extraction record)"""
     import csv  # noqa: PLC0415
 
     name = slug(args.name or f'table{table.number}')
-    with (output / f'{name}-table.csv').open('w', newline='') as file:
+    reaction = any(any(arrow in cell for arrow in ARROWS) for row in table.rows for cell in row)
+    raw_file = output / f'{name}-{"raw" if reaction else "table"}.csv'
+    with raw_file.open('w', newline='') as file:
         writer = csv.writer(file, lineterminator='\n')
         writer.writerow(table.header)
         writer.writerows(table.rows)
-    print(f'table {table.number} (pages {", ".join(str(p) for p in table.pages)}, {table.source}): {len(table.rows)} rows, {len(table.header)} columns -> {output / name}-table.csv')
+    print(f'table {table.number} (pages {", ".join(str(p) for p in table.pages)}, {table.source}): {len(table.rows)} rows, {len(table.header)} columns -> {raw_file}')
     print(f'  caption: {table.caption}')
-    if any(any(arrow in cell for arrow in ARROWS) for row in table.rows for cell in row):
-        # a reaction table: the raw CSV is the copy to enter the rate table from (literature template --rates)
-        print('  reaction table: the raw CSV holds reactions and rate coefficients as printed; enter them as a rate table with')
-        print(f'    piclas-db literature template {args.paper} {name}-rates --rates --page {",".join(str(p) for p in table.pages)} --table {table.number} -o {output}')
+    if reaction:
+        write_reaction_table(args, paper, table, output, name, raw_file)
         return
     parsed = [parse_number(row[0]) for row in table.rows]
     energies = [value for value in parsed if value is not None]

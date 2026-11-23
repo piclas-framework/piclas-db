@@ -583,3 +583,126 @@ def preview(rows: list[RateRow], unit: str, database: Optional[Database] = None)
     if database is not None:
         header.append('In the database (= same values, ≠ closest, – no such reaction)')
     return header, lines, counts
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Conversion of a raw reaction table (extract --table, cells as printed) into a rate table draft
+# ----------------------------------------------------------------------------------------------------------------------------------
+ARROW_PATTERN = re.compile(r'\s*(?:→|⇌|↔|⇔|⇄|<->|<=>|->)\s*')
+UNIT_PATTERNS = (  # printed unit (lower case, Unicode minus as -) -> unit of the rate table; not preceded by a letter (cm3 is not m3)
+    (r'(?<![a-z])(?:cm\^?3\s*/\s*mole?\s*/\s*s|cm\^?3\s*/\s*\(\s*mol\s*s\s*\)|cm\^?3\s*mole?\s*-1\s*s\s*-1|cc\s*/\s*mol\s*/\s*s)', 'cm^3/(mol s)'),
+    (r'(?<![a-z])(?:m\^?3\s*/\s*molecule\s*/\s*s|m\^?3\s*/\s*\(\s*molecule\s*s\s*\)|m\^?3\s*molecule\s*-1\s*s\s*-1)', 'm^3/(molecule s)'),
+    (r'(?<![a-z])(?:cm\^?3\s*/\s*molecule\s*/\s*s|cm\^?3\s*molecule\s*-1\s*s\s*-1|cm\^?3\s*/\s*s|cm\^?3\s*s\s*-1)', 'cm^3/(molecule s)'),
+)
+
+
+def printed_unit(text: str) -> Optional[str]:
+    """Unit of the rate coefficients from a caption or header ('in m3/molecule/s', 'cm3 molecule−1 s−1'); None if not found"""
+    plain = text.lower().replace('−', '-').replace('³', '3')
+    for pattern, unit in UNIT_PATTERNS:
+        if re.search(pattern, plain):
+            return unit
+    return None
+
+
+def printed_species(token: str) -> str:
+    """A species as printed in a table, in the notation of rate tables: N+2 (charge set before the subscript) -> N2+, E− -> e-"""
+    text = token.strip().replace('−', '-').replace('–', '-')
+    if text in ('E-', 'E', 'e', 'e-'):
+        return 'e-'
+    match = re.fullmatch(r'([A-Z][A-Za-z]*?)(\++)(\d+)', text)  # charge printed before the subscript: N+2, O+2
+    if match:
+        return f'{match.group(1)}{match.group(3)}{match.group(2)}'
+    return text
+
+
+@dataclass
+class Converted:
+    row: str
+    reaction: str
+    third_body: str
+    C: float
+    n: float
+    Td: float
+    note: Optional[str] = None  # what to check (e.g. a third body only on one side)
+
+
+def expanded(species: list[str]) -> list[str]:
+    """Stoichiometric factors written out: '2E-' (as in N + E- -> N+ + 2E-) -> e-, e-"""
+    result: list[str] = []
+    for item in species:
+        match = re.fullmatch(r'(\d+)\s*([A-Za-z].*)', item)
+        result += [printed_species(match.group(2))] * int(match.group(1)) if match else [item]
+    return result
+
+
+def convert_reaction(text: str) -> tuple[str, str, Optional[str]]:
+    """'N2 + M → N + N + M' -> ('N2 + M -> N + N + M', 'molecules', note); M/A become the classes molecules/atoms (DSMC usage, as in
+    Farbar and Boyd), a note says so; a third body on one side only is flagged"""
+    sides = ARROW_PATTERN.split(text.strip())
+    if len(sides) != 2:
+        raise RateError(f'no reaction arrow in {text!r}')
+    reactants, products = (expanded([printed_species(token) for token in re.split(r'\s+\+\s+', side.strip()) if token.strip()]) for side in sides)
+    body, note = '', None
+    for marker, kind in (('M', 'molecules'), ('A', 'atoms')):
+        if (marker in reactants) != (marker in products):
+            note = f'third body {marker} on one side only: misprint? (as printed: {text})'
+        if marker in reactants:
+            body, note = kind, note or f'{marker} taken as {kind}: check the paper'
+    for species in reactants + products:
+        species_name(species)  # raises RateError for a species that cannot be read (e.g. Fe(OH)2)
+    return ' + '.join(reactants) + ' -> ' + ' + '.join(products), body, note
+
+
+def parse_rate(text: str) -> tuple[float, float, float]:
+    """'1.162×10−8T−1.6exp(-113 200/T)', '9.2 × 10−10', '4.40e+16', '2.5^14' -> (C, n, T_d); RateError if anything is left over"""
+    plain = text.replace('×', 'x').replace('−', '-').replace('–', '-').replace('\u2009', ' ').strip()
+    Td = 0.0
+    exponential = re.search(r'exp\s*\(\s*(-?)\s*([\d ,.]+)\s*/\s*T\w*\s*\)', plain)
+    if exponential:
+        groups = re.split(r'[ ,]', exponential.group(2).strip())
+        if len(groups) > 1 and any(len(group) != 3 for group in groups[1:]):
+            raise RateError(f'digit groups {exponential.group(2).strip()!r} irregular (misprint?) in {text!r}')
+        Td = float(''.join(groups)) * (1.0 if exponential.group(1) else -1.0)
+        plain = (plain[: exponential.start()] + plain[exponential.end() :]).strip()
+    coefficient = re.match(r'([-+]?\d+(?:\.\d+)?)\s*(?:(?:x\s*10\s*\^?|e|\^)\s*([-+]?\s*\d+))?', plain)
+    if not coefficient:
+        raise RateError(f'no rate coefficient in {text!r}')
+    C = float(coefficient.group(1)) * 10.0 ** int(coefficient.group(2).replace(' ', '')) if coefficient.group(2) else float(coefficient.group(1))
+    rest = plain[coefficient.end() :].strip()
+    n = 0.0
+    power = re.fullmatch(r'T\s*\^?\s*([-+]?\s*\d+(?:\.\d+)?)', rest)
+    if power:
+        n, rest = float(power.group(1).replace(' ', '')), ''
+    if rest:
+        raise RateError(f'not understood: {rest!r} in {text!r}')
+    return C, n, Td
+
+
+def convert_table(header: list[str], rows: list[list[str]]) -> tuple[list[Converted], list[str]]:
+    """Rows of a raw reaction table (label, reaction, rate coefficient) as rate rows; rows that cannot be read are returned as
+    messages for the user"""
+    converted: list[Converted] = []
+    problems: list[str] = []
+    for cells in rows:
+        index = next((i for i, cell in enumerate(cells) if ARROW_PATTERN.search(cell)), None)
+        if index is None:
+            continue
+        label = cells[0] if index > 0 else str(len(converted) + 1)
+        rate = ' '.join(cell for cell in cells[index + 1 :] if cell)
+        try:
+            reaction, body, note = convert_reaction(cells[index])
+            C, n, Td = parse_rate(rate)
+        except (RateError, ValueError) as e:
+            problems.append(f'{label}: {e}')
+            continue
+        converted.append(Converted(label, reaction, body, C, n, Td, note))
+    return converted, problems
+
+
+def rate_csv(converted: list[Converted], problems: list[str]) -> str:
+    """The rate table draft: header, rows, and the rows that could not be read as comments"""
+    lines = ['# rate table converted from the raw copy (extract --table --rates): check every row against the page', 'row,reaction,third_body,C,n,Td,Tx']
+    lines += [f'{row.row},{row.reaction},{row.third_body},{row.C:.6g},{float(row.n)!r},{row.Td:g},T' for row in converted]
+    lines += [f'# not converted: {problem}' for problem in problems]
+    return '\n'.join(lines) + '\n'

@@ -157,7 +157,7 @@ def test_build_reactions_from_rate_tables(tmp_path: pathlib.Path, monkeypatch: p
     # dry run of the same record: checked and shown row by row, compared with the database just built, nothing stored
     assert main(['literature', 'add', '-n', str(record_file), '--compare', str(tmp_path / 'out.h5')]) == 0
     out = capsys.readouterr().out
-    assert 'valid: literature/test-2008/rates: 7 rows' in out and '(dry run, nothing stored)' in out
+    assert 'valid: literature/test-2008/rates (p. 3, table 2): 7 rows' in out and '(dry run, nothing stored)' in out
     assert '= Tx2+M_Tx+M+Tx#1' in out and '≠ Tx2+Qq_TxQq+Tx#1' not in out and 'T_d' in out
     assert 'row(s) with the same values' in out and len(rates.stored_tables(Store(tmp_path / 'store'))) == 1
     specs, models, notes = rates.specs_from_database(db, rates.stored_tables(Store(tmp_path / 'store')))

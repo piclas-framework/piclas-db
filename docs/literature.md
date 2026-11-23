@@ -305,9 +305,10 @@ Arrhenius parameters k = C T^n exp(−T_d/T_x) of a paper's reaction table are s
 third body, as printed, with a record that says the unit of C and which chemistry models of a database come from this paper.
 
 ```bash
-piclas-db literature template author-2001 table2 --page "5 (389)" --table 2 --rates -o work/
-# enter the rows in work/table2.csv, set columns.rate.unit and quantity.assignment.chemistry_model (e.g. Author2001)
-piclas-db literature add work/table2.extraction.yaml
+piclas-db literature template author-2001 table2-rates-air --page "5 (389)" --table 2 --rates -o work/
+# enter the rows in work/table2-rates-air.csv, set columns.rate.unit, quantity.assignment.chemistry_model (e.g. Author2001) and
+# quantity.mixture (air)
+piclas-db literature add work/table2-rates-air.extraction.yaml
 ```
 
 Invented species and values:
@@ -334,6 +335,11 @@ Before storing, `literature add -n RECORD.yaml` checks the record and shows ever
 converted to PICLas units, n, T_d, Tx); with `--compare DATABASE.h5` each row is also looked up among the database's reactions: `=`
 the reactions with the same values, `≠` the closest one with its differences, `–` no such reaction (e.g. recombinations, which PICLas
 computes from the forward rate). Nothing is stored.
+
+Names: `<table>-rates-<mixture>` for a rate table (`table2-rates-air`, `table2-rates-titan`) and `<table>-raw` for the raw copy of
+the table it was converted from (`extract --table --rates`, [extract.md](extract.md)). `literature list` shows every extraction with
+its page (PDF page, printed page in brackets where recorded), table, kind (raw copy, rate table with mixture and chemistry model,
+data series, parameter table, fit formula), rows, method and review status.
 
 `rebuild --explain` compares every Arrhenius reaction of a database with all rate tables in the store ([rebuild.md](rebuild.md)).
 

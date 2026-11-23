@@ -145,7 +145,7 @@ def rate_record() -> dict:
     return {
         'rate_table': True,
         'columns': {'rate': {'unit': 'cm^3/(mol s)'}, 'temperature': {'unit': 'K'}},
-        'quantity': {'description': 'Arrhenius parameters k = C T^n exp(-T_d/T_x)', 'assignment': {'chemistry_model': None}},
+        'quantity': {'description': 'Arrhenius parameters k = C T^n exp(-T_d/T_x)', 'assignment': {'chemistry_model': None}, 'mixture': None},
     }
 
 
@@ -346,7 +346,7 @@ def add_extraction(store: Store, record_path: pathlib.Path, by: Optional[str] = 
     from piclas_db.sources.identify import Identified  # noqa: PLC0415
 
     record, data_path, table = check_extraction(store, record_path, by)
-    if not record.get('parameter_table') and not record.get('rate_table'):
+    if not record.get('parameter_table') and not record.get('rate_table') and not record.get('raw_table'):
         record.setdefault('result', {})['rows'] = len(table.energy)
     zeroed = int(np.sum(table.cross_section < 0.0))
     if zeroed:
@@ -376,6 +376,12 @@ def check_extraction(store: Store, record_path: pathlib.Path, by: Optional[str] 
         problems = validate_source(record) + validate_rate_table(record, rate_rows)
         table = Table(np.zeros(0), np.zeros(0), None)
         record.setdefault('result', {}).update({'rows': len(rate_rows), 'reactions': len({str(row.key) for row in rate_rows})})
+    elif record.get('raw_table'):  # raw copy of a reaction table: kept as printed, not used by builds
+        with data_path.open(encoding='utf-8') as file:
+            count = max(sum(1 for line in file if line.strip()) - 1, 0)
+        problems = validate_source(record)
+        table = Table(np.zeros(0), np.zeros(0), None)
+        record.setdefault('result', {}).update({'rows': count})
     elif record.get('parameter_table'):
         header, rows = read_parameter_table(data_path.read_text(encoding='utf-8'))
         problems = validate_source(record)

@@ -109,7 +109,21 @@ formulas follows in a later version.
 row: the cells are the row label, the reaction (`N2 + M → N + N + M`, subscripts joined) and the rate coefficient as printed. Such a
 table may run across the page with the middle free (reactions left, rates right); section headings inside it and page numbers
 below it are skipped; TeX PDFs whose text layer keeps font positions are cleaned (`!` → `→`, `(cid:0)` → `−`, `(cid:2)` → `×`,
-`1:6` → `1.6`). Only the raw CSV is written: enter it as a rate table with `literature template --rates` ([literature.md](literature.md)).
+`1:6` → `1.6`). The raw copy is written as `<table>-raw.csv` with a record (`raw_table`, stored with `literature add`, not used by
+builds). With `--rates [MIXTURE]` the raw copy is also converted into a rate table `<table>-rates[-MIXTURE].csv` with its record
+([literature.md](literature.md)): reactions in the rate-table notation (`N+2` → `N2+`, `E−` → `e-`, `2E−` → two electrons, M and A
+as the classes `molecules` and `atoms`), C, n and T_d from the printed coefficient (`1.162×10−8T−1.6exp(-113 200/T)`,
+`2.9 × 10−10 exp(−174/T)`), Tx `T`; the unit of C from the caption (else `--rate-unit`), `--chemistry-model` and the mixture in the
+record, which points to the raw copy (`derived_from`). Rows that cannot be read (misprints such as `77 2000`, species such as
+`Fe(OH)2`, other formula shapes) and a third body on one side only are listed and left as comments for you to enter:
+
+```bash
+piclas-db extract farbar-2008 --page 9 --table 2 --rates air --chemistry-model Farbar2008 -o work/
+# -> work/table2-raw.csv + .extraction.yaml, work/table2-rates-air.csv + .extraction.yaml
+piclas-db literature add -n work/table2-rates-air.extraction.yaml --compare SpeciesDatabase.h5
+piclas-db literature add work/table2-raw.extraction.yaml
+piclas-db literature add work/table2-rates-air.extraction.yaml
+```
 Text layers with other broken encodings (letters as single words, symbols mapped to other characters) are not read; try `--ocr`
 or enter the table from the page image.
 

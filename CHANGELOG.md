@@ -3,6 +3,20 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.58.0
+
+* `extract --table` of a reaction table writes the raw copy as `<table>-raw.csv` with a record (`raw_table`, stored with
+  `literature add`, not used by builds)
+* `extract --table --rates [MIXTURE]` also converts the raw copy into a rate table `<table>-rates[-MIXTURE].csv` with its record:
+  reactions in rate-table notation (`N+2` → `N2+`, `E−` → `e-`, stoichiometric factors, M/A as molecules/atoms with a note), C, n
+  and T_d from the printed coefficient, the unit of C from the caption (`--rate-unit` otherwise), `--chemistry-model`, the mixture
+  (`quantity.mixture`) and `derived_from` the raw copy; rows that cannot be read (misprints, irregular digit groups, unknown
+  species, other formula shapes) and third bodies on one side only are listed for the user. Farbar 2008 gives the draft table
+  except the misprinted row 15F, which is flagged
+* `literature list`: one line per extraction with page, table, kind (raw copy, rate table with mixture and chemistry model, ...),
+  rows, method and review status; `literature add -n` names page and table
+* Rate tables are named `<table>-rates-<mixture>`, raw copies `<table>-raw`
+
 ## 0.57.0
 
 * `literature add -n RECORD.yaml`: checks an extraction without storing it; a rate table is shown row by row as understood

@@ -29,7 +29,7 @@ from piclas_db import config, wanted
 from piclas_db.git import GitError
 from piclas_db.literature import LiteratureError, add_extraction, check_extraction, extractions, find_extraction, papers, review, template
 from piclas_db.sources.identify import slug
-from piclas_db.store import Store
+from piclas_db.store import Store, StoreEntry
 # ==================================================================================================================================
 
 CSV_TEMPLATE = """# Values exactly as printed in the paper, in the units given in the extraction record (columns: energy, cross_section[, uncertainty])
@@ -55,6 +55,33 @@ row,reaction,third_body,C,n,Td,Tx
 """
 
 
+def kind_of(record: dict) -> str:
+    """What an extraction holds, in words"""
+    if record.get('raw_table'):
+        return 'raw copy'
+    if record.get('rate_table'):
+        mixture = (record.get('quantity') or {}).get('mixture')
+        model = ((record.get('quantity') or {}).get('assignment') or {}).get('chemistry_model')
+        return 'rate table' + (f' ({mixture})' if mixture else '') + (f', {model}' if model else '')
+    if record.get('parameter_table'):
+        return 'parameter table'
+    if record.get('formula'):
+        return 'fit formula'
+    return 'data series'
+
+
+def extraction_line(entry: StoreEntry) -> str:
+    """One line of literature list: name, page (PDF page, printed page in brackets as recorded), table or figure, kind, rows, method,
+    review status"""
+    record = entry.meta.get('extraction') or {}
+    source = record.get('source') or {}
+    name = str(entry.meta.get('dataset', '')).partition('/')[2] + f'@{str(entry.meta.get("sha256"))[:8]}'
+    where = ', '.join(f'{label} {source[label]}' for label in ('table', 'figure') if source.get(label))
+    rows = (record.get('result') or {}).get('rows')
+    status = (record.get('review') or {}).get('status')
+    return f'{name:32s} p. {source.get("page") or "?"!s:14s} {where:12s} {kind_of(record)}' + (f', {rows} rows' if rows is not None else '') + f', {record.get("method")}, review {status}'
+
+
 def check_only(store: Store, record_path: pathlib.Path, compare: Optional[str]) -> int:
     """literature add -n: validate the record, show what would be stored; rate tables row by row, optionally compared with a database"""
     from piclas_db import rates  # noqa: PLC0415
@@ -76,7 +103,7 @@ def check_only(store: Store, record_path: pathlib.Path, compare: Optional[str]) 
         database = read_database(compare)
     header, lines, counts = rates.preview(rate_rows, unit, database)
     print(
-        f'valid: literature/{paper}/{name}: {len(rate_rows)} rows, {len({str(row.key) for row in rate_rows})} reactions, C in {unit} -> m^3/s per molecule, chemistry model {model or "(none)"} (dry run, nothing stored)'
+        f'valid: literature/{paper}/{name} (p. {(record.get("source") or {}).get("page")}, table {(record.get("source") or {}).get("table")}): {len(rate_rows)} rows, {len({str(row.key) for row in rate_rows})} reactions, C in {unit} -> m^3/s per molecule, chemistry model {model or "(none)"} (dry run, nothing stored)'
     )
     color = use_color()
     print('\n'.join(render(header, [Row(line) for line in lines], shrinkable=[1, len(header) - 1] if database else [1], color=color)))
@@ -160,13 +187,9 @@ def run(args: argparse.Namespace) -> int:
         else:
             for name, paper in sorted(papers(store).items()):
                 print(f'{name:24s} {paper.meta.get("doi") or ""}  {paper.meta.get("reference") or ""}')
-                for entry in extractions(store):
+                for entry in sorted(extractions(store), key=lambda e: str(e.meta.get('dataset'))):
                     if str(entry.meta.get('dataset', '')).startswith(name + '/'):
-                        record = entry.meta.get('extraction') or {}
-                        source = record.get('source') or {}
-                        where = ', '.join(f'{label} {source[label]}' for label in ('table', 'figure', 'page') if source.get(label))
-                        status = (record.get('review') or {}).get('status')
-                        print(f'  {entry.meta["dataset"]}@{str(entry.meta["sha256"])[:8]}  {record.get("method")}, {where}, review {status}')
+                        print('  ' + extraction_line(entry))
     except (LiteratureError, GitError, config.ConfigError, wanted.WantedError) as e:
         print(f'ERROR: {e}')
         return 1

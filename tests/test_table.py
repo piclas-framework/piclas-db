@@ -206,13 +206,10 @@ def test_formula_with_parameters_from_table(paper: pathlib.Path, tmp_path: pathl
     assert 'not a parameter table' in capsys.readouterr().out
 
 
-def test_reaction_table(tmp_path: pathlib.Path) -> None:
+def reaction_paper(path: pathlib.Path) -> None:
     """A reaction table across the page (invented rows in the layout of Farbar and Boyd 2008): reactions on the left of the middle,
-    rate coefficients on the right, subscripts set lower, a section heading inside, a page number below"""
-    from piclas_db.extract.table import reaction_row, tex_cleaned  # noqa: PLC0415
-
+    rate coefficients on the right, a section heading inside, a page number below"""
     plt.rcParams['pdf.fonttype'] = 42
-    path = tmp_path / 'reactions.pdf'
     rows = [('1M', 'Tx + M → Q + Q + M', '1.162×10−8 T−1.6 exp(-113 200/T)'), ('1MB', 'Q + Q + M → Tx + M', '5.691×10−40 T−1.6')]
     more = [('2F', 'Q + Tx → Tx+ + E−', '3.387×10−17 exp(-67 700/T)')]
     with PdfPages(path) as pdf:
@@ -236,9 +233,57 @@ def test_reaction_table(tmp_path: pathlib.Path) -> None:
         text(figure, 300, 700, '9 of 20')
         pdf.savefig(figure)
     plt.close('all')
+
+
+def test_reaction_table(tmp_path: pathlib.Path) -> None:
+    from piclas_db.extract.table import reaction_row, tex_cleaned  # noqa: PLC0415
+
+    path = tmp_path / 'reactions.pdf'
+    reaction_paper(path)
     table = extract_table(str(path), [1], '2')
     assert table.header == ['Number', 'Reaction', 'Rate Coefficient']
     assert [row[0] for row in table.rows] == ['1M', '1MB', '2F']  # the heading and the page number are not rows
     assert table.rows[0][1] == 'Tx + M → Q + Q + M' and table.rows[0][2].startswith('1.162×10−8')
     assert tex_cleaned('1.162(cid:2)10 (cid:0)8 T (cid:0)1:6') == '1.162×10−8 T −1.6' and tex_cleaned('N2 + M ! N + N + M') == 'N2 + M → N + N + M'
     assert not reaction_row([])  # nothing to look at
+
+
+def test_reaction_table_to_rate_table(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """extract --table --rates: raw copy (table2-raw) and rate table (table2-rates-air) with records; literature add -n, add, list"""
+    monkeypatch.setenv('PICLAS_DB_STORE', str(tmp_path / 'store'))
+    reaction_paper(tmp_path / 'reactions.pdf')
+    assert main(['import', str(tmp_path / 'reactions.pdf'), '--literature', 'test-2008', '--doi', '10.0000/test', '--reference', 'A. Author, J. Test 1, 1 (2008)']) == 0
+    work = tmp_path / 'work'
+    assert main(['extract', 'test-2008', '--page', '1', '--table', '2', '--rates', 'air', '--chemistry-model', 'Test2008', '-o', str(work), '--by', 'tester']) == 0
+    out = capsys.readouterr().out
+    assert '3 row(s) converted' in out and 'unit of C: m^3/(molecule s)' in out and 'M taken as molecules' in out
+    assert sorted(path.name for path in work.iterdir()) == ['table2-rates-air.csv', 'table2-rates-air.extraction.yaml', 'table2-raw.csv', 'table2-raw.extraction.yaml']
+    rows = [line for line in (work / 'table2-rates-air.csv').read_text().splitlines() if not line.startswith('#')]
+    assert rows[1] == '1M,Tx + M -> Q + Q + M,molecules,1.162e-08,-1.6,113200,T' and rows[3] == '2F,Q + Tx -> Tx+ + e-,,3.387e-17,0.0,67700,T'
+    record = yaml.safe_load((work / 'table2-rates-air.extraction.yaml').read_text())
+    assert record['derived_from'].startswith('literature/test-2008/table2-raw@') and record['quantity']['mixture'] == 'air'
+    assert main(['literature', 'add', '-n', str(work / 'table2-rates-air.extraction.yaml')]) == 0
+    assert 'valid: literature/test-2008/table2-rates-air (p. 1, table 2): 3 rows' in capsys.readouterr().out
+    assert main(['literature', 'add', str(work / 'table2-raw.extraction.yaml')]) == 0
+    assert main(['literature', 'add', str(work / 'table2-rates-air.extraction.yaml')]) == 0
+    capsys.readouterr()
+    assert main(['literature', 'list']) == 0
+    out = capsys.readouterr().out
+    assert 'raw copy, 3 rows' in out and 'rate table (air), Test2008, 3 rows' in out and 'p. 1' in out
+
+
+def test_rate_conversion() -> None:
+    from piclas_db import rates  # noqa: PLC0415
+
+    assert rates.parse_rate('1.162×10−8T−1.6exp(-113 200/T)') == pytest.approx((1.162e-8, -1.6, 113200.0))
+    assert rates.parse_rate('2.9 × 10−10 exp(−174/T)') == pytest.approx((2.9e-10, 0.0, 174.0))
+    assert rates.parse_rate('4.980×10−8 T −1.6 exp(-113,200/T)') == pytest.approx((4.98e-8, -1.6, 113200.0))
+    for misprint in ('1.660×10−18T0.500exp(-77 2000/T)', '4.9T0.5VSAPMCb'):
+        with pytest.raises(rates.RateError):
+            rates.parse_rate(misprint)
+    assert rates.convert_reaction('N+2 + E− → N + N') == ('N2+ + e- -> N + N', '', None)
+    assert rates.convert_reaction('N + E− → N+ + 2E−')[0] == 'N + e- -> N+ + e- + e-'
+    assert 'one side only' in str(rates.convert_reaction('N2 + E− → N + N + A')[2])  # Boyd 2007, 1E as printed
+    assert rates.printed_unit('rates in m3/molecule/s.') == 'm^3/(molecule s)' and rates.printed_unit('k (cm3 molecule−1 s−1)') == 'cm^3/(molecule s)'
+    converted, problems = rates.convert_table(['No', 'Reaction', 'k'], [['R1', 'Fe + O3 → FeO + O2', '2.9 × 10−10 exp(−174/T)'], ['R10', 'Fe(OH)2 + H → FeOH + H2 O', '3.3 × 10−10']])
+    assert [row.row for row in converted] == ['R1'] and problems[0].startswith('R10: ')
