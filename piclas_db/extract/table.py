@@ -94,8 +94,8 @@ def ocr_words(page: Any) -> list[Word]:
     return words
 
 
-def lines_of(words: list[Word]) -> list[list[Word]]:
-    """Words grouped into lines (by their vertical centre), each line sorted from left to right"""
+def grouped(words: list[Word]) -> list[list[Word]]:
+    """Words grouped into lines by their vertical centre"""
     lines: list[list[Word]] = []
     for word in sorted(words, key=lambda w: (w.top + w.bottom) / 2):
         centre = (word.top + word.bottom) / 2
@@ -103,6 +103,26 @@ def lines_of(words: list[Word]) -> list[list[Word]]:
             lines[-1].append(word)
         else:
             lines.append([word])
+    return lines
+
+
+def lines_of(words: list[Word]) -> list[list[Word]]:
+    """Words grouped into lines (by their vertical centre), each line sorted from left to right; sub- and superscripts (smaller
+    words that overlap a line of normal words, e.g. the 2 of N2 set lower) join that line instead of forming a line of their own"""
+    heights = sorted(w.bottom - w.top for w in words)
+    typical = heights[len(heights) // 2] if heights else 0.0
+    small = [w for w in words if w.bottom - w.top < 0.8 * typical]
+    lines = grouped([w for w in words if w.bottom - w.top >= 0.8 * typical])
+    alone = []
+    for word in small:
+        overlaps = [(min(word.bottom, max(w.bottom for w in line)) - max(word.top, min(w.top for w in line)), index) for index, line in enumerate(lines)]
+        best = max(overlaps, default=(0.0, -1))
+        if best[0] > 0.3 * (word.bottom - word.top):
+            lines[best[1]].append(word)
+        else:
+            alone.append(word)  # small text of its own (a table in a smaller font): lines among themselves
+    lines += grouped(alone)
+    lines.sort(key=lambda line: sum((w.top + w.bottom) / 2 for w in line) / len(line))
     return [sorted(line, key=lambda w: w.x0) for line in lines]
 
 
@@ -125,23 +145,42 @@ def numeric_count(line: list[Word]) -> int:
     return sum(1 for word in line if parse_number(word.text) is not None)
 
 
+ARROWS = ('→', '⇌', '↔', '⇔', '⇄', '->', '<->', '<=>', '\uf0ae', '\uf0ab')  # reaction arrows (the last two: Symbol font in some PDFs)
+
+
+def reaction_row(line: list[Word]) -> bool:
+    """Row of a reaction table: a reaction arrow and at least one number (rate coefficient, exponent or temperature)"""
+    texts = [word.text for word in line]
+    # a rate needs a decimal number or one of 2+ digits (not '1s → 2s' in a header of transitions)
+    # '!' alone is the arrow of TeX's symbol font in PDFs whose text layer keeps the font positions (Laux 1995, Boyd 2007)
+    arrow = any(any(arrow in text for arrow in ARROWS) for text in texts) or ('!' in texts[1:-1] and texts.index('!', 1) > 1)
+    return arrow and any(re.search(r'\d\.\d|\d{2}', text) for text in texts[1:])
+
+
 def tabular(line: list[Word]) -> bool:
-    """Data row: at least two numbers, and numbers are the majority of the words (header lines like 'n = 2' are not data)"""
+    """Data row: at least two numbers, and numbers are the majority of the words (header lines like 'n = 2' are not data); or a row of a
+    reaction table (species and an arrow are words, not numbers)"""
     count = numeric_count(line)
-    return count >= 2 and count >= 0.5 * len(line)
+    return (count >= 2 and count >= 0.5 * len(line)) or reaction_row(line)
 
 
 def find_captions(words: list[Word], number: str) -> list[tuple[Word, str]]:
     """Possible captions of table <number> ('TABLE12.', 'TABLE 12.', 'Table 2:') with the text of their line; references in
     the running text ('as shown in Table 7.') are candidates too and are discarded when no table follows them"""
-    pattern = re.compile(rf'^(TABLE|Table)\s*{re.escape(number)}[.:]?$')
+    pattern = re.compile(rf'^(TABLE|Table|TABELLE|Tabelle)\s*{re.escape(number)}[.:]?$')  # also German theses (Tabelle A.1)
     found = []
     for index, word in enumerate(words):
-        if pattern.match(word.text) or (word.text in ('TABLE', 'Table') and index + 1 < len(words) and re.fullmatch(rf'{re.escape(number)}[.:]?', words[index + 1].text)):
+        if pattern.match(word.text) or (word.text in ('TABLE', 'Table', 'TABELLE', 'Tabelle') and index + 1 < len(words) and re.fullmatch(rf'{re.escape(number)}[.:]?', words[index + 1].text)):
             line = [w for w in words if abs((w.top + w.bottom) / 2 - (word.top + word.bottom) / 2) < 3 and w.x0 >= word.x0 - 1]
             found.append((word, ' '.join(w.text for w in sorted(line, key=lambda w: w.x0))))
     # upper-case captions ('TABLE') first: they are captions, 'Table' may also be a reference in the text
-    return sorted(found, key=lambda item: item[0].text.startswith('Table'))
+    return sorted(found, key=lambda item: item[0].text.startswith(('Table', 'Tabelle')))
+
+
+def superscripts_only(line: list[Word], previous: list[Word]) -> bool:
+    """A line of only small words right below a table row: its sub- or superscripts that the text layer put on a line of their own"""
+    height = sorted(w.bottom - w.top for w in previous)[len(previous) // 2]
+    return all(w.bottom - w.top < 0.8 * height and len(w.text) <= 3 for w in line) and min(w.top for w in line) - max(w.bottom for w in previous) < 0.6 * height
 
 
 def block(lines: list[list[Word]], start: int, step: int) -> list[list[Word]]:
@@ -159,16 +198,21 @@ def block(lines: list[list[Word]], start: int, step: int) -> list[list[Word]]:
                 break
             if data_started and tabular(line) and tabular(selected[-1]):
                 spacing = gap if spacing is None else min(spacing, gap)
+        if selected and data_started and step > 0 and superscripts_only(line, selected[-1]):
+            selected[-1] = sorted(selected[-1] + line, key=lambda w: w.x0)  # exponents set on a line of their own (10 with -8 below)
+            index += step
+            continue
         if tabular(line):
             data_started = True
         elif data_started:
-            # a text line after the data: the table ended (going down), or the header line (going up, then the table ends)
-            if step > 0:
+            # a text line after the data: the table ended (going down), or the header line (going up, then the table ends);
+            # in a reaction table a section heading ('Ionic Chemistry') followed by further reactions belongs to the table
+            if step > 0 and not (any(reaction_row(entry) for entry in selected) and index + 1 < len(lines) and reaction_row(lines[index + 1])):
                 break
-            # header going up: one or two close lines (symbols such as arrows may sit on a line of their own)
-            headers = [entry for entry in selected if not tabular(entry)]
-            if len(headers) >= 2 or (headers and abs(line[0].top - selected[-1][0].top) > 12.0):
-                break
+            if step < 0:  # header going up: one or two close lines (symbols such as arrows may sit on a line of their own)
+                headers = [entry for entry in selected if not tabular(entry)]
+                if len(headers) >= 2 or (headers and abs(line[0].top - selected[-1][0].top) > 12.0):
+                    break
         elif len(selected) > 6:
             break
         selected.append(line)
@@ -177,11 +221,14 @@ def block(lines: list[list[Word]], start: int, step: int) -> list[list[Word]]:
 
 
 def columns(data: list[list[Word]]) -> list[tuple[float, float]]:
-    """Column x-ranges: gaps in the union of the words of all data lines"""
+    """Column x-ranges: gaps in the union of the words of all data lines. In reaction tables the words of one cell (a reaction, a rate
+    formula) are separated by spaces: there, gaps up to about a space (half the text height) belong to the cell"""
     spans = sorted((w.x0, w.x1) for line in data for w in line)
+    heights = sorted(w.bottom - w.top for line in data for w in line)
+    join = 0.6 * heights[len(heights) // 2] if heights and any(reaction_row(line) for line in data) else 2.0
     merged: list[list[float]] = []
     for x0, x1 in spans:
-        if merged and x0 <= merged[-1][1] + 2.0:
+        if merged and x0 <= merged[-1][1] + join:
             merged[-1][1] = max(merged[-1][1], x1)
         else:
             merged.append([x0, x1])
@@ -198,6 +245,48 @@ def cells(line: list[Word], ranges: list[tuple[float, float]]) -> list[str]:
     return [re.sub(r'(?<=\d) (?=\d)', '', cell) for cell in result]
 
 
+def split_row(line: list[Word]) -> list[str]:
+    """Cells of one row of a reaction table: words closer than a wide gap (about a word space of the text, also around sub- and
+    superscripts) belong to one cell, e.g. 'N2 + M → N + N + M' or '1.162×10−8 T−1.6 exp(-113 200/T)'"""
+    height = sorted(w.bottom - w.top for w in line)[len(line) // 2]
+    gap = max(12.0, 1.2 * height)
+    result: list[str] = []
+    end = None
+    for word in line:
+        if end is not None and word.x0 - end <= gap:
+            # sub/superscripts (smaller words) are attached without a space: N2, N+, O+2
+            small = word.bottom - word.top < 0.8 * height
+            result[-1] += ('' if small else ' ') + word.text
+        else:
+            result.append(word.text)
+        end = word.x1 if end is None else max(end, word.x1)
+    return result
+
+
+TEX_GLYPHS = {'(cid:0)': '−', '(cid:2)': '×', '(cid:3)': '∗'}  # TeX symbol font positions in text layers without a character map
+
+
+def tex_cleaned(cell: str) -> str:
+    """Cells of a reaction table from a TeX PDF whose text layer keeps font positions: (cid:0) is a minus, (cid:2) a times sign, '!'
+    the arrow, and ':' between digits the decimal point of TeX's math italic font (1:6 -> 1.6)"""
+    for glyph, character in TEX_GLYPHS.items():
+        cell = cell.replace(glyph, character)
+    cell = re.sub(r'(?<=\S) ! (?=\S)', ' → ', cell)
+    cell = re.sub(r'(?<=\d):(?=\d)', '.', cell)
+    return re.sub(r'(?<=[×−]) (?=\d)|(?<=\d) (?=[−×])', '', cell)
+
+
+def reaction_table(number: str, caption: str, page_number: int, rows: list[list[Word]], source: str) -> Table:
+    """A reaction table as raw cells, row by row (reactions and rate formulas have no common column grid of single numbers)"""
+    data = [[tex_cleaned(cell) for cell in split_row(line)] for line in rows if reaction_row(line)]  # not a page number ('9 of 20')
+    width = max(len(row) for row in data)
+    first = next(index for index, line in enumerate(rows) if reaction_row(line))
+    header_lines = [split_row(line) for line in rows[:first] if not tabular(line)]  # not a section heading inside the table
+    header = header_lines[-1] if header_lines else []
+    header = (header + [''] * width)[:width]
+    return Table(number, caption, [page_number], header, [row + [''] * (width - len(row)) for row in data], source)
+
+
 def table_on_page(page: Any, number: str, use_ocr: bool) -> Optional[Table]:
     words = [] if use_ocr else text_words(page)
     source = 'text'
@@ -205,19 +294,26 @@ def table_on_page(page: Any, number: str, use_ocr: bool) -> Optional[Table]:
         words, source = ocr_words(page), 'ocr'
     all_words = words
     caption_text = ''
+    rows: list[list[Word]] = []
     for caption, candidate_text in find_captions(all_words, number):
         caption_text = candidate_text
-        words = column_of_caption(all_words, caption, float(page.width))
-        lines = lines_of(words)
-        caption_line = next(i for i, line in enumerate(lines) if caption in line)
-        below = block(lines, caption_line + 1, +1)
-        above = block(lines, caption_line - 1, -1)
-        rows = below if sum(tabular(line) for line in below) >= sum(tabular(line) for line in above) else above
+        # the caption's column of a two-column page; if no table is found there, the whole width (a table across the page, whose
+        # columns may leave the middle free, e.g. reactions on the left and rate coefficients on the right)
+        for words in (column_of_caption(all_words, caption, float(page.width)), all_words):
+            lines = lines_of(words)
+            caption_line = next(i for i, line in enumerate(lines) if caption in line)
+            below = block(lines, caption_line + 1, +1)
+            above = block(lines, caption_line - 1, -1)
+            rows = below if sum(tabular(line) for line in below) >= sum(tabular(line) for line in above) else above
+            if sum(tabular(line) for line in rows) >= 2:
+                break
         if sum(tabular(line) for line in rows) >= 2:
             break
     else:
         return None
     data = [line for line in rows if tabular(line)]
+    if any(reaction_row(line) for line in data):
+        return reaction_table(number, caption_text, page.page_number, rows, source)
     ranges = columns(data)
     header_lines = [line for line in rows if not tabular(line)]
     header = [' '.join(part for part in parts if part) for parts in zip(*(cells(line, ranges) for line in header_lines), strict=False)] if header_lines else [''] * len(ranges)

@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.56.0
+
+* `extract --table` reads reaction tables (rows with a reaction arrow and a rate coefficient): cells row by row (label, reaction,
+  rate coefficient as printed), tables across the page with a free middle (the caption's column first, then the whole width),
+  sub- and superscripts set lower or higher joined to their line, exponents on a line of their own joined to their row, section
+  headings inside the table and page numbers below it skipped, TeX font positions cleaned (`!`, `(cid:0)`, `(cid:2)`, `1:6`); the
+  raw CSV is written with a hint to `literature template --rates`. Farbar 2008 (47 rows), Boyd 2007 (37) and Plane 2015 (31) are
+  read; before, `table 2 not found`
+* Captions also `Tabelle A.1:` (German theses)
+
 ## 0.55.1
 
 * The tests run before every push (pre-commit hook `pytest` at stage `pre-push`; `prek install` installs the pre-commit and the pre-push

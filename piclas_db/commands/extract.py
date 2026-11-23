@@ -30,7 +30,7 @@ import yaml
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db.extract.raster import RESOLUTION, SCALE, extract_raster, grid_image, is_scanned, raster_figure_frames
-from piclas_db.extract.table import Table, extract_table, header_unit, parse_number
+from piclas_db.extract.table import ARROWS, Table, extract_table, header_unit, parse_number
 from piclas_db.extract.vector import ExtractError, extract, figure_frames, require_pdfplumber, review_image, tesseract_version, values
 from piclas_db import config
 from piclas_db.common.common_vars import Common
@@ -98,6 +98,11 @@ def write_table(args: argparse.Namespace, paper: StoreEntry, table: Table, outpu
         writer.writerows(table.rows)
     print(f'table {table.number} (pages {", ".join(str(p) for p in table.pages)}, {table.source}): {len(table.rows)} rows, {len(table.header)} columns -> {output / name}-table.csv')
     print(f'  caption: {table.caption}')
+    if any(any(arrow in cell for arrow in ARROWS) for row in table.rows for cell in row):
+        # a reaction table: the raw CSV is the copy to enter the rate table from (literature template --rates)
+        print('  reaction table: the raw CSV holds reactions and rate coefficients as printed; enter them as a rate table with')
+        print(f'    piclas-db literature template {args.paper} {name}-rates --rates --page {",".join(str(p) for p in table.pages)} --table {table.number} -o {output}')
+        return
     parsed = [parse_number(row[0]) for row in table.rows]
     energies = [value for value in parsed if value is not None]
     if len(energies) != len(parsed) or any(b <= a for a, b in itertools.pairwise(energies)):

@@ -204,3 +204,41 @@ def test_formula_with_parameters_from_table(paper: pathlib.Path, tmp_path: pathl
     (work / 'fit.formula.yaml').write_text(yaml.safe_dump({**formula, 'parameters_from': {'table': 'test-2003/table3-c1', 'column': 1}}))
     assert main(['literature', 'add', str(work / 'fit.extraction.yaml')]) == 1
     assert 'not a parameter table' in capsys.readouterr().out
+
+
+def test_reaction_table(tmp_path: pathlib.Path) -> None:
+    """A reaction table across the page (invented rows in the layout of Farbar and Boyd 2008): reactions on the left of the middle,
+    rate coefficients on the right, subscripts set lower, a section heading inside, a page number below"""
+    from piclas_db.extract.table import reaction_row, tex_cleaned  # noqa: PLC0415
+
+    plt.rcParams['pdf.fonttype'] = 42
+    path = tmp_path / 'reactions.pdf'
+    rows = [('1M', 'Tx + M → Q + Q + M', '1.162×10−8 T−1.6 exp(-113 200/T)'), ('1MB', 'Q + Q + M → Tx + M', '5.691×10−40 T−1.6')]
+    more = [('2F', 'Q + Tx → Tx+ + E−', '3.387×10−17 exp(-67 700/T)')]
+    with PdfPages(path) as pdf:
+        figure = plt.figure(figsize=(8.5, 11))
+        text(figure, 190, 60, 'Table 2: Reaction rate coefficients of the invented test species in m3/molecule/s.')
+        text(figure, 140, 80, 'Number')
+        text(figure, 220, 80, 'Reaction')
+        text(figure, 360, 80, 'Rate Coefficient')
+        y = 95.0
+        for label, reaction, rate in rows:
+            text(figure, 140, y, label)
+            text(figure, 190, y, reaction)
+            text(figure, 330, y, rate)
+            y += 14
+        text(figure, 220, y, 'Ion chemistry')
+        y += 14
+        for label, reaction, rate in more:
+            text(figure, 140, y, label)
+            text(figure, 190, y, reaction)
+            text(figure, 330, y, rate)
+        text(figure, 300, 700, '9 of 20')
+        pdf.savefig(figure)
+    plt.close('all')
+    table = extract_table(str(path), [1], '2')
+    assert table.header == ['Number', 'Reaction', 'Rate Coefficient']
+    assert [row[0] for row in table.rows] == ['1M', '1MB', '2F']  # the heading and the page number are not rows
+    assert table.rows[0][1] == 'Tx + M → Q + Q + M' and table.rows[0][2].startswith('1.162×10−8')
+    assert tex_cleaned('1.162(cid:2)10 (cid:0)8 T (cid:0)1:6') == '1.162×10−8 T −1.6' and tex_cleaned('N2 + M ! N + N + M') == 'N2 + M → N + N + M'
+    assert not reaction_row([])  # nothing to look at

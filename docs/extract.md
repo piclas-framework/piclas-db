@@ -93,7 +93,7 @@ piclas-db literature add work/table12-c1.extraction.yaml
 | Step | How |
 | --- | --- |
 | words | text layer of the PDF; pages without one (scans) by OCR with Tesseract, or always with `--ocr` |
-| caption | `TABLE 12.`, `TABLE12.`, `Table 2:`; references in the running text ("listed in Table 7.") are tried as well and discarded when no table follows; upper-case captions first |
+| caption | `TABLE 12.`, `TABLE12.`, `Table 2:`, German `Tabelle A.1:`; references in the running text ("listed in Table 7.") are tried as well and discarded when no table follows; upper-case captions first |
 | layout | on two-column pages (no word near the caption crosses the middle) only the column of the caption |
 | table | data rows (mostly numbers) below or above the caption, header lines on the caption side; continuation pages (`—Continued`) are joined |
 | columns | separated where no word of a data row lies; a label split into two columns is joined again |
@@ -104,6 +104,14 @@ Every table is written as raw CSV (`table<n>-table.csv`, header and all cells). 
 further column becomes a series (`table<n>-c<column>`) with an extraction record (`method: text` or `ocr`, table, pages, column
 header, units). Tables without an energy column, such as fit parameters (Janev et al. 2003), are kept as raw tables; using fit
 formulas follows in a later version.
+
+**Reaction tables** (rows with a reaction arrow and a rate coefficient, e.g. Farbar and Boyd 2008, Plane et al. 2015) are read row by
+row: the cells are the row label, the reaction (`N2 + M → N + N + M`, subscripts joined) and the rate coefficient as printed. Such a
+table may run across the page with the middle free (reactions left, rates right); section headings inside it and page numbers
+below it are skipped; TeX PDFs whose text layer keeps font positions are cleaned (`!` → `→`, `(cid:0)` → `−`, `(cid:2)` → `×`,
+`1:6` → `1.6`). Only the raw CSV is written: enter it as a rate table with `literature template --rates` ([literature.md](literature.md)).
+Text layers with other broken encodings (letters as single words, symbols mapped to other characters) are not read; try `--ocr`
+or enter the table from the page image.
 
 All twelve data tables of Yoon et al. 2008 (Tables 1–5, 7–9, 11–14, including those continued on the next page, two-column layout,
 several columns with different units) are read with the correct number of rows; Table 13 is identical to the values entered by
