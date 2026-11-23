@@ -532,3 +532,54 @@ def spec_yaml(spec: ReactionSpec) -> dict[str, object]:
             data[key] = getattr(spec, key)
     data['models'] = dict(spec.models)
     return data
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Preview of a rate table before it is stored (literature add -n), optionally compared with a database
+# ----------------------------------------------------------------------------------------------------------------------------------
+def database_matches(database: Database, row: RateRow, unit: str) -> tuple[list[str], Optional[tuple[str, list[str]]]]:
+    """Reactions of a database with the same reactants and products and the same C, n and T_d as a table row; else the closest one
+    (by C) with its differences"""
+    same_values: list[str] = []
+    closest: Optional[tuple[float, str, list[str]]] = None
+    for name, reaction in database.reactions.items():
+        attributes = reaction.attributes
+        if 'Arrhenius-Prefactor' not in attributes:
+            continue
+        key, _ = canonical([str(s) for s in as_list(attributes.get('Reactants'))], [str(s) for s in as_list(attributes.get('Products'))])
+        if key != row.key:
+            continue
+        C, n, Td = (as_float(attributes.get(item)) for item in ('Arrhenius-Prefactor', 'Arrhenius-Powerfactor', 'Activation-Energy_K'))
+        differences = same(row, unit, C, n, Td)
+        if not differences:
+            same_values.append(name)
+        else:
+            distance = abs(math.log(C / row.prefactor(unit))) if C > 0 else math.inf
+            if closest is None or distance < closest[0]:
+                closest = (distance, name, differences)
+    return same_values, (closest[1], closest[2]) if closest and not same_values else None
+
+
+def preview(rows: list[RateRow], unit: str, database: Optional[Database] = None) -> tuple[list[str], list[list[str]], dict[str, int]]:
+    """Header and lines of the rows as understood (reaction, third bodies, C converted to PICLas units, n, T_d, Tx) and, with a
+    database, the reactions with the same values or the closest one; counts of rows found, differing and not in the database"""
+    header = ['Row', 'Reaction', 'Third body', 'C (PICLas)', 'n', 'T_d', 'Tx']
+    counts = {'same': 0, 'differs': 0, 'absent': 0}
+    lines = []
+    for row in rows:
+        line = [row.row, str(row.key), ', '.join(row.third_bodies), f'{row.prefactor(unit):.4g}', f'{row.n:g}', f'{row.Td:g}', row.Tx]
+        if database is not None:
+            found, closest = database_matches(database, row, unit)
+            if found:
+                line.append('= ' + ', '.join(found))
+                counts['same'] += 1
+            elif closest:
+                line.append(f'≠ {closest[0]}: ' + '; '.join(closest[1]))
+                counts['differs'] += 1
+            else:
+                line.append('–')
+                counts['absent'] += 1
+        lines.append(line)
+    if database is not None:
+        header.append('In the database (= same values, ≠ closest, – no such reaction)')
+    return header, lines, counts

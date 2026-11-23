@@ -15,6 +15,7 @@
 # ----------------------------------------------------------------------------------------------------------------------------------
 import argparse
 import pathlib
+from typing import Optional
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Third-party libraries
@@ -26,7 +27,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db import config, wanted
 from piclas_db.git import GitError
-from piclas_db.literature import LiteratureError, add_extraction, extractions, find_extraction, papers, review, template
+from piclas_db.literature import LiteratureError, add_extraction, check_extraction, extractions, find_extraction, papers, review, template
 from piclas_db.sources.identify import slug
 from piclas_db.store import Store
 # ==================================================================================================================================
@@ -52,6 +53,37 @@ RATES_TEMPLATE = """# Reaction rate table exactly as printed: one row per reacti
 # C: 3.0e22 or as printed 3.0^22; Tx: T, Ta (sqrt(T Tv)), Tv, Te
 row,reaction,third_body,C,n,Td,Tx
 """
+
+
+def check_only(store: Store, record_path: pathlib.Path, compare: Optional[str]) -> int:
+    """literature add -n: validate the record, show what would be stored; rate tables row by row, optionally compared with a database"""
+    from piclas_db import rates  # noqa: PLC0415
+    from piclas_db.common.table import Row, render, use_color  # noqa: PLC0415
+
+    record, data_path, table = check_extraction(store, record_path)
+    paper, name = record['source']['paper'], record['name']
+    if not record.get('rate_table'):
+        rows = len(table.energy) if not record.get('parameter_table') else record.get('result', {}).get('rows')
+        print(f'valid: literature/{paper}/{name} ({rows} rows) would be stored (dry run, nothing stored)')
+        return 0
+    unit = str(((record.get('columns') or {}).get('rate') or {}).get('unit'))
+    model = ((record.get('quantity') or {}).get('assignment') or {}).get('chemistry_model')
+    rate_rows = rates.read_rate_table(data_path.read_text(encoding='utf-8'))
+    database = None
+    if compare:
+        from piclas_db.readers import read_database  # noqa: PLC0415
+
+        database = read_database(compare)
+    header, lines, counts = rates.preview(rate_rows, unit, database)
+    print(
+        f'valid: literature/{paper}/{name}: {len(rate_rows)} rows, {len({str(row.key) for row in rate_rows})} reactions, C in {unit} -> m^3/s per molecule, chemistry model {model or "(none)"} (dry run, nothing stored)'
+    )
+    color = use_color()
+    print('\n'.join(render(header, [Row(line) for line in lines], shrinkable=[1, len(header) - 1] if database else [1], color=color)))
+    if database is not None:
+        print(f'{compare}: {counts["same"]} row(s) with the same values, {counts["differs"]} with other values (≠), {counts["absent"]} reaction(s) not in the database')
+    print(f'Store it with: piclas-db literature add {record_path}')
+    return 0
 
 
 def run(args: argparse.Namespace) -> int:
@@ -92,6 +124,10 @@ def run(args: argparse.Namespace) -> int:
             record_file.write_text(yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=1000))
             print(f'Enter the values in {data_file}, complete {record_file} (units, created.by, quantity, accuracy), then:')
             print(f'  piclas-db literature add {record_file}')
+        elif args.action == 'add' and args.dry_run:
+            if len(args.arguments) != 1:
+                raise LiteratureError('usage: piclas-db literature add -n RECORD.yaml [--compare DATABASE.h5]')
+            return check_only(store, pathlib.Path(args.arguments[0]), args.compare)
         elif args.action == 'add':
             if len(args.arguments) != 1:
                 raise LiteratureError('usage: piclas-db literature add RECORD.yaml')

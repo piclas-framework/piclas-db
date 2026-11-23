@@ -153,6 +153,13 @@ def test_build_reactions_from_rate_tables(tmp_path: pathlib.Path, monkeypatch: p
     assert 'Arrhenius-Prefactor' not in db.reactions['Tx+electron_TxIon1+electron+electron#1'].attributes
     assert db.attributes['Reactions@AvailableChemistryModels,Reference'] == [['Set_7Spec_3Reac_Test2008', 'A. Author, J. Test 1, 1 (2008)']]
 
+    capsys.readouterr()
+    # dry run of the same record: checked and shown row by row, compared with the database just built, nothing stored
+    assert main(['literature', 'add', '-n', str(record_file), '--compare', str(tmp_path / 'out.h5')]) == 0
+    out = capsys.readouterr().out
+    assert 'valid: literature/test-2008/rates: 7 rows' in out and '(dry run, nothing stored)' in out
+    assert '= Tx2+M_Tx+M+Tx#1' in out and '≠ Tx2+Qq_TxQq+Tx#1' not in out and 'T_d' in out
+    assert 'row(s) with the same values' in out and len(rates.stored_tables(Store(tmp_path / 'store'))) == 1
     specs, models, notes = rates.specs_from_database(db, rates.stored_tables(Store(tmp_path / 'store')))
     assert (specs['Tx2+M_Tx+M+Tx#1'].rates is not None, specs['Tx2+M_Tx+M+Tx#1'].row, specs['Tx2+M_Tx+M+Tx#1'].third_body) == (True, '1', 'molecules')
     assert specs['Qq+electron_QqIon1+electron+electron#1'].arrhenius == {'C': 1.0e-14, 'n': 0.0, 'Td': 1.0e5}

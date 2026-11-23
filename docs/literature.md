@@ -330,6 +330,11 @@ row,reaction,third_body,C,n,Td,Tx
 * `quantity.assignment.chemistry_model`: the suffix of the chemistry models in `AvailableChemistryModels` that cite this paper
   (`Author2001` for `Air_7Spec_9Reac_Author2001`).
 
+Before storing, `literature add -n RECORD.yaml` checks the record and shows every row as understood (reaction, third bodies, C
+converted to PICLas units, n, T_d, Tx); with `--compare DATABASE.h5` each row is also looked up among the database's reactions: `=`
+the reactions with the same values, `≠` the closest one with its differences, `–` no such reaction (e.g. recombinations, which PICLas
+computes from the forward rate). Nothing is stored.
+
 `rebuild --explain` compares every Arrhenius reaction of a database with all rate tables in the store ([rebuild.md](rebuild.md)).
 
 ## Use in recipes

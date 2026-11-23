@@ -3,6 +3,13 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.57.0
+
+* `literature add -n RECORD.yaml`: checks an extraction without storing it; a rate table is shown row by row as understood
+  (reaction, third bodies, C in PICLas units, n, T_d, Tx); `--compare DATABASE.h5` looks every row up among the database's
+  reactions (same values, closest with differences, absent)
+* Positional words after options are accepted (`literature add -n RECORD.yaml`)
+
 ## 0.56.0
 
 * `extract --table` reads reaction tables (rows with a reaction arrow and a rate coefficient): cells row by row (label, reaction,

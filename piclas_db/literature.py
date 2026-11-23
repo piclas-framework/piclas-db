@@ -345,6 +345,21 @@ def add_extraction(store: Store, record_path: pathlib.Path, by: Optional[str] = 
     """Validate an extraction (record + raw CSV next to it) and store it; the paper must be in the store"""
     from piclas_db.sources.identify import Identified  # noqa: PLC0415
 
+    record, data_path, table = check_extraction(store, record_path, by)
+    if not record.get('parameter_table') and not record.get('rate_table'):
+        record.setdefault('result', {})['rows'] = len(table.energy)
+    zeroed = int(np.sum(table.cross_section < 0.0))
+    if zeroed:
+        record.setdefault('notes', []).append(f'{zeroed} value(s) below zero but zero within the uncertainty: used as zero')
+    paper_name = record['source']['paper']
+    identified = Identified(provider='literature', kind='extraction', dataset=f'{paper_name}/{record["name"]}', details={'extraction': record})
+    created = datetime.date.fromisoformat(str(record['created']['date'])[:10]) if record.get('created', {}).get('date') else None
+    return store.add(data_path, identified, retrieved=created, by=by)
+
+
+def check_extraction(store: Store, record_path: pathlib.Path, by: Optional[str] = None) -> tuple[dict, pathlib.Path, Table]:
+    """Validate an extraction without storing it (literature add -n): the record, its data file and the data read from it; raises
+    LiteratureError with all problems"""
     record = load_record(record_path)
     if by and not (record.get('created') or {}).get('by'):
         record.setdefault('created', {})['by'] = by  # who extracted the data, if the record does not say
@@ -383,14 +398,7 @@ def add_extraction(store: Store, record_path: pathlib.Path, by: Optional[str] = 
         problems.append(f'file_sha256 does not match the paper {paper_name} in the store')
     if problems:
         raise LiteratureError('; '.join(problems))
-    if not record.get('parameter_table') and not record.get('rate_table'):
-        record.setdefault('result', {})['rows'] = len(table.energy)
-    zeroed = int(np.sum(table.cross_section < 0.0))
-    if zeroed:
-        record.setdefault('notes', []).append(f'{zeroed} value(s) below zero but zero within the uncertainty: used as zero')
-    identified = Identified(provider='literature', kind='extraction', dataset=f'{paper_name}/{record["name"]}', details={'extraction': record})
-    created = datetime.date.fromisoformat(str(record['created']['date'])[:10]) if record.get('created', {}).get('date') else None
-    return store.add(data_path, identified, retrieved=created, by=by)
+    return record, data_path, table
 
 
 def find_extraction(store: Store, name: str) -> StoreEntry:

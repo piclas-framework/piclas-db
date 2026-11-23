@@ -32,7 +32,12 @@ from piclas_db.store import missing_store, store_location
 def main(argv: Optional[list[str]] = None) -> int:
     """Entry point of the piclas-db command-line tool, returns the exit code"""
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args, extra = parser.parse_known_args(argv)
+    # positional words after an option ('literature add -n RECORD.yaml'): argparse gives the list of words before the option only
+    if extra and isinstance(getattr(args, 'arguments', None), list) and not any(word.startswith('-') for word in extra):
+        args.arguments += extra
+    elif extra:
+        parser.error(f'unrecognized arguments: {" ".join(extra)}')
 
     # No command given: show the help
     if args.command is None:
