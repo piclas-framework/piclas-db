@@ -42,3 +42,4 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
         raise doi.Unreachable('Crossref not reachable: tests run offline')
 
     monkeypatch.setattr(doi, 'get_json', unreachable)
+    monkeypatch.setattr(doi, 'openalex_search', lambda text, timeout=15.0: ([], ''))  # tests of OpenAlex replace fetch_json instead

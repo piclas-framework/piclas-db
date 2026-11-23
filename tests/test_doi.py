@@ -16,6 +16,7 @@
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import pathlib
+import urllib.parse
 from typing import Optional
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -31,6 +32,7 @@ from piclas_db.sources import doi as doi_module
 from piclas_db.store import Store
 # ==================================================================================================================================
 
+REAL_OPENALEX_SEARCH, REAL_GET_JSON = doi_module.openalex_search, doi_module.get_json  # before the autouse fixture replaces them
 PDF = b'%PDF-1.4\n1 0 obj << /Type /Catalog /Metadata 2 0 R >> endobj\n2 0 obj << /Type /Metadata >>\nstream\n<x:xmpmeta><prism:doi>10.9999/test.2001.42</prism:doi></x:xmpmeta>\nendstream\nendobj\ntrailer << /Root 1 0 R >>\n%%EOF\n'
 PLAIN = b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n'
 TEXT = 'Journal of Invented Results 12 (2001)\nRate Parameters for Imaginary Plasmas\nA. Author and B. Other\n'
@@ -302,3 +304,102 @@ def test_open_link_is_detached_and_silent(monkeypatch: pytest.MonkeyPatch) -> No
     command, options = calls[0]
     assert command == ['/usr/bin/xdg-open', 'https://doi.org/10.9999/x'] and options['start_new_session']
     assert options['stdout'] == options['stderr'] == paper_review.subprocess.DEVNULL  # no browser log lines in the review
+
+
+JANEV_TEXT = """Collision Processes in Low-Temperature
+Hydrogen Plasmas
+R.K. Janev1,2, D. Reiter1, U. Samm1
+1 Institut für Plasmaphysik, Forschungszentrum Jülich GmbH
+Jül-4105
+"""
+JANEV_CHAPTER = {'DOI': '10.1007/978-3-642-71935-6_7', 'title': ['Collision Processes of H+'], 'author': [{'family': 'Janev'}], 'issued': {'date-parts': [[1987]]}}
+JANEV_WORK = {
+    'doi': None,
+    'display_name': 'Collision Processes in Low-Temperature Hydrogen Plasmas',
+    'publication_year': 2003,
+    'authorships': [{'author': {'display_name': 'R. K. Janev'}}],
+}
+
+
+def test_title_and_author_checks() -> None:
+    assert doi_module.title_in_text('Modeling of nonequilibrium CO Fourth-Positive and CN Violet emission', 'Modeling of nonequilibrium CO Fourth-Posi-\ntive and CN Violet emission in')
+    assert doi_module.title_in_text(doi_module.tidy_title('emission in CO<sub>2</sub>–N<sub>2</sub> gases'), 'emission in CO 2 -N 2 gases')
+    assert doi_module.title_in_text('Forschungszentrum Jülich report', 'FORSCHUNGSZENTRUM JULICH REPORT')
+    assert not doi_module.title_in_text('Processes Collision in Plasmas', JANEV_TEXT)  # same words, other order
+    assert not doi_module.title_in_text('Collision Processes of H+', JANEV_TEXT)  # the chapter title is not on the report's page
+    assert doi_module.author_found({'author': [{'family': 'Janev'}]}, JANEV_TEXT)  # Janev1,2
+    record = {'author': [{'family': 'Müller'}]}
+    assert all(doi_module.author_found(record, text) for text in ('H. Mueller', 'H. Muller', 'H. MÜLLER')) and not doi_module.author_found({}, 'H. Mueller')
+    assert doi_module.title_lines(JANEV_TEXT) == 'Collision Processes in Low-Temperature Hydrogen Plasmas'
+    assert doi_module.title_lines(LOFTHOUSE).startswith('NONEQUILIBRIUM HYPERSONIC AEROTHERMODYNAMICS')
+    assert doi_module.title_lines('A Title\nSecond line\nabstract: text') == 'A Title Second line'
+    assert doi_module.title_lines('Title\nname@example.org') == 'Title' and doi_module.title_lines('Title\nUniversity of Stuttgart') == 'Title'
+
+
+def test_crossref_search_rejects_similar_chapter(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Janev's report and his chapter "Collision Processes of H+": both long words of the chapter title are on the page"""
+    path = tmp_path / 'report.pdf'
+    path.write_bytes(PLAIN)
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: JANEV_TEXT)
+    monkeypatch.setattr(doi_module, 'get_json', lambda url, timeout: {'items': [JANEV_CHAPTER]} if 'query.bibliographic' in url else None)
+    assert doi_module.paper_citation(path, None, None).doi is None
+    right = {**JANEV_CHAPTER, 'DOI': '10.9999/report', 'title': ['Collision Processes in Low-Temperature Hydrogen Plasmas']}
+    monkeypatch.setattr(doi_module, 'get_json', lambda url, timeout: {'items': [JANEV_CHAPTER, right]} if 'query.bibliographic' in url else None)
+    assert doi_module.paper_citation(path, None, None).doi == '10.9999/report'  # the right hit among the others
+
+
+def test_openalex_fallback(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A report without DOI: not at Crossref, found at OpenAlex by its title; the query has only the title words"""
+    monkeypatch.setattr(doi_module, 'openalex_search', REAL_OPENALEX_SEARCH)  # replaced by the autouse fixture; here fetch_json is replaced
+    monkeypatch.setattr(doi_module, 'get_json', REAL_GET_JSON)
+    monkeypatch.setenv('PICLAS_DB_USER_NAME', 'Tester')
+    monkeypatch.setenv('PICLAS_DB_USER_EMAIL', 'tester@example.org')
+    monkeypatch.setenv('OPENALEX_API_KEY', 'KEY123')
+    path = tmp_path / 'report.pdf'
+    path.write_bytes(PLAIN)
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: JANEV_TEXT)
+    asked: list[str] = []
+
+    def fetch(url: str, timeout: float, service: str = 'Crossref') -> Optional[dict]:
+        asked.append(url)
+        if service == 'OpenAlex':
+            return {'results': [{**JANEV_WORK, 'display_name': 'Another Report'}, JANEV_WORK]}
+        return {'message': {'items': [JANEV_CHAPTER]}} if 'query.bibliographic' in url else None
+
+    monkeypatch.setattr(doi_module, 'fetch_json', fetch)
+    cited = doi_module.paper_citation(path, None, None)
+    assert (cited.doi, cited.reference_from, cited.key(set())) == (None, 'openalex', 'janev-2003')
+    assert cited.reference == 'Janev, Collision Processes in Low-Temperature Hydrogen Plasmas, 2003' and 'found by searching OpenAlex' in cited.notes[-1]
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(asked[-1]).query)
+    assert query['search'] == ['Collision Processes in Low Temperature Hydrogen Plasmas'] and query['mailto'] == ['tester@example.org'] and query['api_key'] == ['KEY123']
+
+    def too_many(url: str, timeout: float, service: str = 'Crossref') -> Optional[dict]:
+        if service == 'OpenAlex':
+            raise doi_module.Unreachable('OpenAlex: HTTP 429 (too many requests)')
+        return None
+
+    monkeypatch.setattr(doi_module, 'fetch_json', too_many)
+    cited = doi_module.paper_citation(path, None, None)
+    assert cited.doi is None and cited.reference is None and 'OpenAlex: HTTP 429' in cited.notes[-1]  # reported, not offline
+    other = {**JANEV_WORK, 'authorships': [{'author': {'display_name': 'A. Nobody'}}]}
+    monkeypatch.setattr(doi_module, 'fetch_json', lambda url, timeout, service='Crossref': {'results': [other]} if service == 'OpenAlex' else None)
+    assert doi_module.paper_citation(path, None, None).reference is None  # other first author: rejected
+
+
+def test_from_openalex_authors() -> None:
+    names = {'R. K. Janev': 'Janev', 'Janev, R. K.': 'Janev', 'John Smith Jr.': 'Smith', 'Hans von der Heydt': 'Heydt'}
+    for name, family in names.items():
+        record = doi_module.from_openalex({'display_name': 'T', 'authorships': [{'author': {'display_name': name}}]})
+        assert record is not None and record['author'] == [{'family': family}]
+    assert doi_module.from_openalex({'display_name': ''}) is None
+    assert doi_module.from_openalex({'display_name': 'T', 'doi': 'https://doi.org/10.1/X'}) == {'title': ['T'], 'DOI': '10.1/X'}
+
+
+def test_pdfminer_warnings_are_silenced(tmp_path: pathlib.Path) -> None:
+    """Warnings of pdfminer about incomplete fonts of older PDFs must not appear on the terminal (through the progress bar)"""
+    import logging  # noqa: PLC0415
+
+    logging.getLogger('pdfminer').setLevel(logging.WARNING)
+    (tmp_path / 'paper.pdf').write_bytes(PLAIN)
+    doi_module.plumber_text(tmp_path / 'paper.pdf', 1)
+    assert logging.getLogger('pdfminer').getEffectiveLevel() == logging.ERROR

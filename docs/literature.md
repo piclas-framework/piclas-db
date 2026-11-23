@@ -51,9 +51,19 @@ override it.
 2. **Check at Crossref**: a DOI is taken when Crossref knows it and its title is on the first pages of the PDF. This catches a
    download that contains another article than its name says (a wrong file from the publisher). Scans without text are not
    compared.
-3. **Search**: without an accepted DOI, the first lines of the PDF (or the file name of a scan) are searched at Crossref; the best
-   match is taken if its title is in the PDF.
-4. **Citation** from the Crossref record: authors (initials), title, journal volume(issue):pages, year.
+3. **Search**: without an accepted DOI, the first lines of the PDF (or the file name of a scan) are searched at Crossref. A hit is
+   taken only if its **whole title is in the text, in order** (compared by letters and digits, so line breaks, hyphenation, accents
+   and formula spacing do not matter) and its **first author's family name** is on the page (with and without spelled-out
+   umlauts). Counting title words was not enough: a dissertation matched a chapter of its committee chair with a similar title, a
+   report matched a chapter of its author whose title words were all on the page. For a scan without text, 60 % of the title words
+   and the author must be in the file name.
+4. **OpenAlex**: if Crossref has nothing, the title lines of the first page (up to the byline) are searched at OpenAlex
+   (api.openalex.org), which also knows reports, theses and books without DOI; the same checks apply. A paper found there may
+   have no DOI: it is stored with the citation. Without a key, all requests of one IP share a small daily budget (about 100);
+   a free key from openalex.org/settings/api in `$OPENALEX_API_KEY` raises it. OpenAlex errors (unreachable, HTTP 429) appear
+   in the paper's notes.
+5. **Citation** from the Crossref or OpenAlex record: authors (initials), title, journal volume(issue):pages, year (OpenAlex:
+   first author's family name, title, year).
 
 The import prints one block per paper with a mark (on a terminal in color: green ✓ fine, yellow ! to check, red ✗ failed,
 = already in the store), the key, the DOI with where it was found and the link to check it, the citation and the reasons to check;

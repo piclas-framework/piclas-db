@@ -3,6 +3,26 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.54.1
+
+* Warnings of pdfminer (under pdfplumber) about incomplete font descriptions of older PDFs ("Could not get FontBBox ...") are no
+  longer printed; they broke through the progress bar of `import --literature`, the text was extracted anyway
+
+## 0.54.0
+
+Ported from rename-papers 0.7.1:
+
+* Search hits (Crossref and OpenAlex) are taken only if their whole title is in the text, in order (`title_in_text`: letters and
+  digits only, so line breaks, hyphenation, accents and formula spacing do not matter), and the first author's family name is on the
+  page (`author_found`, now on letter runs: `Janev1,2`). Replaces the 90 % word count, which still accepted a report's page for a
+  chapter of its author whose two long title words were on it. DOIs found in the PDF or its name keep the 60 % word check; scans
+  compare 60 % of the title words and the author with the file name
+* OpenAlex fallback after the Crossref search, for reports, theses and books without DOI: query with the title lines of the first
+  page (`title_lines`, up to the byline), at most one request per paper, `mailto` from the configured user, `$OPENALEX_API_KEY`;
+  errors (unreachable, HTTP 429) in the notes without marking the run offline; papers found there may have no DOI (stored with the
+  citation, `reference_from: openalex`)
+* `fetch_json` (whole answer, service named in errors) under `get_json`; `ẞ` → `SS` in keys
+
 ## 0.53.2
 
 * `--review`: links and PDFs are opened with `xdg-open` (`open` on macOS) detached from the terminal and without its output, so browser

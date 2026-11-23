@@ -23,6 +23,8 @@ https://doi.org/<DOI>, printed by the import.
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
 import json
+import logging
+import os
 import pathlib
 import re
 import shutil
@@ -44,7 +46,8 @@ from piclas_db.common.common_vars import Common
 DOI_PATTERN = re.compile(r'\b(10\.\d{4,9}/[^\s"<>{}\[\]]+)', re.IGNORECASE)
 CROSSREF = 'https://api.crossref.org/works/'
 TITLE_MATCH = 0.6  # share of the title's words that must appear in the first pages (DOI found in the PDF or its name)
-SEARCH_MATCH = 0.9  # the same for a Crossref search hit, which must also have its first author in the text
+BYLINE = re.compile(r'^by\b|\b[A-Z]\.|@|\b(?:abstract|university|universit\w*|institut\w*|department|laborator\w*)\b', re.IGNORECASE)
+SUFFIXES = {'jr', 'sr', 'ii', 'iii', 'iv'}
 
 
 @dataclass
@@ -73,7 +76,7 @@ class Citation:
         return f'https://doi.org/{self.doi}' if self.doi else None
 
 
-UMLAUTS = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss'}
+UMLAUTS = {'ä': 'ae', 'ö': 'oe', 'ü': 'ue', 'Ä': 'Ae', 'Ö': 'Oe', 'Ü': 'Ue', 'ß': 'ss', 'ẞ': 'SS'}
 
 
 def ascii_fold(text: str) -> str:
@@ -100,12 +103,74 @@ def plain_words(text: str) -> list[str]:
 
 
 def author_found(record: dict, text: str) -> bool:
-    """The first author's family name (all its parts of 2+ letters) in the text, compared in both spellings (Mueller and Muller)"""
+    """The first author's family name (all its parts of 2+ letters) in the text, in both spellings (Mueller and Muller for Müller);
+    letter runs, because affiliation markers stick to names in extracted text (R.K. Janev1,2)"""
     authors = record.get('author') or []
     family = str(authors[0].get('family') or authors[0].get('name') or '') if authors else ''
-    haystack = {word.lower() for word in ascii_words(text) + plain_words(text)}
+    haystack = {word.lower() for word in re.findall(r'[A-Za-z]+', ' '.join(ascii_words(text) + plain_words(text)))}
     spellings = [[word.lower() for word in words(family) if len(word) > 1] for words in (ascii_words, plain_words)]
     return any(names and all(name in haystack for name in names) for names in spellings)
+
+
+def title_in_text(title: str, text: str) -> bool:
+    """The whole title is in the text, in order: compared by letters and digits only, so line breaks, hyphenation, punctuation,
+    accents and formula spacing (H 2, H2) do not matter"""
+    squeezed = ''.join(plain_words(title)).lower()
+    return bool(squeezed) and squeezed in ''.join(plain_words(text)).lower()
+
+
+def title_lines(text: str) -> str:
+    """The title from the start of the first page: lines up to the byline (by, initials R.K., e-mail, Abstract, affiliation), at most 4"""
+    lines: list[str] = []
+    for line in (line.strip() for line in text.splitlines()):
+        if not line:
+            continue
+        if BYLINE.search(line) or len(lines) == 4:
+            break
+        lines.append(line)
+    return ' '.join(lines)
+
+
+def from_openalex(work: dict) -> Optional[dict]:
+    """OpenAlex work as a Crossref-like record (title, first author's family name, year, DOI or None); None without title"""
+    title = str(work.get('display_name') or work.get('title') or '')
+    if not title:
+        return None
+    record: dict = {'title': [title], 'DOI': clean(str(work['doi'])) if work.get('doi') else None}
+    if work.get('publication_year'):
+        record['issued'] = {'date-parts': [[int(work['publication_year'])]]}
+    authors = work.get('authorships') or []
+    name = str(((authors[0].get('author') or {}).get('display_name') or authors[0].get('raw_author_name') or '') if authors else '')
+    if ',' in name:  # Janev, R. K.
+        family = name.partition(',')[0].strip()
+    else:  # R. K. Janev (compound names lose their particles: Hans von der Heydt -> Heydt)
+        words = [word for word in name.split() if word.rstrip('.').lower() not in SUFFIXES]
+        family = words[-1] if words else ''
+    if family:
+        record['author'] = [{'family': family}]
+    return record
+
+
+def openalex_search(text: str, timeout: float = 15.0) -> tuple[list[dict], str]:
+    """(records of the OpenAlex works best matching the title of the PDF, error); one request per file. OpenAlex also knows reports,
+    theses and books without DOI. Queried with the title lines only (it needs all query words, author initials would prevent hits).
+    Without a key all requests of one IP share a small daily budget: $OPENALEX_API_KEY (free, openalex.org/settings/api) raises it."""
+    query = ' '.join(re.sub(r'[^\w\s]|\d', ' ', title_lines(text)).split())[:200]
+    if not query:
+        return [], ''
+    params: dict[str, object] = {'search': query, 'per-page': 5, 'select': 'doi,display_name,publication_year,authorships'}
+    from piclas_db import config  # noqa: PLC0415
+
+    found = config.identity()
+    if found:
+        params['mailto'] = found[1]
+    if os.environ.get('OPENALEX_API_KEY'):
+        params['api_key'] = os.environ['OPENALEX_API_KEY']
+    try:
+        data = fetch_json('https://api.openalex.org/works?' + urllib.parse.urlencode(params), timeout, 'OpenAlex')
+    except Unreachable as e:  # only a fallback: the error is reported, the run is not offline
+        return [], str(e)
+    return [record for record in map(from_openalex, (data or {}).get('results') or []) if record], ''
 
 
 def record_year(record: dict) -> Optional[int]:
@@ -147,8 +212,15 @@ def from_file_name(name: str) -> list[str]:
     return [clean(match.group(1))] if match else []
 
 
+def quiet_pdfminer() -> None:
+    """pdfminer (under pdfplumber) logs a warning for every incomplete font description of older PDFs ("Could not get FontBBox
+    from font descriptor ..."); the text is extracted anyway, so only errors are shown"""
+    logging.getLogger('pdfminer').setLevel(logging.ERROR)
+
+
 def plumber_text(path: pathlib.Path, pages: int) -> Optional[str]:
     """Text by pdfplumber; None if it is not installed or cannot read the file"""
+    quiet_pdfminer()
     try:
         import pdfplumber  # noqa: PLC0415
 
@@ -205,20 +277,27 @@ class Unreachable(Exception):
     """Crossref could not be asked (offline, firewall, timeout)"""
 
 
-def get_json(url: str, timeout: float) -> Optional[dict]:
-    """JSON of a Crossref URL; None for 'not found' (HTTP 404), Unreachable for network errors"""
+def fetch_json(url: str, timeout: float, service: str = 'Crossref') -> Optional[dict]:
+    """Whole JSON answer of a web service; None for 'not found' (HTTP 404), Unreachable (naming the service) for network errors"""
     headers = {'User-Agent': f'piclas-db/{Common().version} (https://github.com/piclas-framework/piclas-db)', 'Accept': 'application/json'}
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as response:  # noqa: S310 (fixed https host)
-            return json.loads(response.read().decode('utf-8')).get('message')
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as response:  # noqa: S310 (fixed https hosts)
+            data = json.loads(response.read().decode('utf-8'))
+            return data if isinstance(data, dict) else None
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None
-        raise Unreachable(f'Crossref: HTTP {e.code}') from e
+        raise Unreachable(f'{service}: HTTP {e.code}' + (' (too many requests)' if e.code == 429 else '')) from e
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise Unreachable(f'Crossref not reachable: {e}') from e
+        raise Unreachable(f'{service} not reachable: {e}') from e
     except ValueError:
         return None
+
+
+def get_json(url: str, timeout: float) -> Optional[dict]:
+    """The 'message' of a Crossref answer; None for 'not found', Unreachable for network errors"""
+    data = fetch_json(url, timeout, 'Crossref')
+    return data.get('message') if data else None
 
 
 def crossref(doi: str, timeout: float = 15.0) -> Optional[dict]:
@@ -294,6 +373,24 @@ def paper_citation(path: pathlib.Path, doi: Optional[str], reference: Optional[s
     return result
 
 
+def search_hit(record: dict, text: str, haystack: str) -> bool:
+    """A search hit is the paper only if its whole title is in the text, in order, and its first author is there; a scan without
+    text has only its file name: 60 % of the title words and the author"""
+    title = record_title(record)
+    if not title:
+        return False
+    if text.strip():
+        return title_in_text(title, text) and author_found(record, text)
+    return title_found(title, haystack) >= TITLE_MATCH and author_found(record, haystack)
+
+
+def take(result: Citation, record: dict, doi: Optional[str], where: str) -> None:
+    result.doi, result.doi_found_in, result.title = doi, where if doi else None, record_title(record) or None
+    result.first_author, result.year = record_author(record), record_year(record)
+    if not result.reference:
+        result.reference, result.reference_from = format_citation(record), 'openalex' if where == 'OpenAlex' else 'crossref'
+
+
 def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result: Citation) -> Citation:
     """DOI candidates checked at Crossref (title on the first pages), else a Crossref search for the first lines"""
     has_text = bool(text.strip())
@@ -323,16 +420,18 @@ def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result:
         break
     else:
         lines = [line.strip() for line in text.splitlines() if len(line.strip()) > 15][:6] if has_text else [haystack]
-        for record in search(' '.join(lines)):
-            title = record_title(record)
-            needed = SEARCH_MATCH if has_text else TITLE_MATCH  # a scan: only the file name to compare with
-            if title and title_found(title, haystack) >= needed and author_found(record, haystack) and record.get('DOI'):
-                result.doi, result.doi_found_in, result.title = str(record['DOI']), 'Crossref search', title
-                result.first_author, result.year = record_author(record), record_year(record)
-                result.notes.append('DOI found by searching Crossref for the first lines of the PDF: check it at the link')
-                if not result.reference:
-                    result.reference, result.reference_from = format_citation(record), 'crossref'
-                break
+        hit = next((record for record in search(' '.join(lines)) if record.get('DOI') and search_hit(record, text, haystack)), None)
+        if hit is not None:
+            take(result, hit, str(hit['DOI']), 'Crossref search')
+            result.notes.append('DOI found by searching Crossref for the first lines of the PDF: check it at the link')
+        elif has_text:  # OpenAlex also knows reports, theses and books without DOI
+            records, error = openalex_search(text)
+            hit = next((record for record in records if search_hit(record, text, haystack)), None)
+            if hit is not None:
+                take(result, hit, hit.get('DOI'), 'OpenAlex')
+                result.notes.append('found by searching OpenAlex for the title: check it' + (' at the link' if hit.get('DOI') else ' (no DOI)'))
+            elif error:
+                rejected.append(error)
     if rejected:
         result.notes.append('not taken: ' + '; '.join(rejected))
     return result
