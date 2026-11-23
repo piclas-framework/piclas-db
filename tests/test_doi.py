@@ -410,3 +410,54 @@ def test_year_of_the_printed_issue() -> None:
     record = {'issued': {'date-parts': [[2000, 12]]}, 'published-online': {'date-parts': [[2000, 12]]}, 'published-print': {'date-parts': [[2001, 1]]}}
     assert doi_module.record_year(record) == 2001
     assert doi_module.record_year({'issued': {'date-parts': [[2014, 9]]}}) == 2014
+
+
+PARK_TEXT = """JOURNAL OF THERMOPHYSICS AND HEAT TRANSFER
+Vol. 15, No. 1, January– March 2001
+Chemical-Kinetic Parameters of Hyperbolic Earth Entry
+Chul Park¤
+Eloret Corporation, Moffett Field, California 94085
+and
+Richard L. Jaffe† and Harry Partridge‡
+NASA Ames Research Center, Moffett Field, California 94035
+"""
+PARK = {
+    'DOI': '10.2514/2.6582',
+    'title': ['Chemical-Kinetic Parameters of Hyperbolic Earth Entry'],
+    'author': [{'given': 'Chul', 'family': 'Park'}],
+    'container-title': ['Journal of Thermophysics and Heat Transfer'],
+    'issued': {'date-parts': [[2000, 12]]},
+    'published-online': {'date-parts': [[2000, 12]]},
+    'published-print': {'date-parts': [[2001, 1]]},
+}
+PARK_CONFERENCE = {
+    'DOI': '10.2514/6.2000-210',
+    'title': ['Chemical-kinetic parameters of hyperbolic earth entry'],
+    'author': [{'family': 'Park'}],
+    'container-title': ['38th Aerospace Sciences Meeting and Exhibit'],
+    'issued': {'date-parts': [[2000, 1, 10]]},
+}
+
+
+def test_journal_before_conference_version(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Park et al. 2001 and the AIAA paper 2000-210 share title and first author; journal and year on the page decide"""
+    assert doi_module.evidence(PARK, PARK_TEXT) == (True, True)
+    assert doi_module.evidence(PARK_CONFERENCE, PARK_TEXT) == (False, False) and doi_module.evidence({}, PARK_TEXT) == (False, False)
+    without_journal = {key: value for key, value in PARK.items() if key != 'container-title'}
+    first = {**PARK_CONFERENCE, 'DOI': '10.9999/first', 'container-title': []}
+    second = {**PARK_CONFERENCE, 'DOI': '10.9999/second', 'container-title': []}
+    choices = {
+        '10.2514/2.6582': [PARK_CONFERENCE, PARK],
+        '10.2514/2.6582 ': [PARK_CONFERENCE, without_journal],  # the year 2001 alone decides
+        '10.2514/6.2000-210': [PARK_CONFERENCE],  # only the conference version: taken, nothing speaks against it
+        '10.9999/first': [first, second],  # equal evidence: the search order
+    }
+    for expected, hits in choices.items():
+        hit = doi_module.best_hit(hits, PARK_TEXT)
+        assert hit is not None and hit['DOI'] == expected.strip()
+    path = tmp_path / 'park.pdf'
+    path.write_bytes(PLAIN)
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: PARK_TEXT)
+    monkeypatch.setattr(doi_module, 'get_json', lambda url, timeout: {'items': [PARK_CONFERENCE, PARK]} if 'query.bibliographic' in url else None)
+    cited = doi_module.paper_citation(path, None, None)  # whole path: no DOI on the page, Crossref search
+    assert (cited.doi, cited.key(set())) == ('10.2514/2.6582', 'park-2001')

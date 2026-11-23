@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.55.0
+
+Ported from rename-papers 0.8.1:
+
+* Of several fitting search hits (Crossref and OpenAlex), the one whose journal or book title and year are on the first pages is
+  taken, else the first in search order (`evidence`, `best_hit`); Crossref is asked for 5 hits instead of 3. Fixes Park et al. 2001,
+  which a search matched to its conference version (AIAA paper 2000-210, same title and first author, 2000)
+* The optional pdfplumber import is marked for ty (`import-not-found` where it is not installed, e.g. in CI)
+
 ## 0.54.2
 
 * Year of a paper (key, citation): the printed issue (`published-print`) before Crossref's `issued`, which is the earliest date

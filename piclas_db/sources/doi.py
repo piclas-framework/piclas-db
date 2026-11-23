@@ -222,7 +222,7 @@ def plumber_text(path: pathlib.Path, pages: int) -> Optional[str]:
     """Text by pdfplumber; None if it is not installed or cannot read the file"""
     quiet_pdfminer()
     try:
-        import pdfplumber  # noqa: PLC0415
+        import pdfplumber  # noqa: PLC0415  # ty: ignore[import-not-found]  # optional, pdftotext otherwise
 
         with pdfplumber.open(path) as pdf:
             return '\n'.join(page.extract_text() or '' for page in pdf.pages[:pages])
@@ -332,7 +332,7 @@ def title_found(title: str, text: str) -> float:
 
 def search(query: str, timeout: float = 15.0) -> list[dict]:
     """Crossref bibliographic search, best matches first (Unreachable if Crossref cannot be asked)"""
-    message = get_json('https://api.crossref.org/works?' + urllib.parse.urlencode({'query.bibliographic': query[:300], 'rows': 3}), timeout) or {}
+    message = get_json('https://api.crossref.org/works?' + urllib.parse.urlencode({'query.bibliographic': query[:300], 'rows': 5}), timeout) or {}
     return list(message.get('items') or [])
 
 
@@ -384,6 +384,20 @@ def search_hit(record: dict, text: str, haystack: str) -> bool:
     return title_found(title, haystack) >= TITLE_MATCH and author_found(record, haystack)
 
 
+def evidence(record: dict, text: str) -> tuple[bool, bool]:
+    """How well a search hit fits the first pages beyond title and author: (journal or book title there, year there). Tells the
+    journal article from its conference version with the same title and author (Park et al. 2001 and AIAA paper 2000-210)"""
+    containers = [str(container) for container in record.get('container-title') or [] if container]
+    year = record_year(record)
+    return any(title_in_text(container, text) for container in containers), bool(year) and str(year) in re.findall(r'\d{4}', text)
+
+
+def best_hit(hits: list[dict], text: str) -> Optional[dict]:
+    """Of the fitting search hits (versions of one paper: conference, journal), the one whose journal and year are on the page;
+    equal evidence: the search order (max returns the first); a single hit is taken even without evidence"""
+    return max(hits, key=lambda record: evidence(record, text)) if hits else None
+
+
 def take(result: Citation, record: dict, doi: Optional[str], where: str) -> None:
     result.doi, result.doi_found_in, result.title = doi, where if doi else None, record_title(record) or None
     result.first_author, result.year = record_author(record), record_year(record)
@@ -420,13 +434,13 @@ def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result:
         break
     else:
         lines = [line.strip() for line in text.splitlines() if len(line.strip()) > 15][:6] if has_text else [haystack]
-        hit = next((record for record in search(' '.join(lines)) if record.get('DOI') and search_hit(record, text, haystack)), None)
+        hit = best_hit([record for record in search(' '.join(lines)) if record.get('DOI') and search_hit(record, text, haystack)], haystack)
         if hit is not None:
             take(result, hit, str(hit['DOI']), 'Crossref search')
             result.notes.append('DOI found by searching Crossref for the first lines of the PDF: check it at the link')
         elif has_text:  # OpenAlex also knows reports, theses and books without DOI
             records, error = openalex_search(text)
-            hit = next((record for record in records if search_hit(record, text, haystack)), None)
+            hit = best_hit([record for record in records if search_hit(record, text, haystack)], haystack)
             if hit is not None:
                 take(result, hit, hit.get('DOI'), 'OpenAlex')
                 result.notes.append('found by searching OpenAlex for the title: check it' + (' at the link' if hit.get('DOI') else ' (no DOI)'))
