@@ -4,7 +4,7 @@
 
 ```bash
 python -m pip install -e ".[dev]"
-prek install          # pre-commit hooks: ruff, ty, vulture, gitleaks, file checks
+prek install          # hooks: ruff, ty, vulture, gitleaks, file checks on commit; the tests (pytest) before a push
 pytest                # tests use synthetic data only
 ```
 

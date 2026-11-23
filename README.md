@@ -97,9 +97,10 @@ repository of the group. piclas-db publishes no data; users build `database.h5` 
 piclas-db uses [prek pre-commit](https://prek.j178.dev/quickstart/) for maintaining code quality. The hooks run
 [Ruff](https://docs.astral.sh/ruff/) (linter and formatter), [ty](https://github.com/astral-sh/ty) (type checker),
 [Vulture](https://github.com/jendrikseipp/vulture) (dead code), [gitleaks](https://github.com/gitleaks/gitleaks) (secrets) and
-checks against large files, which keep data out of the repository. Install the hooks with
+checks against large files, which keep data out of the repository, on every commit; before every push they run the tests
+(pytest, about a minute; skip once with `SKIP=pytest git push`). Install the hooks with
 ```bash
-prek install
+prek install       # both: pre-commit and pre-push
 ```
 and run them on all files with
 ```bash

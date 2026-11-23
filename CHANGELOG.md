@@ -3,6 +3,11 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.55.1
+
+* The tests run before every push (pre-commit hook `pytest` at stage `pre-push`; `prek install` installs the pre-commit and the pre-push
+  hook); the other hooks stay on commit
+
 ## 0.55.0
 
 Ported from rename-papers 0.8.1:
