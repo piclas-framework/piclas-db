@@ -740,3 +740,39 @@ def rate_csv(converted: list[Converted], problems: list[str]) -> str:
     writer.writerows([row.row, row.reaction, row.third_body, f'{row.C:.6g}', repr(float(row.n)), f'{row.Td:g}', row.Tx] for row in converted)
     output.writelines(f'# not converted: {problem}\n' for problem in problems)
     return output.getvalue()
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Two readings of one rate table (double entry: literature compare)
+# ----------------------------------------------------------------------------------------------------------------------------------
+def expanded_rows(text: str) -> dict[tuple[str, str], list[RateRow]]:
+    """Rows of a rate table by (reaction, single third body): grouped third bodies ('N2, O2, NO') count as one row each"""
+    result: dict[tuple[str, str], list[RateRow]] = {}
+    for row in read_rate_table(text):
+        for body in row.third_bodies or ['']:
+            result.setdefault((str(row.key), body), []).append(row)
+    return result
+
+
+def compare_readings(first: str, second: str) -> tuple[int, list[str]]:
+    """Two readings of one table, row by row (per third body): the number of rows that agree, and the differences in words: a
+    reaction and third body in one reading only, or the values (C, n, T_d, Tx) that differ"""
+    a, b = expanded_rows(first), expanded_rows(second)
+    same, differences = 0, []
+    for key in sorted(set(a) | set(b)):
+        body = key[1]
+        written = (a.get(key) or b[key])[0].reaction  # as written in the table, to look it up on the page
+        where = written + (f' [{body}]' if body else '')
+        if key not in b:
+            differences.append(f'only in the first:  {where} (row {a[key][0].row})')
+            continue
+        if key not in a:
+            differences.append(f'only in the second: {where} (row {b[key][0].row})')
+            continue
+        x, y = a[key][0], b[key][0]
+        fields = [f'{name} {u} vs. {v}' for name, u, v in (('C', f'{x.C:.4g}', f'{y.C:.4g}'), ('n', f'{x.n:g}', f'{y.n:g}'), ('T_d', f'{x.Td:g}', f'{y.Td:g}'), ('Tx', x.Tx, y.Tx)) if u != v]
+        if fields:
+            differences.append(f'differs:            {where}: ' + ', '.join(fields))
+        else:
+            same += 1
+    return same, differences

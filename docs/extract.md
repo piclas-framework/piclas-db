@@ -148,9 +148,12 @@ column:
 converts more rows. The unit of C is taken from the caption or header where printed, else `--rate-unit` (Park, Johnston, Gökçen:
 `"cm^3/(mol s)"`; Laux: `"m^3/(molecule s)"`).
 
-**Scans** (Park 1993, 1994) are read by OCR (`--ocr`): numbers are repaired where unambiguous (decimal commas, minus signs) and
-exponents re-read from the enlarged image, but OCR misreads species (`N,` for N2, `N*` for N+) and merges cells, so few rows
-convert; the raw copy is an aid for entering the table by hand (`literature template --rates`).
+**Scans** (Park 1993, 1994) are read by OCR. With `--ocr --columns reaction,M,Tx,C,n,Td,skip` (the role of each column from left
+to right) every cell is read on its own, with the characters its column can hold, and the exponents of C once more from their own
+enlarged crop; systematic errors are translated and marked (`N,` → `N2?`, `O*` → `O+?`, the arrow `—>`), every uncertain cell
+gets a note in its row. Tesseract still misreads small superscripts and subscripts of these scans so often (exponents, Tₐ) that
+the converted rows are not usable as they are; the raw copy (`<table>-raw.csv`, one column per table column) is an aid for entering
+the table by hand (`literature template --rates`), which is the way for scans.
 
 All twelve data tables of Yoon et al. 2008 (Tables 1–5, 7–9, 11–14, including those continued on the next page, two-column layout,
 several columns with different units) are read with the correct number of rows; Table 13 is identical to the values entered by

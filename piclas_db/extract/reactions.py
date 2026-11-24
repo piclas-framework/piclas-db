@@ -123,6 +123,9 @@ def reaction_part(words: list[Word]) -> tuple[str, str, list[Word]]:
     elif glued:
         label = glued.group(1)
         words = [Word(first[glued.end() :], words[0].x0, words[0].x1, words[0].top, words[0].bottom), *words[1:]]
+    whole = next((i for i, word in enumerate(words) if re.search(rf'\S\s*[{ARROWS}]\s*\S', word.text)), None)
+    if whole is not None:  # the reaction in one word (a cell of a scanned table, or set without spaces): the words after it are values
+        return label, split_reaction_text(words[whole].text), words[whole + 1 :]
     reaction: list[Word] = []
     for index, word in enumerate(words):
         if numeric(word.text) and any(has_arrow(w.text) for w in reaction) and reaction[-1].text not in ('+', '→', '⇌', '↔'):
@@ -224,12 +227,19 @@ def convert_half(lines: list[list[Word]], columns: list[Column], result: Result,
     for label, reaction, _, body in rows:
         per_reaction[label + reaction] = per_reaction.get(label + reaction, 0) + bool(body)
     for label, reaction, by_role, body in rows:
+        checks = (('reaction', reaction), ('third body', body), ('C', by_role.get('C', '')), ('Tx', by_role.get('Tx', '')))
+        uncertain = [f'{name} {value.rstrip("?")}' for name, value in checks if value.endswith('?')]
+        key = label + reaction  # as counted above, with the marks
+        reaction, body = reaction.rstrip('?'), body.rstrip('?')
+        by_role = {role: value.rstrip('?') for role, value in by_role.items()}
         try:
             text, kind, note = convert_reaction(reaction)
+            if uncertain:
+                note = (note + '; ' if note else '') + 'OCR uncertain, check against the page: ' + ', '.join(uncertain)
             generic = kind in ('molecules', 'atoms')
             bodies_text = third_bodies(body) if body else ''
             if ' + M ' in f' {text} ' or text.startswith('M + ') or ' M ->' in text:
-                kind = bodies_text or ('others' if per_reaction[label + reaction] else 'all')
+                kind = bodies_text or ('others' if per_reaction[key] else 'all')
                 note = note if note and 'not balanced' in note else None  # M is a third body here, not the class 'molecules'
             elif generic:
                 kind = bodies_text or kind
@@ -378,3 +388,134 @@ def ocr_cleaned(text: str) -> str:
     if re.fullmatch(r'[—–~-]?\d,\d{1,2}', text):
         text = text.replace(',', '.')
     return re.sub(r'^[—–~]', '−', text)
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+# Scanned tables cell by cell (Park 1993, 1994): column boundaries from the header, every cell read on its own with the characters
+# its column can hold, exponents of C read again from their own enlarged crop
+# ----------------------------------------------------------------------------------------------------------------------------------
+WHITELIST = {
+    'reaction': 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-=>(),;*',
+    'M': 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-,;*%~',
+    'Tx': 'TaevrxtV',
+    'C': '0123456789.',
+    'n': '0123456789.-',
+    'Td': '0123456789,',
+}
+CANONICAL = {'reaction': 'Reaction', 'M': 'M', 'Tx': 'Tf', 'C': 'C', 'n': 'n', 'Td': 'Df', 'label': 'Nr', 'formula': 'Rate', 'skip': 'Source'}
+
+
+def ocr_cell(image: Any, box: tuple[int, int, int, int], role: str, scale: int = 1) -> str:
+    """Text of one cell, read as one line with the characters its column can hold"""
+    import subprocess  # noqa: PLC0415
+    import tempfile  # noqa: PLC0415
+
+    crop = image.crop(box)
+    if scale > 1:
+        crop = crop.resize((crop.width * scale, crop.height * scale))
+    with tempfile.NamedTemporaryFile(suffix='.png') as file:
+        crop.save(file.name)
+        command = ['tesseract', file.name, '-', '--psm', '7', '-c', f'tessedit_char_whitelist={WHITELIST.get(role, "")}'] if role in WHITELIST else ['tesseract', file.name, '-', '--psm', '7']
+        return subprocess.run(command, capture_output=True, text=True, check=False).stdout.strip()
+
+
+def scan_coefficient(image: Any, box: tuple[int, int, int, int]) -> str:
+    """C of a scanned cell: mantissa with one decimal (3.0) and an exponent set as superscript (22); the exponent read from the cell and
+    again from its own enlarged crop; '3.0^22' if both agree, '3.0^22?' if not (the user checks)"""
+    whole = ocr_cell(image, box, 'C')
+    match = re.fullmatch(r'(\d\.\d)(\d{1,2})', whole)
+    left, top, right, bottom = box
+    split = left + int(0.55 * (right - left))
+    again = ocr_cell(image, (split, top, right, top + int(0.6 * (bottom - top))), 'C', scale=3)
+    leading = re.match(r'\d\.\d', whole)
+    mantissa = match.group(1) if match else (leading.group(0) if leading else whole)
+    exponent = match.group(2) if match else ''
+    if exponent and again == exponent:
+        return f'{mantissa}^{exponent}'
+    candidate = exponent or (again if re.fullmatch(r'\d{1,2}', again) else '')
+    return f'{mantissa}^{candidate}?' if candidate else f'{whole}?'
+
+
+def scan_species(text: str) -> str:
+    """Species of a scanned cell with the usual OCR errors of subscripts and charges translated, marked with '?' for the user: a comma
+    or semicolon after a letter is the subscript 2 (N, -> N2), '*' or 't' after a species the charge (O* -> O+), '~' after e the
+    minus (e~ -> e-), '%' or a stacked '2+' read as one character stays unknown (N% -> N?)"""
+    value = text.strip()
+    original = value
+    value = re.sub(r'(?<=[A-Z])[,;](?=[+*]|$)', '2', value)
+    value = re.sub(r'(?<=[A-Za-z0-9])[*t](?=$)', '+', value) if value != 't' else value
+    value = re.sub(r'^e[~\-]?$', 'e-', value)
+    if re.search(r'[%~;,*]', value) or not re.fullmatch(r'[A-Z][A-Za-z0-9]*\+*|e-', value):
+        return f'{value}?'
+    return value if value == original else f'{value}?'
+
+
+def scan_reaction(text: str) -> str:
+    """A scanned reaction with OCR repairs: the arrow (—>, ->, >), commas for the subscript 2 (N,+M -> N2+M), a 4 between two + (the
+    + read twice: N+N4+M -> N+N+M); marked with '?' where something was changed"""
+    value = OCR_ARROW.sub('→', text.replace('->', '→'))
+    value = re.sub(r'(?<=[A-Za-z0-9])>(?=[A-Z])', '→', value)
+    repaired = re.sub(r'(?<=[A-Z])[,;](?=[+→])', '2', value)
+    repaired = re.sub(r'(?<=[A-Z])4\+', '+', repaired)
+    return repaired if repaired == value else repaired + '?'
+
+
+def scan_table_lines(page: Any, numbers: list[str], roles: list[str]) -> tuple[list[list[Word]], str]:
+    """Lines of a scanned reaction table, read cell by cell: the header line (column positions) and the rows below it, each cell as
+    one word at its column's centre; 'roles' gives the role of each header column from left to right (reaction, M, Tx, C, n, Td, skip)"""
+    from piclas_db.extract.table import ExtractError, find_captions, lines_of  # noqa: PLC0415
+
+    resolution = 600
+    scale = resolution / 72
+    image = page.to_image(resolution=resolution).original.convert('L')
+    words = ocr_words_with_exponents(page)
+    page_lines = lines_of(words)
+    found = find_captions(words, numbers[0])
+    caption_text = found[0][1] if found else ''
+    start = next((i for i, line in enumerate(page_lines) if found and found[0][0] in line), -1) + 1
+    header_index = next((i for i in range(start, min(start + 4, len(page_lines))) if len(page_lines[i]) >= len(roles) - 1), None)
+    if header_index is None:
+        raise ExtractError(f'no header line below the caption of table {numbers[0]}')
+    header = sorted(page_lines[header_index], key=lambda w: w.x0)
+    height = sorted(w.bottom - w.top for w in header)[len(header) // 2]
+    columns = columns_from_header(header, 0.6 * height)
+    if len(columns) != len(roles):
+        raise ExtractError(f'{len(columns)} header columns ({", ".join(c.header for c in columns)}) but {len(roles)} roles given (--columns)')
+    for column, role in zip(columns, roles, strict=True):
+        column.role = role
+    centres = [column.centre for column in columns]
+    bounds = []
+    for index, column in enumerate(columns):
+        low = -1e9 if index == 0 else bounds[-1][1]
+        if index + 1 == len(columns):
+            high = 1e9
+        elif column.role == 'reaction' and index + 2 < len(columns):  # reactions are long, the next column's values short
+            high = centres[index + 1] - (centres[index + 2] - centres[index + 1]) / 2
+        else:
+            high = (centres[index] + centres[index + 1]) / 2
+        bounds.append((low, high))
+    lines = [[Word(CANONICAL[column.role], column.x0, column.x1, header[0].top, header[0].bottom) for column in columns]]
+    for line in page_lines[header_index + 1 :]:
+        if any(re.match(r'^(TABLE|Table)$', w.text) for w in line):
+            break  # the next table
+        top, bottom = min(w.top for w in line), max(w.bottom for w in line)
+        pad = 0.35 * (bottom - top)
+        cells = []
+        for column, (low, high) in zip(columns, bounds, strict=True):
+            if column.role == 'skip' or not any(low <= (w.x0 + w.x1) / 2 < high for w in line):
+                continue
+            box = (int(max(low, 0) * scale), int((top - pad) * scale), int(min(high, float(page.width)) * scale), int((bottom + pad) * scale))
+            text = scan_coefficient(image, box) if column.role == 'C' else ocr_cell(image, box, column.role)
+            if column.role == 'reaction':
+                text = scan_reaction(text)
+            elif column.role == 'M' and text:
+                text = scan_species(text)
+            elif column.role == 'Tx' and text == 'T':
+                text = 'T?'  # the subscript (Ta, Tv) is easily lost in a scan
+            if column.role == 'n' and re.fullmatch(r'-?\d\d\d', text):
+                text = f'{text[:-2]}.{text[-2:]}'  # the decimal point lost: -160 -> -1.60
+            if text:
+                cells.append(Word(text, column.centre - 1, column.centre + 1, top, bottom))
+        if cells:
+            lines.append(cells)
+    return lines, caption_text

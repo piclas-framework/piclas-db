@@ -342,6 +342,38 @@ converted to PICLas units, n, T_d, Tx); with `--compare DATABASE.h5` each row is
 the reactions with the same values, `≠` the closest one with its differences, `–` no such reaction (e.g. recombinations, which PICLas
 computes from the forward rate). Nothing is stored.
 
+### Two ways to a rate table
+
+**From the text layer** (most PDFs since about 2000): `piclas-db extract PAPER --page P --table T --rates MIXTURE` reads the table
+and converts it ([extract.md](extract.md)); the output lists what to check (misprints, unbalanced reactions, how M and A were
+read). You correct those rows, check, and store.
+
+**By hand, with double entry** (scans, and text layers that cannot be read): two people (or one person and a second, independent
+source) enter the same table, each from the page, without looking at the other's entry; `literature compare` then lists every row
+where the two readings differ, and each difference is looked up on the page. Two independent readings that agree are far more
+reliable than one reading checked by eye; this is the usual procedure for data typed from print. The second reading can also be a
+table from another source (an earlier transcription, a colleague's file), but it must be made from the page, not copied from the
+first.
+
+```bash
+piclas-db literature template park-1993 table2-rates-air --rates --page 5 --table 2 -o first/
+piclas-db literature template park-1993 table2-rates-air --rates --page 5 --table 2 -o second/
+# person 1 fills first/table2-rates-air.csv, person 2 fills second/table2-rates-air.csv, each from the page
+piclas-db literature compare first/table2-rates-air.extraction.yaml second/table2-rates-air.extraction.yaml
+```
+
+```
+125 row(s) agree, 2 difference(s):
+  differs:            N2 + M -> N + N + M [O2]: C 7e+21 vs. 7e+22
+  only in the second: NO + M -> O + O + M [N] (row 3)
+Look up every difference on the page: one of the two readings is wrong there, or a decision (misprint) differs.
+```
+
+`compare` takes two rate tables or their records, compares row by row per third body (`"N2, O2, NO"` in one row counts as three
+rows, so grouping does not matter), names the reaction as written in the table, and reports differing units or chemistry models
+of the records. Exit code 0 if the readings agree, 1 otherwise. When they agree, one of them is stored (`literature add`), with
+`method: manual` and a note on the double entry; the other can be kept outside the store.
+
 Names: `<table>-rates-<mixture>` for a rate table (`table2-rates-air`, `table2-rates-titan`) and `<table>-raw` for the raw copy of
 the table it was converted from (`extract --table --rates`, [extract.md](extract.md)). `literature list` shows every extraction with
 its page (PDF page, printed page in brackets where recorded), table, kind (raw copy, rate table with mixture and chemistry model,

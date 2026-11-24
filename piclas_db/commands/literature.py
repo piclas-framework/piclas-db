@@ -27,7 +27,7 @@ import yaml
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db import config, wanted
 from piclas_db.git import GitError
-from piclas_db.literature import LiteratureError, add_extraction, check_extraction, extractions, find_extraction, papers, review, template
+from piclas_db.literature import LiteratureError, load_record, add_extraction, check_extraction, extractions, find_extraction, papers, review, template
 from piclas_db.sources.identify import slug
 from piclas_db.store import Store, StoreEntry
 # ==================================================================================================================================
@@ -80,6 +80,44 @@ def extraction_line(entry: StoreEntry) -> str:
     rows = (record.get('result') or {}).get('rows')
     status = (record.get('review') or {}).get('status')
     return f'{name:32s} p. {source.get("page") or "?"!s:14s} {where:12s} {kind_of(record)}' + (f', {rows} rows' if rows is not None else '') + f', {record.get("method")}, review {status}'
+
+
+def reading(path: pathlib.Path) -> tuple[str, dict]:
+    """The rate table of a reading: a CSV, or a record (.extraction.yaml) with the CSV next to it; the record ({} for a CSV)"""
+    if path.name.endswith(('.yaml', '.yml')):
+        record = load_record(path)
+        if not record.get('rate_table'):
+            raise LiteratureError(f'{path}: not a rate table')
+        return (path.parent / str(record.get('data'))).read_text(encoding='utf-8'), record
+    try:
+        return path.read_text(encoding='utf-8'), {}
+    except (OSError, UnicodeDecodeError) as e:
+        raise LiteratureError(f'cannot read {path}: {e}') from e
+
+
+def compare_tables(first: pathlib.Path, second: pathlib.Path) -> int:
+    """literature compare: two readings of one table (double entry), row by row per third body; exit code 1 if they differ"""
+    from piclas_db import rates  # noqa: PLC0415
+
+    (text_a, record_a), (text_b, record_b) = reading(first), reading(second)
+    same, differences = rates.compare_readings(text_a, text_b)
+    print(f'first:  {first}')
+    print(f'second: {second}')
+    for label, path in (('unit of C', ('columns', 'rate', 'unit')), ('chemistry model', ('quantity', 'assignment', 'chemistry_model'))):
+        values = []
+        for record in (record_a, record_b):
+            value = record
+            for key in path:
+                value = (value or {}).get(key) if isinstance(value, dict) else None
+            values.append(value)
+        if record_a and record_b and values[0] != values[1]:
+            differences.insert(0, f'records differ:     {label} {values[0]} vs. {values[1]}')
+    print(f'{same} row(s) agree, {len(differences)} difference(s)' + (':' if differences else ' (the two readings agree)'))
+    for line in differences:
+        print('  ' + line)
+    if differences:
+        print('Look up every difference on the page: one of the two readings is wrong there, or a decision (misprint) differs.')
+    return 1 if differences else 0
 
 
 def check_only(store: Store, record_path: pathlib.Path, compare: Optional[str]) -> int:
@@ -151,6 +189,10 @@ def run(args: argparse.Namespace) -> int:
             record_file.write_text(yaml.safe_dump(record, sort_keys=False, allow_unicode=True, width=1000))
             print(f'Enter the values in {data_file}, complete {record_file} (units, created.by, quantity, accuracy), then:')
             print(f'  piclas-db literature add {record_file}')
+        elif args.action == 'compare':
+            if len(args.arguments) != 2:
+                raise LiteratureError('usage: piclas-db literature compare FIRST SECOND (two readings of one table: rate tables or their records)')
+            return compare_tables(pathlib.Path(args.arguments[0]), pathlib.Path(args.arguments[1]))
         elif args.action == 'add' and args.dry_run:
             if len(args.arguments) != 1:
                 raise LiteratureError('usage: piclas-db literature add -n RECORD.yaml [--compare DATABASE.h5]')

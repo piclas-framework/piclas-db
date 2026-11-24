@@ -3,6 +3,24 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.63.0
+
+* `literature compare FIRST SECOND`: two readings of one rate table (double entry) row by row per third body; differences named
+  with the reaction as written in the table, differing units or chemistry models of the records reported; exit code 1 if they
+  differ
+* Documentation: the two ways to a rate table (from the text layer; by hand with double entry for scans) in `docs/literature.md`
+* Tutorial T6: rate tables from papers, with Farbar 2008 (text layer) and Park 1993 (scan, double entry) as worked examples
+
+## 0.62.0
+
+* Scanned reaction tables cell by cell: `extract --table --rates --ocr --columns reaction,M,Tx,C,n,Td,skip` (roles from left to
+  right) reads every cell on its own with the characters of its column, the exponents of C again from an enlarged crop; systematic
+  OCR errors are translated and marked (`N,` → N2, `O*` → O+, `—>` → →, a lost subscript of Tₐ), uncertain cells noted per row.
+  Measured on Park 1993 and 1994: not usable as a draft (exponents and controlling temperatures mostly wrong); the raw copy is an
+  aid for entering scans by hand
+* A reaction read as one word (a scanned cell, or set without spaces) is no longer joined with the words of the next columns
+* Fixed: a crash when a marked reaction (`?`) had third-body rows
+
 ## 0.61.0
 
 Ported from rename-papers 0.10.0:

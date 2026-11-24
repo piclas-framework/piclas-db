@@ -168,3 +168,21 @@ def test_build_reactions_from_rate_tables(tmp_path: pathlib.Path, monkeypatch: p
     assert again == specs['Tx2+M_Tx+M+Tx#1']
     with pytest.raises(rates.RateError, match='either "rates"'):
         rates.parse_reaction_spec('X', {'reaction': 'Tx + Qq -> TxQq', 'models': {'M1': None}})
+
+
+def test_compare_readings(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """literature compare: two readings of one table (double entry); grouped third bodies count per species"""
+    header = 'row,reaction,third_body,C,n,Td,Tx\n'
+    first = header + '1,Tx2 + M -> Tx + Tx + M,"Tx, Qq",3.0^22,-1.6,113200,Ta\n1,Tx2 + M -> Tx + Tx + M,Tx2,7.0^21,-1.6,113200,Ta\n2,Tx + Qq -> TxQq+ + e-,,5.3^12,0,31900,T\n'
+    second = header + '1,Tx2 + M -> Tx + Tx + M,Tx,3.0e22,-1.6,113200,Ta\n1,Tx2 + M -> Tx + Tx + M,Qq,3.0e22,-1.6,113200,Ta\n1,Tx2 + M -> Tx + Tx + M,Tx2,7.0e21,-1.6,113200,Ta\n'
+    (tmp_path / 'a.csv').write_text(first)
+    (tmp_path / 'b.csv').write_text(second)
+    (tmp_path / 'c.csv').write_text(second.replace('7.0e21', '7.0e22') + '2,Tx + Qq -> TxQq+ + e-,,5.3^12,0,31900,T\n')
+    (tmp_path / 'd.csv').write_text(first)
+    assert main(['literature', 'compare', str(tmp_path / 'a.csv'), str(tmp_path / 'd.csv')]) == 0
+    assert '4 row(s) agree, 0 difference(s) (the two readings agree)' in capsys.readouterr().out
+    assert main(['literature', 'compare', str(tmp_path / 'a.csv'), str(tmp_path / 'b.csv')]) == 1
+    out = capsys.readouterr().out
+    assert '3 row(s) agree, 1 difference(s)' in out and 'only in the first:  Tx + Qq -> TxQq+ + e- (row 2)' in out
+    assert main(['literature', 'compare', str(tmp_path / 'a.csv'), str(tmp_path / 'c.csv')]) == 1
+    assert 'differs:            Tx2 + M -> Tx + Tx + M [Tx2]: C 7e+21 vs. 7e+22' in capsys.readouterr().out  # the exponent read differently

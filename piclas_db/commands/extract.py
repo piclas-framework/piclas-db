@@ -97,8 +97,12 @@ def column_table(args: argparse.Namespace, paper: StoreEntry, path: str, output:
 
     numbers = args.table.split(',')
     try:
-        lines, caption, pages = reactions.table_lines(path, page_list(args.page), numbers, use_ocr=args.ocr, glyphs=glyph_map(args.glyphs))
-        result = reactions.convert_columns(lines, column_roles(args.columns))
+        positional = [role.strip() for role in (args.columns or '').split(',')] if args.columns and '=' not in args.columns else None
+        if args.ocr and positional:  # a scan, cell by cell, with the role of each column given from left to right
+            lines, caption, pages = scan_lines(path, page_list(args.page), numbers, positional)
+        else:
+            lines, caption, pages = reactions.table_lines(path, page_list(args.page), numbers, use_ocr=args.ocr, glyphs=glyph_map(args.glyphs))
+        result = reactions.convert_columns(lines, None if positional else column_roles(args.columns))
     except (ExtractError, rates.RateError):
         return False
     if len(numbers) == 1 and not result.converted:
@@ -123,6 +127,22 @@ def column_table(args: argparse.Namespace, paper: StoreEntry, path: str, output:
     print(f'  caption: {caption}')
     write_reaction_table(args, paper, table, output, name, raw_file, (result.converted, result.problems))
     return True
+
+
+def scan_lines(path: str, pages: list[int], numbers: list[str], roles: list[str]) -> tuple[list, str, list[int]]:
+    """Lines of a scanned reaction table, read cell by cell on every page (the header repeated on continuation pages)"""
+    from piclas_db.extract import reactions  # noqa: PLC0415
+
+    pdfplumber = require_pdfplumber()
+    lines: list = []
+    caption, used = '', []
+    with pdfplumber.open(path) as pdf:
+        for number in pages:
+            page_lines, page_caption = reactions.scan_table_lines(pdf.pages[number - 1], numbers, roles)
+            lines += page_lines if not lines else page_lines[1:]  # the header once
+            caption = caption or page_caption
+            used.append(number)
+    return lines, caption, used
 
 
 def glyph_map(text: Optional[str]) -> Optional[dict[str, str]]:

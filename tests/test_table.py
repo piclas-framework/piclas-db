@@ -31,7 +31,7 @@ from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
-from piclas_db.extract.table import ExtractError, extract_table, header_unit, parse_number  # noqa: E402
+from piclas_db.extract.table import ExtractError, Word, extract_table, header_unit, parse_number  # noqa: E402
 from piclas_db.literature import find_extraction, read_extraction  # noqa: E402
 from piclas_db.piclas_db import main  # noqa: E402
 from piclas_db.store import Store  # noqa: E402
@@ -347,3 +347,13 @@ def test_reading_helpers() -> None:
     assert glyph({'text': '(cid:9)', 'fontname': 'Other'}, {'(cid:9)': '→'}) == '→'
     assert 'not balanced (H: 5 -> 3)' in str(convert_reaction('CH3 + CH2 ⇌ C2H2 + H')[2])  # Gökçen 2007, row 25 as printed
     assert reactions.ocr_cleaned('1,60') == '1.60' and reactions.ocr_cleaned('113,200') == '113,200' and reactions.ocr_cleaned('N2+M—~N') == 'N2+M→N'
+
+
+def test_scan_repairs() -> None:
+    """Systematic OCR errors of scanned reaction tables translated and marked with '?' (Park 1993/1994 cells)"""
+    from piclas_db.extract import reactions  # noqa: PLC0415
+
+    assert [reactions.scan_species(text) for text in ('N', 'N,', 'O*', 'Nt', 'NO*', 'N%', 'e~')] == ['N', 'N2?', 'O+?', 'N+?', 'NO+?', 'N%?', 'e-?']
+    assert reactions.scan_reaction('N,+M—>N+N4+M') == 'N2+M→N+N+M?' and reactions.scan_reaction('NO+M>O+O+M') == 'NO+M→O+O+M'
+    label, reaction, rest = reactions.reaction_part([Word('N2+M→N+N+M?', 0, 50, 0, 10), Word('N', 60, 65, 0, 10), Word('3.0^22?', 90, 110, 0, 10)])
+    assert (label, reaction, [w.text for w in rest]) == ('', 'N2 + M → N + N + M?', ['N', '3.0^22?'])  # the cell alone, not glued to M

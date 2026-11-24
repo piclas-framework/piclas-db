@@ -91,10 +91,10 @@ def build_parser() -> argparse.ArgumentParser:
         elif name == 'literature':
             sub.add_argument(
                 'action',
-                choices=['template', 'add', 'review', 'list', 'want', 'wanted', 'unwant'],
-                help='template: files to enter data; add: store an extraction; review: approve or reject; list; want: put a paper on the wanted list; wanted: show it; unwant: remove an entry',
+                choices=['template', 'add', 'review', 'list', 'compare', 'want', 'wanted', 'unwant'],
+                help='template: files to enter data; add: store an extraction; review: approve or reject; list; compare: two readings of one table (double entry); want: put a paper on the wanted list; wanted: show it; unwant: remove an entry',
             )
-            sub.add_argument('arguments', nargs='*', help='template: PAPER NAME; add: RECORD.yaml; review: PAPER/NAME[@SHA]; want, unwant: KEY')
+            sub.add_argument('arguments', nargs='*', help='template: PAPER NAME; add: RECORD.yaml; review: PAPER/NAME[@SHA]; compare: FIRST SECOND; want, unwant: KEY')
             sub.add_argument('--reference', help='want: citation of the wanted paper')
             sub.add_argument('-n', '--dry-run', action='store_true', help='add: check the record and show the rows as understood, store nothing')
             sub.add_argument('--compare', metavar='DATABASE', help='add -n of a rate table: compare every row with the reactions of this database')
@@ -124,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--rates', nargs='?', const='', metavar='TOPIC', help='with --table of a reaction table: also convert it into a rate table <table>-rates[-TOPIC] (e.g. air, mars)')
             sub.add_argument('--rate-unit', help='with --rates: unit of the rate coefficients if the caption does not give it (e.g. "cm^3/(mol s)")')
             sub.add_argument('--chemistry-model', help='with --rates: suffix of the chemistry models that cite the paper (e.g. Farbar2008)')
-            sub.add_argument('--columns', help='with --rates: roles of table columns by header, e.g. "Ta=Tx,Tr=Td" (C, n, Td, Tx, M, skip)')
+            sub.add_argument('--columns', help='with --rates: roles of table columns by header ("Ta=Tx,Tr=Td"), or for a scan (--ocr) from left to right ("reaction,M,Tx,C,n,Td,skip")')
             sub.add_argument('--glyphs', help='with --rates: glyphs of a font without Unicode map, e.g. "(cid:5)=×,þ=+"')
             sub.add_argument('--ocr', action='store_true', help='with --table: read the page by OCR even if it has a text layer')
             sub.add_argument('--raster', action='store_true', help='treat the page as a scan (default: automatic for pages without vector graphics)')
