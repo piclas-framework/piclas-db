@@ -152,10 +152,20 @@ def rate_record() -> dict:
 def load_record(path: Union[str, pathlib.Path]) -> dict:
     path = pathlib.Path(path)
     try:
-        record = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
-    except (OSError, yaml.YAMLError) as e:
+        head = path.read_bytes()[:5]
+    except OSError as e:
         raise LiteratureError(f'cannot read extraction record {path}: {e}') from e
-    if record.get('format') != RECORD_FORMAT:
+    if head == b'%PDF-':  # a paper given instead of its extraction record
+        raise LiteratureError(
+            f'{path} is a PDF, not an extraction record (.extraction.yaml). Papers are imported with\n'
+            f'  piclas-db import {path} --literature [KEY]\n'
+            'and data from a paper with piclas-db extract or literature template, then literature add <name>.extraction.yaml'
+        )
+    try:
+        record = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as e:
+        raise LiteratureError(f'{path} is not an extraction record (.extraction.yaml): {e}') from e
+    if not isinstance(record, dict) or record.get('format') != RECORD_FORMAT:
         raise LiteratureError(f'{path}: not a piclas-db extraction record')
     if int(record.get('format_version', 0)) > RECORD_VERSION:
         raise LiteratureError(f'{path}: record format version {record["format_version"]} is newer than supported ({RECORD_VERSION})')

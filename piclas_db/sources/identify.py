@@ -135,6 +135,12 @@ def identify(
     if zipfile.is_zipfile(path):
         return identify_lxcat_zip(path)
 
+    if path.read_bytes()[:5] == b'%PDF-':  # a paper without --literature
+        raise IdentifyError(
+            'a PDF: papers are imported with --literature (key and citation are found automatically); check first with -n:\n'
+            f'           piclas-db import {path.name} --literature -n\n'
+            f'           piclas-db import {path.name} --literature'
+        )
     text = read_text(path)
     if text is None:
         raise IdentifyError('binary file, not an LXCat or NIST ASD download (use --custom NAME to store other data)')

@@ -3,6 +3,16 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.60.2
+
+* `import` of a PDF without `--literature`: the error names the commands to use (`import FILE --literature -n`, then without `-n`)
+  instead of "binary file, not an LXCat or NIST ASD download"
+
+## 0.60.1
+
+* `literature add` (and `add -n`) of a PDF instead of an extraction record: an error naming `piclas-db import FILE --literature` instead
+  of a traceback; files that are not text or not a record are reported as errors too
+
 ## 0.60.0
 
 Ported from rename-papers 0.9.1:

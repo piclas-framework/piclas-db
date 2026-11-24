@@ -136,6 +136,15 @@ def test_add_errors(store: Store, tmp_path: pathlib.Path, capsys: pytest.Capture
     assert main(['literature', 'review', 'test-2008/missing', '--approve', '--reviewer', 'r']) == 1
     assert main(['literature', 'review', 'test-2008/total-ionization', '--reviewer', 'r']) == 1  # neither approve nor reject
     assert main(['literature', 'add']) == 1
+    capsys.readouterr()
+    assert main(['literature', 'add', str(tmp_path / 'paper.pdf')]) == 1  # the paper instead of its extraction record
+    assert 'is a PDF, not an extraction record' in capsys.readouterr().out
+    assert main(['import', str(tmp_path / 'paper.pdf'), '-n']) == 1  # a paper without --literature: the right commands are named
+    assert 'piclas-db import paper.pdf --literature -n' in capsys.readouterr().out
+    (tmp_path / 'binary.yaml').write_bytes(b'\xe2\x28\xa1 not text')
+    assert main(['literature', 'add', str(tmp_path / 'binary.yaml')]) == 1  # unreadable as text: an error, no traceback
+    (tmp_path / 'list.yaml').write_text('- a\n- b\n')
+    assert main(['literature', 'add', str(tmp_path / 'list.yaml')]) == 1  # YAML, but not a record
     (tmp_path / 'notes.txt').write_text('x')
     assert main(['import', str(tmp_path / 'notes.txt'), '--literature', 'x', '--doi', '1']) == 1  # not a PDF
     assert main(['import', str(tmp_path / 'paper.pdf'), '--literature', 'x']) == 0  # already in the store (as test-2008): nothing to do
