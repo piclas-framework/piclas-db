@@ -439,15 +439,56 @@ def evidence(record: dict, text: str) -> tuple[bool, bool]:
     return any(title_in_text(container, text) for container in containers), bool(year) and str(year) in re.findall(r'\d{4}', text)
 
 
-def best_hit(hits: list[dict], text: str, scan: bool = False) -> Optional[dict]:
+PAGE_SLACK = 3  # extra pages a download may have (cover, download sheet, blank page)
+
+
+def page_range(record: dict) -> Optional[int]:
+    """Number of pages of a record's page range ('8-689' -> 682); None without a range"""
+    match = re.fullmatch(r'\s*(\d+)\s*[-\u2013]\s*(\d+)\s*', str(record.get('page') or ''))
+    if not match or int(match.group(2)) < int(match.group(1)):
+        return None
+    return int(match.group(2)) - int(match.group(1)) + 1
+
+
+def page_fit(record: dict, pages: Optional[int]) -> int:
+    """1 if the PDF has the pages of the record's range (one fewer up to a few more: cover, download sheet), -1 if clearly not (more
+    than this chapter or article, or only a part), 0 without a range (books, conference papers) or page count"""
+    length = page_range(record)
+    if not (length and pages):
+        return 0
+    return 1 if length - 1 <= pages <= length + PAGE_SLACK else -1
+
+
+def pdf_pages(path: pathlib.Path) -> Optional[int]:
+    """Number of pages of the PDF (pdfinfo, else pdfplumber); None if unknown"""
+    tool = shutil.which('pdfinfo')
+    if tool:
+        try:
+            info = subprocess.run([tool, str(path)], capture_output=True, text=True, timeout=60, check=False).stdout  # noqa: S603 (fixed tool)
+            match = re.search(r'^Pages:\s+(\d+)', info, re.MULTILINE)
+            if match:
+                return int(match.group(1))
+        except (OSError, subprocess.SubprocessError):
+            pass
+    try:
+        import pdfplumber  # noqa: PLC0415  # ty: ignore[import-not-found]  # optional
+
+        with pdfplumber.open(path) as pdf:
+            return len(pdf.pages)
+    except Exception:  # noqa: BLE001 (not installed, damaged or unusual PDF)
+        return None
+
+
+def best_hit(hits: list[dict], text: str, scan: bool = False, pages: Optional[int] = None) -> Optional[dict]:
     """Of the fitting search hits: the one whose title differs from the page in the fewest characters (a sibling of a paper series may
-    fit within the tolerance), then the one whose journal and year are on the page (versions of one paper: conference, journal), then
-    the search order (sorted is stable); a single hit is taken even without evidence. For scans the file name is compared by the
-    word share: no character errors there."""
+    fit within the tolerance), then the one whose page range fits the page count of the PDF (a chapter against its whole book: Huber
+    and Herzberg 1979; an article against its conference version), then the one whose journal and year are on the page, then the
+    search order (max returns the first of equals); a single hit is taken even without evidence. For scans the file name is compared
+    by the word share: no character errors there."""
     if not hits:
         return None
     errors = {id(record): 0 if scan else title_errors(record_title(record), text) for record in hits}
-    return max(hits, key=lambda record: (-errors[id(record)], *evidence(record, text)))  # max: the first of equals
+    return max(hits, key=lambda record: (-errors[id(record)], page_fit(record, pages), *evidence(record, text)))
 
 
 def take(result: Citation, record: dict, doi: Optional[str], where: str) -> None:
@@ -487,7 +528,8 @@ def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result:
     else:
         lines = [line.strip() for line in text.splitlines() if len(line.strip()) > 15][:6] if has_text else [haystack]
         searched = [record for record in search(' '.join(lines)) if record.get('DOI')]
-        hit = best_hit([record for record in searched if search_hit(record, text, haystack)], haystack, scan=not has_text)
+        fitting = [record for record in searched if search_hit(record, text, haystack)]
+        hit = best_hit(fitting, haystack, scan=not has_text, pages=pdf_pages(path) if len(fitting) > 1 else None)
         closest_note = None
         if hit is None and searched and has_text:  # the closest rejected hit, for the user: give its DOI with --doi if it is the paper
             closest = max(searched, key=lambda record: title_share(record_title(record), text))
@@ -497,7 +539,8 @@ def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result:
             result.notes.append('DOI found by searching Crossref for the first lines of the PDF: check it at the link')
         elif has_text:  # OpenAlex also knows reports, theses and books without DOI
             records, error = openalex_search(text)
-            hit = best_hit([record for record in records if search_hit(record, text, haystack)], haystack, scan=not has_text)
+            fitting = [record for record in records if search_hit(record, text, haystack)]
+            hit = best_hit(fitting, haystack, scan=not has_text, pages=pdf_pages(path) if len(fitting) > 1 else None)
             if hit is not None:
                 take(result, hit, hit.get('DOI'), 'OpenAlex')
                 result.notes.append('found by searching OpenAlex for the title: check it' + (' at the link' if hit.get('DOI') else ' (no DOI)'))

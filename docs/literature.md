@@ -57,7 +57,9 @@ override it.
    scans: `Ar+` read as `AI+`) and its **first author's family name** is on the page (with and without spelled-out
    umlauts). Of several fitting hits (versions of one paper, e.g. a journal article and its conference paper with the same title
    and author, or papers of a series with almost the same title), the one whose title differs in the fewest characters, then the
-   one whose journal (also abbreviated, as old title pages print it) and year are on the page, otherwise the first. If no hit is
+   one whose page range fits the page count of the PDF (a whole book against one of its chapters, an article against its
+   conference version), then the one whose journal (also abbreviated, as old title pages print it) and year are on the page,
+   otherwise the first. If no hit is
    taken, the paper's notes name the closest one with the share of its title found on the page (`10.1088/… (67 % of its title on
    the page) not taken`): if it is the paper after all, import it with `--doi`. Counting title words was not enough: a dissertation matched a chapter of its committee chair with a similar title, a
    report matched a chapter of its author whose title words were all on the page. For a scan without text, 60 % of the title words

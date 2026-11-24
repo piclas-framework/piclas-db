@@ -32,7 +32,7 @@ from piclas_db.sources import doi as doi_module
 from piclas_db.store import Store
 # ==================================================================================================================================
 
-REAL_OPENALEX_SEARCH, REAL_GET_JSON = doi_module.openalex_search, doi_module.get_json  # before the autouse fixture replaces them
+REAL_OPENALEX_SEARCH, REAL_GET_JSON, REAL_PDF_PAGES = doi_module.openalex_search, doi_module.get_json, doi_module.pdf_pages  # before the autouse fixture
 PDF = b'%PDF-1.4\n1 0 obj << /Type /Catalog /Metadata 2 0 R >> endobj\n2 0 obj << /Type /Metadata >>\nstream\n<x:xmpmeta><prism:doi>10.9999/test.2001.42</prism:doi></x:xmpmeta>\nendstream\nendobj\ntrailer << /Root 1 0 R >>\n%%EOF\n'
 PLAIN = b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n'
 TEXT = 'Journal of Invented Results 12 (2001)\nRate Parameters for Imaginary Plasmas\nA. Author and B. Other\n'
@@ -510,3 +510,63 @@ def test_series_and_twin(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(doi_module, 'get_json', lambda url, timeout: {'items': [MAN_SERIES]} if 'query.bibliographic' in url else None)
     cited = doi_module.paper_citation(path, None, None)  # only the sibling: rejected, the closest hit named in the notes
     assert cited.doi is None and any('10.1088/0022-3700/20/6/019 (67 % of its title on the page) not taken' in note for note in cited.notes)
+
+
+HUBER_TEXT = """MOLECULAR SPECTRA
+and
+MOLECULAR STRUCTURE
+IV. CONSTANTS OF DIATOMIC
+MOLECULES
+By
+K. P. Huber and G. Herzberg
+National Research Council of Canada
+VAN NOSTRAND REINHOLD COMPANY
+NEW YORK CINCINNATI ATLANTA DALLAS SAN FRANCISCO"""
+HUBER_BOOK = {'DOI': '10.1007/978-1-4757-0961-2', 'title': ['Molecular Spectra and Molecular Structure'], 'author': [{'family': 'Huber'}], 'issued': {'date-parts': [[1979]]}}
+HUBER_CHAPTER = {
+    'DOI': '10.1007/978-1-4757-0961-2_2',
+    'title': ['Constants of diatomic molecules'],
+    'author': [{'family': 'Huber'}],
+    'container-title': ['Molecular Spectra and Molecular Structure'],
+    'page': '8-689',
+    'issued': {'date-parts': [[1979]]},
+}
+HUBER_ABBREVIATIONS = {**HUBER_CHAPTER, 'DOI': '10.1007/978-1-4757-0961-2_1', 'title': ['Abbreviated Publication Titles'], 'page': '1-7'}
+
+
+def test_page_count_in_the_ranking() -> None:
+    """The whole book against its chapter (Huber and Herzberg 1979), an article against its conference version (Park et al. 2001)"""
+    hits = [HUBER_CHAPTER, HUBER_BOOK, HUBER_ABBREVIATIONS]
+    fitting = [record for record in hits if doi_module.search_hit(record, HUBER_TEXT, HUBER_TEXT)]
+    assert HUBER_ABBREVIATIONS not in fitting
+    expected = {731: HUBER_BOOK['DOI'], 682: HUBER_CHAPTER['DOI'], 684: HUBER_CHAPTER['DOI'], None: HUBER_CHAPTER['DOI']}
+    for pages, doi in expected.items():
+        hit = doi_module.best_hit(fitting, HUBER_TEXT, pages=pages)
+        assert hit is not None and hit['DOI'] == doi, pages
+    journal = {'DOI': '10.2514/2.6582', 'title': PARK['title'], 'author': PARK['author'], 'page': '76-90'}  # no journal name, no dates
+    hit = doi_module.best_hit([PARK_CONFERENCE, journal], PARK_TEXT, pages=15)
+    assert hit is not None and hit['DOI'] == '10.2514/2.6582'
+    ranges = {'8-689': 682, '76\u201390': 15, ' 5865 - 5880 ': 16, '123': None, 'e123': None, '90-76': None, '': None}
+    assert {text: doi_module.page_range({'page': text}) for text in ranges} == ranges
+    fits = {15: 1, 14: 1, 18: 1, 19: -1, 13: -1, None: 0}
+    assert {pages: doi_module.page_fit({'page': '76-90'}, pages) for pages in fits} == fits and doi_module.page_fit({}, 15) == 0
+
+
+def test_pdf_pages(tmp_path: pathlib.Path) -> None:
+    """Page count of a real PDF (three pages)"""
+    import shutil  # noqa: PLC0415
+
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+    from matplotlib.backends.backend_pdf import PdfPages  # noqa: PLC0415
+
+    if shutil.which('pdfinfo') is None:
+        pytest.skip('pdfinfo not installed')
+    path = tmp_path / 'three.pdf'
+    with PdfPages(path) as pdf:
+        for _ in range(3):
+            pdf.savefig(plt.figure())
+    plt.close('all')
+    assert REAL_PDF_PAGES(path) == 3 and REAL_PDF_PAGES(tmp_path / 'missing.pdf') is None

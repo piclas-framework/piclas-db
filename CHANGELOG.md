@@ -3,6 +3,15 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.61.0
+
+Ported from rename-papers 0.10.0:
+
+* Ranking of fitting search hits: the page count of the PDF against the record's page range comes after the title differences and
+  before journal and year (`page_range`, `page_fit`, `pdf_pages`): the whole book of Huber and Herzberg 1979 (about 730 pages) is
+  no longer taken for its chapter 2 (pages 8-689), a journal article (pages 76-90) wins against its conference version by its
+  page count alone
+
 ## 0.60.2
 
 * `import` of a PDF without `--literature`: the error names the commands to use (`import FILE --literature -n`, then without `-n`)

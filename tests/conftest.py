@@ -43,3 +43,4 @@ def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(doi, 'get_json', unreachable)
     monkeypatch.setattr(doi, 'openalex_search', lambda text, timeout=15.0: ([], ''))  # tests of OpenAlex replace fetch_json instead
+    monkeypatch.setattr(doi, 'pdf_pages', lambda path: None)  # the minimal PDFs of the tests have no pages (tests of it restore it)
