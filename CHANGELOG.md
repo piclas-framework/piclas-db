@@ -3,6 +3,21 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.59.0
+
+* Reaction tables with columns (`piclas_db/extract/reactions.py`): `extract --table --rates` reads them character by character from
+  the text layer (baselines from the text matrix, exponents by size and position, sub- and superscripts joined, rotated margin text
+  ignored, Type 3 characters without height grouped by baseline; `char_words` in `extract/table.py`) and converts them column by
+  column: roles from the headers (`--columns` to set them), third-body sub-rows with inherited values, two halves side by side,
+  a second table on the same page (`--table 4,5`), continuation pages; whichever of this and the formula reading converts more rows
+  is used. Laux 1995 (34 rows), Johnston 2014 Tables 4 and 5 (54 per third body), Park et al. 2001 (118) and Gökçen 2007 (76)
+  convert like the hand-made drafts
+* Math glyphs without Unicode mapped by font (AIAA, Elsevier, Realpage, TeX); `--glyphs` for others
+* Every converted reaction is checked for element and charge balance; reactions without reactants or products are rejected
+* Scans (`--ocr`): decimal commas and minus signs repaired, exponents re-read enlarged; species are still misread, so scans give
+  only a raw copy to work from and few rows
+* Names without dots (`tablea1-raw` for Table A.1)
+
 ## 0.58.0
 
 * `extract --table` of a reaction table writes the raw copy as `<table>-raw.csv` with a record (`raw_table`, stored with

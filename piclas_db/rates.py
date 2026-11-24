@@ -625,6 +625,7 @@ class Converted:
     n: float
     Td: float
     note: Optional[str] = None  # what to check (e.g. a third body only on one side)
+    Tx: str = 'T'  # controlling temperature
 
 
 def expanded(species: list[str]) -> list[str]:
@@ -643,6 +644,8 @@ def convert_reaction(text: str) -> tuple[str, str, Optional[str]]:
     if len(sides) != 2:
         raise RateError(f'no reaction arrow in {text!r}')
     reactants, products = (expanded([printed_species(token) for token in re.split(r'\s+\+\s+', side.strip()) if token.strip()]) for side in sides)
+    if not reactants or not products:
+        raise RateError(f'reaction {text!r} without reactants or products')
     body, note = '', None
     for marker, kind in (('M', 'molecules'), ('A', 'atoms')):
         if (marker in reactants) != (marker in products):
@@ -651,7 +654,35 @@ def convert_reaction(text: str) -> tuple[str, str, Optional[str]]:
             body, note = kind, note or f'{marker} taken as {kind}: check the paper'
     for species in reactants + products:
         species_name(species)  # raises RateError for a species that cannot be read (e.g. Fe(OH)2)
+    unbalanced = balance([s for s in reactants if s not in THIRD_BODY], [s for s in products if s not in THIRD_BODY])
+    if unbalanced:
+        note = (note + '; ' if note else '') + f'not balanced ({unbalanced}): misprint? (as printed: {text})'
     return ' + '.join(reactants) + ' -> ' + ' + '.join(products), body, note
+
+
+def balance(reactants: list[str], products: list[str]) -> Optional[str]:
+    """Elements and charge on both sides; None if balanced, else what differs ('H: 5 -> 3')"""
+    from piclas_db.atct_map import piclas_name  # noqa: PLC0415
+
+    def totals(side: list[str]) -> Counter:
+        total: Counter = Counter()
+        for species in side:
+            name = species_name(species)
+            if name == 'electron':
+                total['charge'] -= 1
+                continue
+            parsed = piclas_name(name)
+            if parsed is None:
+                return Counter({'?': 1})
+            total.update(parsed[1])
+            total['charge'] += parsed[2]
+        return total
+
+    left, right = totals(reactants), totals(products)
+    if '?' in left or '?' in right:
+        return None
+    differences = [f'{key}: {left[key]} -> {right[key]}' for key in sorted(set(left) | set(right)) if left[key] != right[key]]
+    return ', '.join(differences) or None
 
 
 def parse_rate(text: str) -> tuple[float, float, float]:
@@ -702,7 +733,10 @@ def convert_table(header: list[str], rows: list[list[str]]) -> tuple[list[Conver
 
 def rate_csv(converted: list[Converted], problems: list[str]) -> str:
     """The rate table draft: header, rows, and the rows that could not be read as comments"""
-    lines = ['# rate table converted from the raw copy (extract --table --rates): check every row against the page', 'row,reaction,third_body,C,n,Td,Tx']
-    lines += [f'{row.row},{row.reaction},{row.third_body},{row.C:.6g},{float(row.n)!r},{row.Td:g},T' for row in converted]
-    lines += [f'# not converted: {problem}' for problem in problems]
-    return '\n'.join(lines) + '\n'
+    output = io.StringIO()
+    writer = csv.writer(output, lineterminator='\n')
+    output.write('# rate table converted from the raw copy (extract --table --rates): check every row against the page\n')
+    writer.writerow(['row', 'reaction', 'third_body', 'C', 'n', 'Td', 'Tx'])
+    writer.writerows([row.row, row.reaction, row.third_body, f'{row.C:.6g}', repr(float(row.n)), f'{row.Td:g}', row.Tx] for row in converted)
+    output.writelines(f'# not converted: {problem}\n' for problem in problems)
+    return output.getvalue()

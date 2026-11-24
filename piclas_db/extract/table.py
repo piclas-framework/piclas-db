@@ -22,6 +22,7 @@ page ('—Continued') is joined.
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import operator
 import re
 import shutil
 import subprocess
@@ -73,7 +74,127 @@ def parse_number(text: str) -> Optional[float]:
 # Words
 # ----------------------------------------------------------------------------------------------------------------------------------
 def text_words(page: Any) -> list[Word]:
+    chars = page.chars
+    if chars and sum(c['bottom'] - c['top'] < 1.0 for c in chars) > 0.5 * len(chars):
+        return baseline_words(chars)  # characters without height (Type 3 fonts, e.g. Laux 1995): grouped by their baselines
     return [Word(w['text'], w['x0'], w['x1'], w['top'], w['bottom']) for w in page.extract_words(keep_blank_chars=False, x_tolerance=1.5)]
+
+
+# Glyphs of math fonts whose text layer has no Unicode map, by (part of) the font name: TeX (Boyd 2007), the fonts of AIAA's
+# typesetter (Gökçen 2007), Elsevier's (Johnston 2014), Realpage (Park et al. 2001), and Type 3 fonts without name (Laux 1995)
+FONT_GLYPHS: dict[str, dict[str, str]] = {
+    'CMSY': {'!': '→', '(cid:0)': '−', '(cid:1)': '·', '(cid:2)': '×', '(cid:3)': '∗'},
+    'CMMI': {':': '.'},
+    'AdvP49C2A1': {'(cid:1)': '=', '(cid:2)': '+', '(cid:3)': '−', '(cid:4)': '⇌', '(cid:5)': '×'},
+    'AdvP3E483E': {':': '.'},
+    'AdvMacMthSyN': {'þ': '+', '(cid:3)': '−', 'ð': '(', 'Þ': ')'},
+    'AdvEls-Ent1': {'2': '↔'},
+    'RealpageACS4': {'¡': '−', '!': '→', 'C': '+', 'p': '√'},
+    'RealpageLMS1': {'¡': '−'},
+    'unknown': {'!': '→', '(cid:0)': '−', '(cid:1)': '·', ':': '.'},
+}
+
+
+def glyph(char: dict, extra: Optional[dict[str, str]] = None) -> str:
+    """The character a glyph stands for: the user's map (--glyphs), then the known math fonts"""
+    text = str(char['text'])
+    if extra and text in extra:
+        return extra[text]
+    font = str(char.get('fontname') or 'unknown').split('+')[-1]
+    for name, table in FONT_GLYPHS.items():
+        if name in font and text in table:
+            return table[text]
+    return text
+
+
+def char_words(page: Any, extra: Optional[dict[str, str]] = None) -> list[Word]:
+    """Words built from the characters of the text layer, for tables whose words the PDF library cannot group (characters set one by
+    one, exponents as small raised digits, math glyphs without Unicode): lines from the baselines of normal-size characters, smaller
+    characters joined to the nearest line (raised digits after a digit become an exponent: 10 with raised 21 -> 10^21), words from
+    characters closer than a third of the font size, glyphs mapped by font (FONT_GLYPHS, --glyphs)"""
+    chars = [c for c in page.chars if str(c['text']).strip()]
+    upright = [c for c in chars if c.get('upright', True)]
+    if len(upright) > 0.5 * len(chars):
+        chars = upright  # not the rotated margin text ('Downloaded by ...'); Type 3 fonts may report no character as upright
+    if not chars:
+        return []
+    if sum(c['bottom'] - c['top'] < 1.0 for c in chars) > 0.5 * len(chars):
+        return [Word(tex_cleaned(w.text), w.x0, w.x1, w.top, w.bottom) for w in baseline_words([{**c, 'text': glyph(c, extra)} for c in chars])]
+    height = float(page.height)
+    for char in chars:  # the baseline from the text matrix: independent of the glyph box, which differs between fonts
+        matrix = char.get('matrix')
+        char['bottom'] = height - float(matrix[5]) if matrix else char['bottom']
+    sizes = sorted(c['size'] for c in chars)
+    size = sizes[len(sizes) // 2]
+    normal = [c for c in chars if c['size'] >= 0.85 * size]
+    bases: list[float] = []
+    for bottom in sorted(c['bottom'] for c in normal):
+        if not bases or bottom - bases[-1] > 0.35 * size:
+            bases.append(bottom)
+    rows: dict[float, list[dict]] = {base: [] for base in bases}
+    by_base: dict[float, list[dict]] = {base: [] for base in bases}
+    for char in normal:
+        by_base[min(bases, key=lambda b: abs(b - char['bottom']))].append(char)
+    for char in chars:
+        near = [b for b in bases if abs(b - char['bottom']) <= 0.7 * size]
+        if char['size'] < 0.85 * size:  # a sub- or superscript belongs to the line of the character it follows (not of another column)
+            adjacent = [b for b in near if any(-0.5 * size <= char['x0'] - c['x1'] <= 0.6 * size for c in by_base[b])]
+            near = adjacent or near
+        base = min(near or bases, key=lambda b: abs(b - char['bottom']))
+        if abs(base - char['bottom']) <= 0.7 * size:
+            small = char['size'] < 0.85 * size
+            rows[base].append({**char, 'text': glyph(char, extra), 'raised': small and char['bottom'] < base - 0.2 * size})
+    words: list[Word] = []
+    for base, members in rows.items():
+        current: list[dict] = []
+        for char in sorted(members, key=operator.itemgetter('x0')):
+            # sub- and superscripts (smaller) may be set a little apart from their base character: 3.0 ¹⁴, N ₂, NO ⁺
+            limit = 0.6 * size if char['size'] < 0.85 * size and current and current[-1]['size'] >= 0.85 * size else 0.3 * size
+            if current and char['x0'] - current[-1]['x1'] > limit:
+                words.append(joined(current, base, size))
+                current = []
+            current.append(char)
+        if current:
+            words.append(joined(current, base, size))
+    return words
+
+
+def baseline_words(chars: list[dict]) -> list[Word]:
+    """Words from characters whose boxes have no height: lines from the most frequent baselines; characters up to 6 pt above or below
+    a line are its sub- or superscripts, raised digits after a digit become an exponent ('10' with raised '−9' -> '10^−9'); characters
+    closer than 2 pt form a word. All words get the same height (the line spacing is all that is known)."""
+    baselines: dict[float, int] = {}
+    for char in chars:
+        baselines[round(char['top'], 0)] = baselines.get(round(char['top'], 0), 0) + 1
+    lines: list[float] = []  # main baselines: the most frequent first, others within 6 pt of one are its sub- or superscripts
+    for base, count in sorted(baselines.items(), key=lambda item: -item[1]):
+        if count >= 3 and all(abs(base - line) > 6.0 for line in lines):
+            lines.append(base)
+    lines.sort()
+    rows: dict[float, list[dict]] = {base: [] for base in lines}
+    for char in chars:
+        base = min(lines, key=lambda line: abs(line - char['top']), default=None)
+        if base is not None and abs(base - char['top']) <= 6.0:
+            rows[base].append({**char, 'raised': base - char['top'] > 2.0})
+    words: list[Word] = []
+    for base, members in rows.items():
+        current: list[dict] = []
+        for char in sorted(members, key=operator.itemgetter('x0')):
+            if current and char['x0'] - current[-1]['x1'] > 2.0:
+                words.append(joined(current, base))
+                current = []
+            current.append(char)
+        if current:
+            words.append(joined(current, base))
+    return words
+
+
+def joined(chars: list[dict], base: float, size: float = 9.0) -> Word:
+    text = ''
+    for index, char in enumerate(chars):
+        exponent = char['raised'] and (index == 0 or not chars[index - 1]['raised']) and re.search(r'\d$', text) and re.match(r'[\d−-]', char['text'])
+        text += ('^' if exponent else '') + char['text']
+    return Word(text, chars[0]['x0'], chars[-1]['x1'], base - size, base)
 
 
 def ocr_words(page: Any) -> list[Word]:
@@ -135,7 +256,8 @@ def column_of_caption(words: list[Word], caption: Word, width: float) -> list[Wo
     if crossing > 0.02 * len(near):
         return words
     left = caption.x0 < middle
-    return [w for w in words if (w.x1 <= middle + 2) == left]
+    column = [w for w in words if (w.x1 <= middle + 2) == left]
+    return column if caption in column else words  # a caption across the middle: no column layout here
 
 
 # ----------------------------------------------------------------------------------------------------------------------------------
@@ -263,7 +385,7 @@ def split_row(line: list[Word]) -> list[str]:
     return result
 
 
-TEX_GLYPHS = {'(cid:0)': '−', '(cid:2)': '×', '(cid:3)': '∗'}  # TeX symbol font positions in text layers without a character map
+TEX_GLYPHS = {'(cid:0)': '−', '(cid:1)': '·', '(cid:2)': '×', '(cid:3)': '∗'}  # TeX symbol font positions without a character map
 
 
 def tex_cleaned(cell: str) -> str:

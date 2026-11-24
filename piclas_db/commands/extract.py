@@ -70,7 +70,7 @@ def pairs(text: Optional[str], separator: str) -> Optional[list[tuple[float, flo
 COMMAND_OPTIONS = (
     'page', 'frame', 'figure', 'name', 'table', 'ocr', 'raster', 'symbol_radius', 'frame_box', 'x_points', 'y_points', 'seeds',
     'x_labels', 'y_labels', 'x_scale', 'y_scale', 'x_unit', 'x_quantity', 'mass_amu', 'target_mass_amu', 'energy_frame', 'y_unit', 'by',
-    'rates', 'rate_unit', 'chemistry_model',
+    'rates', 'rate_unit', 'chemistry_model', 'glyphs', 'columns',
 )  # fmt: skip
 
 
@@ -88,7 +88,63 @@ def page_list(text: str) -> list[int]:
     return pages
 
 
-def write_reaction_table(args: argparse.Namespace, paper: StoreEntry, table: Table, output: pathlib.Path, name: str, raw_file: pathlib.Path) -> None:
+def column_table(args: argparse.Namespace, paper: StoreEntry, path: str, output: pathlib.Path) -> bool:
+    """--rates for a reaction table with columns (C, n, T_d, Tx, third body; read character by character or by OCR, extract/reactions.py)
+    when it converts more rows than the reading of the table as label, reaction and one formula cell (Farbar, Boyd, Plane); True if
+    written"""
+    from piclas_db import rates  # noqa: PLC0415
+    from piclas_db.extract import reactions  # noqa: PLC0415
+
+    numbers = args.table.split(',')
+    try:
+        lines, caption, pages = reactions.table_lines(path, page_list(args.page), numbers, use_ocr=args.ocr, glyphs=glyph_map(args.glyphs))
+        result = reactions.convert_columns(lines, column_roles(args.columns))
+    except (ExtractError, rates.RateError):
+        return False
+    if len(numbers) == 1 and not result.converted:
+        return False
+    if len(numbers) == 1 and not any(len(row) > 5 for row in result.raw):  # label, reaction and one or two cells: the formula reading
+        try:
+            simple = extract_table(path, page_list(args.page), numbers[0], use_ocr=args.ocr)
+            if len(rates.convert_table(simple.header, simple.rows)[0]) >= len(result.converted):
+                return False
+        except ExtractError:
+            pass
+    table = Table('-'.join(numbers), caption, pages, result.header, [row + [''] * (len(result.header) - len(row)) for row in result.raw], 'ocr' if args.ocr else 'text')
+    name = slug(args.name or ('tables' if len(numbers) > 1 else 'table') + '-'.join(number.replace('.', '') for number in numbers))  # tablea1
+    raw_file = output / f'{name}-raw.csv'
+    import csv  # noqa: PLC0415
+
+    with raw_file.open('w', newline='') as file:
+        writer = csv.writer(file, lineterminator='\n')
+        writer.writerow(table.header)
+        writer.writerows(table.rows)
+    print(f'table {", ".join(numbers)} (pages {", ".join(str(p) for p in pages)}, {table.source}, column table): {len(table.rows)} rows -> {raw_file}')
+    print(f'  caption: {caption}')
+    write_reaction_table(args, paper, table, output, name, raw_file, (result.converted, result.problems))
+    return True
+
+
+def glyph_map(text: Optional[str]) -> Optional[dict[str, str]]:
+    """--glyphs '(cid:5)=×,þ=+': glyphs of a font without Unicode map"""
+    if not text:
+        return None
+    result: dict[str, str] = {}
+    for item in text.split(','):
+        key, _, value = item.rpartition('=')
+        if key:
+            result[key] = value
+    return result
+
+
+def column_roles(text: Optional[str]) -> Optional[dict[str, str]]:
+    """--columns 'Ta=Tx,Tr=Td': roles of columns by their header (C, n, Td, Tx, M, skip)"""
+    if not text:
+        return None
+    return {key.strip(): value.strip() for key, value in (item.split('=', 1) for item in text.split(',') if '=' in item)}
+
+
+def write_reaction_table(args: argparse.Namespace, paper: StoreEntry, table: Table, output: pathlib.Path, name: str, raw_file: pathlib.Path, done: Optional[tuple[list, list[str]]] = None) -> None:
     """A reaction table: the raw copy with its record (<name>-raw), and with --rates [TOPIC] the rate table converted from it
     (<name>-rates[-TOPIC]), whose record points to the raw copy"""
     from piclas_db import rates  # noqa: PLC0415
@@ -113,7 +169,7 @@ def write_reaction_table(args: argparse.Namespace, paper: StoreEntry, table: Tab
         print(f'    piclas-db literature template {paper_key} {name}-rates --rates --page {pages} --table {table.number} -o {output}')
         print(f'  store the raw copy with: piclas-db literature add {raw_record}')
         return
-    converted, problems = rates.convert_table(table.header, table.rows)
+    converted, problems = done or rates.convert_table(table.header, table.rows)
     rates_name = f'{name}-rates' + (f'-{slug(args.rates)}' if args.rates else '')
     (output / f'{rates_name}.csv').write_text(rates.rate_csv(converted, problems), encoding='utf-8')
     unit = args.rate_unit or rates.printed_unit(' '.join([table.caption, *table.header]))
@@ -128,6 +184,8 @@ def write_reaction_table(args: argparse.Namespace, paper: StoreEntry, table: Tab
     notes = sorted({row.note for row in converted if row.note and 'taken as' in row.note})
     notes += [f'row {row.row}: {row.note}' for row in converted if row.note and 'taken as' not in row.note]
     notes += [f'not converted: {problem}' for problem in problems]
+    if table.source == 'ocr':
+        notes.insert(0, 'read by OCR from a scan: species and exponents are often misread; check every row against the page, or enter the table by hand')
     notes.append('controlling temperature not printed: entered as T (change Tx where the paper says otherwise)')
     record['notes'] = notes
     rates_record = output / f'{rates_name}.extraction.yaml'
@@ -305,9 +363,11 @@ def run(args: argparse.Namespace) -> int:
         paper = known[paper_key]
         path = str(paper.path)
         if args.table:
-            table = extract_table(path, page_list(args.page), args.table, use_ocr=args.ocr)
             output = pathlib.Path(args.output)
             output.mkdir(parents=True, exist_ok=True)
+            if args.rates is not None and column_table(args, paper, path, output):
+                return 0
+            table = extract_table(path, page_list(args.page), args.table.split(',')[0], use_ocr=args.ocr)
             write_table(args, paper, table, output)
             return 0
         page = page_list(args.page)[0]

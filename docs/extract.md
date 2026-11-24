@@ -124,8 +124,33 @@ piclas-db literature add -n work/table2-rates-air.extraction.yaml --compare Spec
 piclas-db literature add work/table2-raw.extraction.yaml
 piclas-db literature add work/table2-rates-air.extraction.yaml
 ```
-Text layers with other broken encodings (letters as single words, symbols mapped to other characters) are not read; try `--ocr`
-or enter the table from the page image.
+**Reaction tables with columns** (C, n, T_d, controlling temperature and third body in columns of their own: Park et al. 2001,
+Johnston and Brandis 2014, Laux 1995, Gökçen 2007) are read character by character from the text layer and converted column by
+column:
+
+* exponents set as small raised digits become `3.0^22`, `7.00×10^21`; sub- and superscripts join the character they follow (`N2+`);
+  baselines come from the text matrix, so mixed fonts stay on one line; the rotated margin text of downloads is ignored; characters
+  without height (Type 3 fonts, Laux 1995) are grouped by their baselines
+* math glyphs without Unicode are mapped by font (`(cid:4)` → `⇌` in the AIAA fonts of Gökçen 2007, `þ` → `+` in Elsevier's,
+  `¡` → `−` in Realpage's, TeX's `!` → `→`); others with `--glyphs '(cid:5)=×,þ=+'`
+* the role of each column comes from its header (`A`, `Af,i`, `af [m3/...]` → C; `n`, `nf,i`, `bf` → n; `Tr`, `Df,i`, `Ea`,
+  `Ta, K` → T_d; `Ta`, `Tf,i` → controlling temperature; `M`, `Third body` → third body; formulas, sources and references are
+  skipped); `--columns 'Ta=Tx,Tr=Td'` sets roles by header
+* rows without a reaction arrow belong to the reaction above (third-body sub-rows: Park's `M = N, O, N2, ...`, Johnston's
+  `Ar`/`Others`, Gökçen's `Enhanced rate for M = N, C, H`) and take n, T_d and Tx from its first row where they print none; a
+  reaction with sub-rows gives `others` to its first row, one without gives `all`
+* two halves side by side (Park 2001) are read left half first, a reaction continuing at the top of the right half; a second table
+  on the same page starts new columns (`--table 4,5`, Johnston); continuation pages are read from the top (`--page 126-127`)
+* every reaction is checked for its element and charge balance: `CH3 + CH2 → C2H2 + H` as printed in Gökçen's row 25 is flagged
+  (`not balanced (H: 5 -> 3)`), not changed
+
+`extract --table --rates` uses this reading or the one above (label, reaction, one formula cell: Farbar, Boyd, Plane), whichever
+converts more rows. The unit of C is taken from the caption or header where printed, else `--rate-unit` (Park, Johnston, Gökçen:
+`"cm^3/(mol s)"`; Laux: `"m^3/(molecule s)"`).
+
+**Scans** (Park 1993, 1994) are read by OCR (`--ocr`): numbers are repaired where unambiguous (decimal commas, minus signs) and
+exponents re-read from the enlarged image, but OCR misreads species (`N,` for N2, `N*` for N+) and merges cells, so few rows
+convert; the raw copy is an aid for entering the table by hand (`literature template --rates`).
 
 All twelve data tables of Yoon et al. 2008 (Tables 1–5, 7–9, 11–14, including those continued on the next page, two-column layout,
 several columns with different units) are read with the correct number of rows; Table 13 is identical to the values entered by

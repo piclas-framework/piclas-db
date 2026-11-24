@@ -287,3 +287,63 @@ def test_rate_conversion() -> None:
     assert rates.printed_unit('rates in m3/molecule/s.') == 'm^3/(molecule s)' and rates.printed_unit('k (cm3 molecule−1 s−1)') == 'cm^3/(molecule s)'
     converted, problems = rates.convert_table(['No', 'Reaction', 'k'], [['R1', 'Fe + O3 → FeO + O2', '2.9 × 10−10 exp(−174/T)'], ['R10', 'Fe(OH)2 + H → FeOH + H2 O', '3.3 × 10−10']])
     assert [row.row for row in converted] == ['R1'] and problems[0].startswith('R10: ')
+
+
+def column_paper(path: pathlib.Path) -> None:
+    """A reaction table with columns (invented, in the layout of Park 2001): two halves side by side, C with superscript exponents
+    (mathtext), third-body sub-rows, the controlling temperature as a column; a reaction whose sub-rows continue in the right half"""
+    plt.rcParams['pdf.fonttype'] = 42
+    with PdfPages(path) as pdf:
+        figure = plt.figure(figsize=(8.5, 11))
+        text(figure, 60, 60, 'Table 5    Reaction rate coefficients of invented species')
+        for x0 in (40, 320):
+            for dx, header in ((0, 'Reaction'), (70, 'M'), (100, 'C'), (150, 'n'), (185, 'Tr'), (230, 'Ta')):
+                text(figure, x0 + dx, 80, header)
+        rows_left = [('1) Tx2 + M → Tx + Tx + M', None), ('Tx', r'$3.0^{22}$', '−1.6', '113,200', 'T'), ('Qq2', r'$7.0^{21}$', '−1.6', '113,200', 'T'), ('2) Qq2 + M → Qq + Qq + M', None)]
+        rows_right = [('Tx', r'$1.0^{22}$', '−1.5', '59,360', 'Tv'), ('Qq2', r'$2.0^{21}$', '−1.5', '59,360', 'Tv'), ('3) Tx + Qq → TxQq+ + e−', None)]
+        for x0, rows in ((40, rows_left), (320, rows_right)):
+            y = 96.0
+            for row in rows:
+                if row[1] is None:
+                    text(figure, x0, y, row[0])
+                else:
+                    for dx, cell in zip((70, 100, 150, 185, 230), row, strict=True):
+                        text(figure, x0 + dx, y, cell)
+                y += 14
+        for dx, cell in zip((100, 150, 185, 230), (r'$5.3^{12}$', '0', '31,900', 'T'), strict=True):
+            text(figure, 320 + dx, 110 + 28, cell)
+        pdf.savefig(figure)
+    plt.close('all')
+
+
+def test_column_table(tmp_path: pathlib.Path) -> None:
+    """Character-level reading (exponents by size and position) and the column converter: halves, sub-rows, roles, continuation"""
+    from piclas_db.extract import reactions  # noqa: PLC0415
+
+    path = tmp_path / 'columns.pdf'
+    column_paper(path)
+    lines, caption, pages = reactions.table_lines(str(path), [1], ['5'])
+    assert caption.startswith('Table 5') and pages == [1]
+    result = reactions.convert_columns(lines)
+    rows = {(row.reaction, row.third_body): (row.C, row.n, row.Td, row.Tx) for row in result.converted}
+    assert rows[('Tx2 + M -> Tx + Tx + M', 'Tx')] == pytest.approx((3.0e22, -1.6, 113200.0, 'T'))  # type: ignore[arg-type]
+    assert rows[('Qq2 + M -> Qq + Qq + M', 'Qq2')][:3] == pytest.approx((2.0e21, -1.5, 59360.0))  # continued in the right half
+    assert rows[('Qq2 + M -> Qq + Qq + M', 'Qq2')][3] == 'Tv'
+    assert ('Tx + Qq -> TxQq+ + e-', '') in rows and not result.problems
+
+
+def test_reading_helpers() -> None:
+    from piclas_db.extract import reactions  # noqa: PLC0415
+    from piclas_db.extract.table import glyph  # noqa: PLC0415
+    from piclas_db.rates import convert_reaction  # noqa: PLC0415
+
+    assert reactions.split_reaction_text('N2+M⇌N+N+M') == 'N2 + M → N + N + M'
+    assert reactions.split_reaction_text('N+N→N+2+e−') == 'N + N → N+2 + e−'  # N+2: the charge printed before the subscript
+    assert reactions.split_reaction_text('C+e−→C++2e−') == 'C + e− → C+ + 2e−'
+    assert reactions.coefficient('6.170·10^−9') == pytest.approx(6.17e-9) and reactions.coefficient('4.40+16') == pytest.approx(4.4e16)
+    assert reactions.header_role('A, cc/mol/s') == 'C' and reactions.header_role('Df;i') == 'Td' and reactions.header_role('Third body, M') == 'M'
+    assert reactions.header_role('kf =ATne−Ta=T') == 'skip' and reactions.third_bodies('EnhancedrateforM=N,C,H') == 'N, C, H'
+    assert glyph({'text': '(cid:4)', 'fontname': 'ABCDEF+AdvP49C2A1'}) == '⇌' and glyph({'text': '¡', 'fontname': 'X+RealpageACS4'}) == '−'
+    assert glyph({'text': '(cid:9)', 'fontname': 'Other'}, {'(cid:9)': '→'}) == '→'
+    assert 'not balanced (H: 5 -> 3)' in str(convert_reaction('CH3 + CH2 ⇌ C2H2 + H')[2])  # Gökçen 2007, row 25 as printed
+    assert reactions.ocr_cleaned('1,60') == '1.60' and reactions.ocr_cleaned('113,200') == '113,200' and reactions.ocr_cleaned('N2+M—~N') == 'N2+M→N'

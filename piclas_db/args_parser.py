@@ -124,6 +124,8 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('--rates', nargs='?', const='', metavar='TOPIC', help='with --table of a reaction table: also convert it into a rate table <table>-rates[-TOPIC] (e.g. air, mars)')
             sub.add_argument('--rate-unit', help='with --rates: unit of the rate coefficients if the caption does not give it (e.g. "cm^3/(mol s)")')
             sub.add_argument('--chemistry-model', help='with --rates: suffix of the chemistry models that cite the paper (e.g. Farbar2008)')
+            sub.add_argument('--columns', help='with --rates: roles of table columns by header, e.g. "Ta=Tx,Tr=Td" (C, n, Td, Tx, M, skip)')
+            sub.add_argument('--glyphs', help='with --rates: glyphs of a font without Unicode map, e.g. "(cid:5)=×,þ=+"')
             sub.add_argument('--ocr', action='store_true', help='with --table: read the page by OCR even if it has a text layer')
             sub.add_argument('--raster', action='store_true', help='treat the page as a scan (default: automatic for pages without vector graphics)')
             sub.add_argument('--frame-box', help='scans: frame x0,y0,x1,y1 in pt (from the grid image of --list) if it is not found')
