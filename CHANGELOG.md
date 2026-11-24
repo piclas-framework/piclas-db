@@ -3,6 +3,17 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.60.0
+
+Ported from rename-papers 0.9.1:
+
+* Search hits (Crossref, OpenAlex): the whole-title check tolerates up to 5 % differing letters and digits in titles of 20 or more
+  (approximate substring matching, Myers' bit-parallel algorithm: `edits`, `title_errors`, `title_share`), for OCR text layers of
+  old scans (Man et al. 1987: `Ar+` read as `AI+`); shorter titles must match exactly
+* Fitting hits are ranked by fewest differing title characters first (siblings of a paper series), then journal and year on the
+  page, then the search order; the journal is also looked for in its abbreviated form (`short-container-title`)
+* Without any hit taken, the notes name the closest rejected Crossref hit with the share of its title on the page
+
 ## 0.59.0
 
 * Reaction tables with columns (`piclas_db/extract/reactions.py`): `extract --table --rates` reads them character by character from

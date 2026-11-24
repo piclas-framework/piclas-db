@@ -112,11 +112,58 @@ def author_found(record: dict, text: str) -> bool:
     return any(names and all(name in haystack for name in names) for names in spellings)
 
 
+def edits(pattern: str, text: str) -> int:
+    """Fewest edits (insert, delete or replace a character) that turn pattern into some part of text: approximate substring matching
+    with Myers' bit-parallel algorithm (1999), fast also for two pages of text. The search variant: a match may start anywhere."""
+    m = len(pattern)
+    if not m:
+        return 0
+    mask, high = (1 << m) - 1, 1 << (m - 1)
+    peq: dict[str, int] = {}
+    for i, char in enumerate(pattern):
+        peq[char] = peq.get(char, 0) | (1 << i)
+    pv, mv, score, best = mask, 0, m, m
+    for char in text:
+        eq = peq.get(char, 0)
+        xv = eq | mv
+        xh = (((eq & pv) + pv) ^ pv) | eq
+        ph = (mv | ~(xh | pv)) & mask
+        mh = pv & xh
+        if ph & high:
+            score += 1
+        elif mh & high:
+            score -= 1
+        ph = (ph << 1) & mask
+        mh = (mh << 1) & mask
+        pv = (mh | ~(xv | ph)) & mask
+        mv = ph & xv
+        best = min(best, score)
+    return best
+
+
+def squeeze(text: str) -> str:
+    """Letters and digits only, lower case, accents dropped"""
+    return ''.join(plain_words(text)).lower()
+
+
+def title_errors(title: str, text: str) -> int:
+    """Characters of the title (letters and digits) that differ from the closest part of the text, in order"""
+    squeezed, haystack = squeeze(title), squeeze(text)
+    return 0 if squeezed in haystack else edits(squeezed, haystack)
+
+
+def title_share(title: str, text: str) -> int:
+    """Percentage (rounded down) of the title's letters and digits found in the text, in order (for messages)"""
+    squeezed = squeeze(title)
+    return int(100 * max(0, len(squeezed) - title_errors(title, text)) / len(squeezed)) if squeezed else 0
+
+
 def title_in_text(title: str, text: str) -> bool:
     """The whole title is in the text, in order: compared by letters and digits only, so line breaks, hyphenation, punctuation,
-    accents and formula spacing (H 2, H2) do not matter"""
-    squeezed = ''.join(plain_words(title)).lower()
-    return bool(squeezed) and squeezed in ''.join(plain_words(text)).lower()
+    accents and formula spacing (H 2, H2) do not matter; up to 5 % of the characters may differ (OCR of old scans: 'Ar+' read as
+    'AI+', Man et al. 1987), none in titles under 20 characters (a short title matches too easily: 'Collision Processes of H+')"""
+    squeezed = squeeze(title)
+    return bool(squeezed) and title_errors(title, text) <= len(squeezed) // 20
 
 
 def title_lines(text: str) -> str:
@@ -387,15 +434,20 @@ def search_hit(record: dict, text: str, haystack: str) -> bool:
 def evidence(record: dict, text: str) -> tuple[bool, bool]:
     """How well a search hit fits the first pages beyond title and author: (journal or book title there, year there). Tells the
     journal article from its conference version with the same title and author (Park et al. 2001 and AIAA paper 2000-210)"""
-    containers = [str(container) for container in record.get('container-title') or [] if container]
+    containers = [str(container) for key in ('container-title', 'short-container-title') for container in record.get(key) or [] if container]  # old pages: J. Phys. B
     year = record_year(record)
     return any(title_in_text(container, text) for container in containers), bool(year) and str(year) in re.findall(r'\d{4}', text)
 
 
-def best_hit(hits: list[dict], text: str) -> Optional[dict]:
-    """Of the fitting search hits (versions of one paper: conference, journal), the one whose journal and year are on the page;
-    equal evidence: the search order (max returns the first); a single hit is taken even without evidence"""
-    return max(hits, key=lambda record: evidence(record, text)) if hits else None
+def best_hit(hits: list[dict], text: str, scan: bool = False) -> Optional[dict]:
+    """Of the fitting search hits: the one whose title differs from the page in the fewest characters (a sibling of a paper series may
+    fit within the tolerance), then the one whose journal and year are on the page (versions of one paper: conference, journal), then
+    the search order (sorted is stable); a single hit is taken even without evidence. For scans the file name is compared by the
+    word share: no character errors there."""
+    if not hits:
+        return None
+    errors = {id(record): 0 if scan else title_errors(record_title(record), text) for record in hits}
+    return max(hits, key=lambda record: (-errors[id(record)], *evidence(record, text)))  # max: the first of equals
 
 
 def take(result: Citation, record: dict, doi: Optional[str], where: str) -> None:
@@ -434,18 +486,25 @@ def checked(path: pathlib.Path, text: str, found: list[tuple[str, str]], result:
         break
     else:
         lines = [line.strip() for line in text.splitlines() if len(line.strip()) > 15][:6] if has_text else [haystack]
-        hit = best_hit([record for record in search(' '.join(lines)) if record.get('DOI') and search_hit(record, text, haystack)], haystack)
+        searched = [record for record in search(' '.join(lines)) if record.get('DOI')]
+        hit = best_hit([record for record in searched if search_hit(record, text, haystack)], haystack, scan=not has_text)
+        closest_note = None
+        if hit is None and searched and has_text:  # the closest rejected hit, for the user: give its DOI with --doi if it is the paper
+            closest = max(searched, key=lambda record: title_share(record_title(record), text))
+            closest_note = f'Crossref search: {closest["DOI"]} ({title_share(record_title(closest), text)} % of its title on the page) not taken'
         if hit is not None:
             take(result, hit, str(hit['DOI']), 'Crossref search')
             result.notes.append('DOI found by searching Crossref for the first lines of the PDF: check it at the link')
         elif has_text:  # OpenAlex also knows reports, theses and books without DOI
             records, error = openalex_search(text)
-            hit = best_hit([record for record in records if search_hit(record, text, haystack)], haystack)
+            hit = best_hit([record for record in records if search_hit(record, text, haystack)], haystack, scan=not has_text)
             if hit is not None:
                 take(result, hit, hit.get('DOI'), 'OpenAlex')
                 result.notes.append('found by searching OpenAlex for the title: check it' + (' at the link' if hit.get('DOI') else ' (no DOI)'))
             elif error:
                 rejected.append(error)
+        if closest_note and not result.doi and not result.reference:  # nothing found at all: show what came closest
+            rejected.append(closest_note)
     if rejected:
         result.notes.append('not taken: ' + '; '.join(rejected))
     return result

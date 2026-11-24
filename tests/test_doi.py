@@ -461,3 +461,52 @@ def test_journal_before_conference_version(tmp_path: pathlib.Path, monkeypatch: 
     monkeypatch.setattr(doi_module, 'get_json', lambda url, timeout: {'items': [PARK_CONFERENCE, PARK]} if 'query.bibliographic' in url else None)
     cited = doi_module.paper_citation(path, None, None)  # whole path: no DOI on the page, Crossref search
     assert (cited.doi, cited.key(set())) == ('10.2514/2.6582', 'park-2001')
+
+
+MAN_TEXT = """J. Phys. B: At. Mol. Phys. 20 (1987) 5865-5880. Printed in the UK
+
+A measurement of the cross section for electron impact
+ionisation of Ne', AI+, Kr' and Xe'
+K F Man?, A C H Smith? and M F A Harrison$
+t Department of Physics and Astronomy, University College London, London W C l E 6BT,
+UK"""
+SUP = '\n                    <sup>+</sup>\n                    '
+MAN = {
+    'DOI': '10.1088/0022-3700/20/21/030',
+    'title': [f'A measurement of the cross section for electron impact ionisation of Ne{SUP}, Ar{SUP}, Kr{SUP}and Xe{SUP}'],
+    'author': [{'family': 'Man'}],
+    'container-title': ['Journal of Physics B: Atomic and Molecular Physics'],
+    'short-container-title': ['J. Phys. B: At. Mol. Phys.'],
+    'issued': {'date-parts': [[1987, 11, 14]]},
+}
+MAN_SERIES = {**MAN, 'DOI': '10.1088/0022-3700/20/6/019', 'title': ['A measurement of the cross section for ionisation of He+, Ne+ and Ar+']}  # invented
+MAN_TWIN = {**MAN, 'DOI': '10.1088/0022-3700/99/1/001', 'title': ['A measurement of the cross section for electron impact ionisation of Ne+, Ar+, Kr+ and Xe2+']}  # invented
+
+
+def test_tolerant_title_check() -> None:
+    """Old scans with an OCR text layer: up to 5 % of a long title may differ ('Ar+' read as 'AI+'); short titles exactly"""
+    edits = doi_module.edits
+    assert (edits('abc', 'xxabcxx'), edits('abc', 'xxabxx'), edits('abc', 'xxaxcxx'), edits('abc', 'xxabbcxx'), edits('abc', ''), edits('', 'abc')) == (0, 1, 1, 1, 3, 0)
+    title = doi_module.record_title(MAN)
+    assert doi_module.title_errors(title, MAN_TEXT) == 1 and doi_module.title_in_text(title, MAN_TEXT) and doi_module.title_share(title, MAN_TEXT) == 98
+    assert not doi_module.title_in_text('Collision Processes of H', JANEV_TEXT)  # 21 characters: no difference allowed
+    assert not doi_module.title_in_text('Abcdefghijklmnop', 'xx Abcdefghijklmnoq xx')  # 16 characters, 1 differs
+    assert doi_module.title_in_text('Abcdefghijklmnopqrstuvwxyzab', 'xx Abcdefghijklmnopqrstuvwxyzac xx')  # 28 characters, 1 differs
+    assert doi_module.evidence(MAN, MAN_TEXT) == (True, True)  # the journal as abbreviated on the page
+
+
+def test_series_and_twin(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    assert not doi_module.search_hit(MAN_SERIES, MAN_TEXT, MAN_TEXT) and doi_module.title_share(doi_module.record_title(MAN_SERIES), MAN_TEXT) == 67
+    for hits in ([MAN_SERIES, MAN], [MAN_TWIN, MAN]):  # the twin differs in 2 characters, Man et al. 1987 in 1
+        fitting = [record for record in hits if doi_module.search_hit(record, MAN_TEXT, MAN_TEXT)]
+        hit = doi_module.best_hit(fitting, MAN_TEXT)
+        assert hit is not None and hit['DOI'] == MAN['DOI']
+    path = tmp_path / 'man.pdf'
+    path.write_bytes(PLAIN)
+    monkeypatch.setattr(doi_module, 'pdf_text', lambda path, pages=2: MAN_TEXT)
+    monkeypatch.setattr(doi_module, 'get_json', lambda url, timeout: {'items': [MAN_SERIES, MAN_TWIN, MAN]} if 'query.bibliographic' in url else None)
+    cited = doi_module.paper_citation(path, None, None)  # whole path: no DOI on the page, Crossref search
+    assert (cited.doi, cited.key(set())) == (MAN['DOI'], 'man-1987')
+    monkeypatch.setattr(doi_module, 'get_json', lambda url, timeout: {'items': [MAN_SERIES]} if 'query.bibliographic' in url else None)
+    cited = doi_module.paper_citation(path, None, None)  # only the sibling: rejected, the closest hit named in the notes
+    assert cited.doi is None and any('10.1088/0022-3700/20/6/019 (67 % of its title on the page) not taken' in note for note in cited.notes)

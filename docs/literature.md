@@ -53,9 +53,13 @@ override it.
    compared.
 3. **Search**: without an accepted DOI, the first lines of the PDF (or the file name of a scan) are searched at Crossref. A hit is
    taken only if its **whole title is in the text, in order** (compared by letters and digits, so line breaks, hyphenation, accents
-   and formula spacing do not matter) and its **first author's family name** is on the page (with and without spelled-out
+   and formula spacing do not matter; in titles of 20 or more letters and digits up to 5 % may differ, for the OCR text layers of old
+   scans: `Ar+` read as `AI+`) and its **first author's family name** is on the page (with and without spelled-out
    umlauts). Of several fitting hits (versions of one paper, e.g. a journal article and its conference paper with the same title
-   and author), the one whose journal and year are on the page is taken, otherwise the first. Counting title words was not enough: a dissertation matched a chapter of its committee chair with a similar title, a
+   and author, or papers of a series with almost the same title), the one whose title differs in the fewest characters, then the
+   one whose journal (also abbreviated, as old title pages print it) and year are on the page, otherwise the first. If no hit is
+   taken, the paper's notes name the closest one with the share of its title found on the page (`10.1088/… (67 % of its title on
+   the page) not taken`): if it is the paper after all, import it with `--doi`. Counting title words was not enough: a dissertation matched a chapter of its committee chair with a similar title, a
    report matched a chapter of its author whose title words were all on the page. For a scan without text, 60 % of the title words
    and the author must be in the file name.
 4. **OpenAlex**: if Crossref has nothing, the title lines of the first page (up to the byline) are searched at OpenAlex
