@@ -560,6 +560,11 @@ def database_matches(database: Database, row: RateRow, unit: str) -> tuple[list[
     return same_values, (closest[1], closest[2]) if closest and not same_values else None
 
 
+def differing_fields(differences: list[str]) -> set[str]:
+    """The values named in differences from same(): 'C 1.2e-08 vs. ...' -> {'C'}, 'T_d 18000 vs. 18600' -> {'T_d'}"""
+    return {text.split(' ', 1)[0] for text in differences}
+
+
 def preview(rows: list[RateRow], unit: str, database: Optional[Database] = None) -> tuple[list[str], list[list[str]], dict[str, int]]:
     """Header and lines of the rows as understood (reaction, third bodies, C converted to PICLas units, n, T_d, Tx) and, with a
     database, the reactions with the same values or the closest one; counts of rows found, differing and not in the database"""

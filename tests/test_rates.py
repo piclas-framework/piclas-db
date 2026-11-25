@@ -16,7 +16,9 @@ invented species (Tx, Qq) and values, no content of real papers"""
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Standard libraries
 # ----------------------------------------------------------------------------------------------------------------------------------
+import csv
 import pathlib
+import shutil
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 # Third-party libraries
@@ -28,6 +30,7 @@ import yaml
 # Local imports
 # ----------------------------------------------------------------------------------------------------------------------------------
 from piclas_db import rates
+from piclas_db.common import table
 from piclas_db.model import Database, Reaction
 from piclas_db.piclas_db import main
 from piclas_db.schema import Schema
@@ -159,7 +162,28 @@ def test_build_reactions_from_rate_tables(tmp_path: pathlib.Path, monkeypatch: p
     out = capsys.readouterr().out
     assert 'valid: literature/test-2008/rates (p. 3, table 2): 7 rows' in out and '(dry run, nothing stored)' in out
     assert '= Tx2+M_Tx+M+Tx#1' in out and '≠ Tx2+Qq_TxQq+Tx#1' not in out and 'T_d' in out
+    assert 'Legend:' in out and 'a value that differs' in out and 'Tx is not compared' in out
     assert 'row(s) with the same values' in out and len(rates.stored_tables(Store(tmp_path / 'store'))) == 1
+    assert main(['literature', 'add', '-n', str(record_file), '--compare', str(tmp_path / 'out.h5'), '--color', 'always']) == 0
+    out = capsys.readouterr().out
+    assert '\x1b[32m= Tx2+M_Tx+M+Tx#1' in out  # same values green (other values: the whole row red; no such reaction gray)
+    assert '\x1b[2m' not in out  # the faint attribute is not used (not shown by every terminal)
+    other = tmp_path / 'other'  # one value changed: that row is red as a whole, from its first cell on
+    shutil.copytree(record_file.parent, other)
+    data = other / str(yaml.safe_load(record_file.read_text())['data'])
+    rows = list(csv.DictReader(line for line in data.read_text().splitlines() if not line.startswith('#')))
+    rows[0]['C'] = '9.9e9'
+    with data.open('w', newline='') as file:
+        writer = csv.DictWriter(file, fieldnames=list(rows[0]), lineterminator='\n')
+        writer.writeheader()
+        writer.writerows(rows)
+    cells = [rows[0]['row']]
+    assert main(['literature', 'add', '-n', str(other / record_file.name), '--compare', str(tmp_path / 'out.h5'), '--color', 'always']) == 0
+    out = capsys.readouterr().out
+    line = next(line for line in out.splitlines() if '\x1b[31m≠ ' in line)
+    assert f'\x1b[33m{cells[0]}' in line and '\x1b[31m≠ ' in line  # the row's name yellow, the comparison red
+    assert line.count('\x1b[31m') == 2 and line.count('\x1b[32m') == 2  # red: the changed C and the comparison; green: n and T_d
+    table.COLOR_MODE['mode'] = 'auto'
     specs, models, notes = rates.specs_from_database(db, rates.stored_tables(Store(tmp_path / 'store')))
     assert (specs['Tx2+M_Tx+M+Tx#1'].rates is not None, specs['Tx2+M_Tx+M+Tx#1'].row, specs['Tx2+M_Tx+M+Tx#1'].third_body) == (True, '1', 'molecules')
     assert specs['Qq+electron_QqIon1+electron+electron#1'].arrhenius == {'C': 1.0e-14, 'n': 0.0, 'Td': 1.0e5}

@@ -120,10 +120,26 @@ def compare_tables(first: pathlib.Path, second: pathlib.Path) -> int:
     return 1 if differences else 0
 
 
+def legend(color: bool) -> list[str]:
+    """What the marks and colours of the database comparison mean (with colours: the colours themselves as examples)"""
+    from piclas_db.common.table import paint  # noqa: PLC0415
+
+    return [
+        'Legend:',
+        f'  {paint("= name", "green", color)}   the database has a reaction with the same C, n and T_d (its name)',
+        f'  {paint("≠ name", "red", color)}   other values: the closest reaction of the database and what differs; in such a row',
+        f'           {paint("yellow", "yellow", color)}  the row (label, reaction, third body), to find it',
+        f'           {paint("green", "green", color)}   a value (C, n, T_d) that matches the database',
+        f'           {paint("red", "red", color)}     a value that differs',
+        f'  {paint("–", "dim", color)}        no such reaction in the database (e.g. recombinations, computed by PICLas from the forward rate)',
+        '  Tx is not compared (the database has no controlling temperature); C in PICLas units (m^3/s per molecule).',
+    ]
+
+
 def check_only(store: Store, record_path: pathlib.Path, compare: Optional[str]) -> int:
     """literature add -n: validate the record, show what would be stored; rate tables row by row, optionally compared with a database"""
     from piclas_db import rates  # noqa: PLC0415
-    from piclas_db.common.table import Row, render, use_color  # noqa: PLC0415
+    from piclas_db.common.table import Row, paint, render, use_color  # noqa: PLC0415
 
     record, data_path, table = check_extraction(store, record_path)
     paper, name = record['source']['paper'], record['name']
@@ -144,9 +160,24 @@ def check_only(store: Store, record_path: pathlib.Path, compare: Optional[str]) 
         f'valid: literature/{paper}/{name} (p. {(record.get("source") or {}).get("page")}, table {(record.get("source") or {}).get("table")}): {len(rate_rows)} rows, {len({str(row.key) for row in rate_rows})} reactions, C in {unit} -> m^3/s per molecule, chemistry model {model or "(none)"} (dry run, nothing stored)'
     )
     color = use_color()
-    print('\n'.join(render(header, [Row(line) for line in lines], shrinkable=[1, len(header) - 1] if database else [1], color=color)))
+    MARKS = {'=': 'green', '≠': 'red', '–': 'dim'}  # same values, other values (the closest reaction), no such reaction
+    compared = {'C': header.index('C (PICLas)'), 'n': header.index('n'), 'T_d': header.index('T_d')}
+    rows = []
+    for line in lines:
+        mark = MARKS.get(line[-1][:1]) if database is not None else None
+        colors: list[Optional[str]] = [None] * (len(line) - 1) + [mark]
+        if mark == 'red':  # other values: the row's name yellow (to find it), each compared value green if it matches, red if not
+            wrong = rates.differing_fields(line[-1].split(': ', 1)[1].split('; ')) if ': ' in line[-1] else set(compared)
+            for index in range(compared['C']):
+                colors[index] = 'yellow'
+            for name, index in compared.items():
+                colors[index] = 'red' if name in wrong else 'green'
+        rows.append(Row(line, colors=colors))
+    print('\n'.join(render(header, rows, shrinkable=[1, len(header) - 1] if database else [1], color=color)))
     if database is not None:
-        print(f'{compare}: {counts["same"]} row(s) with the same values, {counts["differs"]} with other values (≠), {counts["absent"]} reaction(s) not in the database')
+        summary = [paint(f'{counts["same"]} row(s) with the same values (=)', 'green', color), paint(f'{counts["differs"]} with other values (≠)', 'red', color)]
+        print(f'{compare}: ' + ', '.join(summary) + f', {counts["absent"]} reaction(s) not in the database (–)')
+        print('\n'.join(legend(color)))
     print(f'Store it with: piclas-db literature add {record_path}')
     return 0
 

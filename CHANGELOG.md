@@ -3,6 +3,33 @@
 piclas-db starts with version 0.1.0. The minor version (0.x.0) is incremented with each development step until the tool is
 feature complete, which will be released as version 1.0.0. The version is defined in `pyproject.toml` only.
 
+## 0.63.5
+
+* `literature add -n --compare`: a legend below the summary explains the marks and colours (=, ≠ with yellow, green and red, –),
+  that Tx is not compared and that C is in PICLas units
+
+## 0.63.4
+
+* `literature add -n --compare`: in a row with other values the row's name is yellow and each compared value (C, n, T_d) green
+  where it matches the database, red where it differs (instead of the whole row red)
+
+## 0.63.3
+
+* `literature add -n --compare`: a row with other values (`≠`) is red as a whole, not only its last cell
+* Gray (bright black) instead of the faint attribute for dimmed text everywhere (table borders, marks); some terminals do not show
+  the faint attribute
+
+## 0.63.2
+
+* `literature add -n --compare`: the database column is coloured, `≠` (other values, the closest reaction) red, `=` green, `–` dim;
+  the summary line likewise; `--color` for `literature` as for `import` and `diff`
+
+## 0.63.1
+
+* `extract --table --ocr --columns reaction,M,...` without `--rates` (the OCR copy of a scan as a reading aid) uses the cell reader;
+  before, the old table reader was used and reported `table 2 not found`. The hint after it points to entering the table by
+  hand (tutorial T6) instead of storing or converting the OCR copy
+
 ## 0.63.0
 
 * `literature compare FIRST SECOND`: two readings of one rate table (double entry) row by row per third body; differences named

@@ -340,7 +340,9 @@ row,reaction,third_body,C,n,Td,Tx
 Before storing, `literature add -n RECORD.yaml` checks the record and shows every row as understood (reaction, third bodies, C
 converted to PICLas units, n, T_d, Tx); with `--compare DATABASE.h5` each row is also looked up among the database's reactions: `=`
 the reactions with the same values, `≠` the closest one with its differences, `–` no such reaction (e.g. recombinations, which PICLas
-computes from the forward rate). Nothing is stored.
+computes from the forward rate). Nothing is stored. On a terminal, in a row with `≠` the row's name (label, reaction, third body) is yellow, and each compared value (C, n, T_d) is
+green where it matches the database and red where it differs, so only the differing values stand out; `=` is green, `–` gray
+(`--color always|never`).
 
 ### Two ways to a rate table
 

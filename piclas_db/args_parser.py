@@ -97,6 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
             sub.add_argument('arguments', nargs='*', help='template: PAPER NAME; add: RECORD.yaml; review: PAPER/NAME[@SHA]; compare: FIRST SECOND; want, unwant: KEY')
             sub.add_argument('--reference', help='want: citation of the wanted paper')
             sub.add_argument('-n', '--dry-run', action='store_true', help='add: check the record and show the rows as understood, store nothing')
+            sub.add_argument('--color', choices=['auto', 'always', 'never'], default=None, help='colors: auto (on a terminal, default), always (also into a pipe), never')
             sub.add_argument('--compare', metavar='DATABASE', help='add -n of a rate table: compare every row with the reactions of this database')
             sub.add_argument('--doi', help='want: DOI of the wanted paper (its import then removes the entry)')
             sub.add_argument('--needed-for', help='want: what the paper is needed for')

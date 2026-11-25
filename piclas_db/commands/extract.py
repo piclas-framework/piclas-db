@@ -105,9 +105,9 @@ def column_table(args: argparse.Namespace, paper: StoreEntry, path: str, output:
         result = reactions.convert_columns(lines, None if positional else column_roles(args.columns))
     except (ExtractError, rates.RateError):
         return False
-    if len(numbers) == 1 and not result.converted:
+    if len(numbers) == 1 and not result.converted and not (args.ocr and positional):
         return False
-    if len(numbers) == 1 and not any(len(row) > 5 for row in result.raw):  # label, reaction and one or two cells: the formula reading
+    if len(numbers) == 1 and not positional and not any(len(row) > 5 for row in result.raw):  # label, reaction and one formula cell
         try:
             simple = extract_table(path, page_list(args.page), numbers[0], use_ocr=args.ocr)
             if len(rates.convert_table(simple.header, simple.rows)[0]) >= len(result.converted):
@@ -184,6 +184,11 @@ def write_reaction_table(args: argparse.Namespace, paper: StoreEntry, table: Tab
     raw_record = output / f'{name}-raw.extraction.yaml'
     raw_record.write_text(yaml.safe_dump(raw, sort_keys=False, allow_unicode=True, width=1000))
     print(f'  raw copy: {raw_record}')
+    if args.rates is None and table.source == 'ocr':
+        print('  scan: the OCR copy is a reading aid only (exponents, subscripts and charges are often misread; do not store it).')
+        print('  Enter the table by hand from the page and check it by double entry (tutorial T6, section 4):')
+        print(f'    piclas-db literature template {paper_key} {name}-rates-<mixture> --rates --page {pages} --table {table.number} -o <directory>')
+        return
     if args.rates is None:
         print('  reaction table: convert it into a rate table with --rates [TOPIC] (e.g. --rates air), or enter one with')
         print(f'    piclas-db literature template {paper_key} {name}-rates --rates --page {pages} --table {table.number} -o {output}')
@@ -385,7 +390,8 @@ def run(args: argparse.Namespace) -> int:
         if args.table:
             output = pathlib.Path(args.output)
             output.mkdir(parents=True, exist_ok=True)
-            if args.rates is not None and column_table(args, paper, path, output):
+            scan = args.ocr and args.columns and '=' not in args.columns  # a scan read cell by cell: also for the raw copy alone
+            if (args.rates is not None or scan) and column_table(args, paper, path, output):
                 return 0
             table = extract_table(path, page_list(args.page), args.table.split(',')[0], use_ocr=args.ocr)
             write_table(args, paper, table, output)

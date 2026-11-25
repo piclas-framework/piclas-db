@@ -24,7 +24,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 # ==================================================================================================================================
 
-COLORS = {'red': '31', 'green': '32', 'yellow': '33', 'blue': '34', 'magenta': '35', 'cyan': '36', 'dim': '2', 'bold': '1'}
+# 'dim' is gray (bright black, 90) rather than the faint attribute (2), which some terminals and color schemes do not show
+COLORS = {'red': '31', 'green': '32', 'yellow': '33', 'blue': '34', 'magenta': '35', 'cyan': '36', 'dim': '90', 'bold': '1'}
 MIN_WIDTH = 8
 
 
